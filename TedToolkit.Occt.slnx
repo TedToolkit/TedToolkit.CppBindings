@@ -1,0 +1,12 @@
+<Solution>
+  <Folder Name="/SolutionItems/">
+    <File Path=".github\workflows\build.yml" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+  </Folder>
+  <Project Path="Build/Build.csproj">
+    <Build Solution="Debug|*" Project="false" />
+  </Project>
+  <Project Path="TedToolkit.Occt/TedToolkit.Occt.csproj" />
+</Solution>

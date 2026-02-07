@@ -1,0 +1,12 @@
+﻿<?xml version="1.0" encoding="utf-8"?>
+<Project>
+  <PropertyGroup>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <LangVersion>preview</LangVersion>
+    <Version>1.0.0</Version>
+    <GenerateDocumentationFile>true</GenerateDocumentationFile>
+    <NoWarn>$(NoWarn);PolyfillMemoryVersion</NoWarn>
+    <PackageProjectUrl>https://github.com/TedToolkit/TedToolkit.Assertions</PackageProjectUrl>
+  </PropertyGroup>
+</Project>

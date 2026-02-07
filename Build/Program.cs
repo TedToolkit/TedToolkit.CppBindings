@@ -1,0 +1,34 @@
+// See https://aka.ms/new-console-template for more information
+
+using Sourcy.DotNet;
+
+using TedToolkit.ModularPipelines;
+using HexaGen.CppAst;
+using HexaGen.CppAst.Parsing;
+
+Console.OutputEncoding = System.Text.Encoding.UTF8;
+
+
+// // Parse C++ code
+// var compilation = CppParser.Parse(@"
+// enum MyEnum { MyEnum_0, MyEnum_1 };
+// void function0(int a, int b);
+// struct MyStruct { int field0; int field1;};
+// typedef MyStruct* MyStructPtr;
+// ");
+
+var pipeline = new TedPipeline(
+    new()
+    {
+        BuildFiles =
+        [
+            Solutions.TedToolkit_Occt,
+        ],
+        Solution = Solutions.TedToolkit_Occt,
+        TestFiles =
+        [
+        ],
+    },
+    new FileInfo(Path.Combine(Projects.Build.Directory!.FullName, "appsettings.json")));
+
+await pipeline.ExecuteAsync().ConfigureAwait(false);

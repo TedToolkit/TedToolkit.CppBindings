@@ -1,0 +1,10 @@
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="HexaGen.CppAst" Version="1.0.8" />
+    <PackageVersion Include="HexaGen.Runtime" Version="1.1.24" />
+    <PackageVersion Include="Sourcy.DotNet" Version="1.1.1" />
+  </ItemGroup>
+</Project>

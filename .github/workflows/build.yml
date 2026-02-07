@@ -1,0 +1,12 @@
+on:
+  push:
+  workflow_dispatch:
+
+permissions:
+  contents: write
+  pull-requests: write
+
+jobs:
+  run-build-project:
+    uses: TedToolkit/TedToolkit/.github/workflows/build.yml@development
+    secrets: inherit
