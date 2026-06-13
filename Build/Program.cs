@@ -3,8 +3,6 @@
 using Sourcy.DotNet;
 
 using TedToolkit.ModularPipelines;
-using HexaGen.CppAst;
-using HexaGen.CppAst.Parsing;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 

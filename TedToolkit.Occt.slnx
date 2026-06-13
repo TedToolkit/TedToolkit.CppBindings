@@ -1,4 +1,9 @@
 <Solution>
+  <Folder Name="/build/">
+    <Project Path="Build/Build.csproj">
+      <Build Project="false" />
+    </Project>
+  </Folder>
   <Folder Name="/SolutionItems/">
     <File Path=".github\workflows\build.yml" />
     <File Path=".gitignore" />
@@ -6,8 +11,16 @@
     <File Path="Directory.Packages.props" />
     <File Path="README.md" />
   </Folder>
-  <Project Path="Build/Build.csproj">
-    <Build Solution="Debug|*" Project="false" />
-  </Project>
-  <Project Path="TedToolkit.Occt/TedToolkit.Occt.csproj" />
+  <Folder Name="/src/" />
+  <Folder Name="/src/core/">
+    <Project Path="src/core/TedToolkit.Occt.Generator/TedToolkit.Occt.Generator.csproj">
+      <BuildDependency Project="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />
+    </Project>
+  </Folder>
+  <Folder Name="/src/tools/">
+    <Project Path="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests\TedToolkit.Occt.Console\TedToolkit.Occt.Console.csproj" />
+  </Folder>
 </Solution>

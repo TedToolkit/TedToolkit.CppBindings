@@ -13,3 +13,5 @@ output
 artifacts
 
 Build/appsettings.json
+
+.editorconfig

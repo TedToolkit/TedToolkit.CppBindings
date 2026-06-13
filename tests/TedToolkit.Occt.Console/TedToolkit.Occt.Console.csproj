@@ -1,0 +1,18 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
+  <Import Project="..\..\externals\TedToolkit\props\NugetPackage.props"/>
+
+  <PropertyGroup>
+    <OutputType>exe</OutputType>
+    <TargetFramework>net9.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Analyzer Include="..\..\src\tools\TedToolkit.Occt.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.Occt.Analyzer.dll"/>
+    <Analyzer Include="..\..\src\tools\TedToolkit.Occt.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.RoslynHelper.dll"/>
+    <Analyzer Include="..\..\src\tools\TedToolkit.Occt.Analyzer\bin\$(Configuration)\netstandard2.0\ZString.dll"/>
+    <Analyzer Include="..\..\src\tools\TedToolkit.Occt.Analyzer\bin\$(Configuration)\netstandard2.0\System.Memory.dll"/>
+    <ProjectReference Include="..\..\src\core\TedToolkit.Occt.Generator\TedToolkit.Occt.Generator.csproj" />
+  </ItemGroup>
+</Project>
