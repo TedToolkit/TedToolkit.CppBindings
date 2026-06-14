@@ -22,9 +22,12 @@ public static class PipelineBuilderExtension
             .AddSingleton<ITypeService, TypeService>()
             .AddSingleton<IFieldService, FieldService>()
             .AddSingleton<IRecordService, RecordService>()
+            .AddSingleton<IGeneratorService, GeneratorService>()
+            .AddModule<ParseModule>()
+            .AddModule<RecordModule>()
+            .AddModule<GenerateModule>()
             .AddSingleton(
-                Microsoft.Extensions.Options.Options.Create(options))
-            .AddModule<ParseModule>();
+                Microsoft.Extensions.Options.Options.Create(options));
 
         return builder;
     }

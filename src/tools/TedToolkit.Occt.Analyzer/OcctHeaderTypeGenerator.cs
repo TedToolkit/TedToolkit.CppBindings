@@ -3,7 +3,6 @@ using System.Runtime.InteropServices;
 using Microsoft.CodeAnalysis;
 
 using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 using static TedToolkit.RoslynHelper.Generators.SourceComposer;
 using static TedToolkit.RoslynHelper.Generators.SourceComposer<

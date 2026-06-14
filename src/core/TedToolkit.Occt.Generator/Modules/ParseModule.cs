@@ -38,7 +38,7 @@ public sealed class ParseModule(
     protected override async Task<TranslationUnit?> ExecuteAsync(IModuleContext context,
         CancellationToken cancellationToken)
     {
-        var commandLineArgs = new List<string>()
+        var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs)
         {
             ZString.Concat("-I", vcpkgService.GetOcctIncludeFolder()),
             ZString.Concat("-I", vcpkgService.GetIncludeFolder()),

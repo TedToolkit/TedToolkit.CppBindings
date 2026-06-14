@@ -36,4 +36,25 @@ internal sealed class RecordService : IRecordService
             yield return recordField;
         }
     }
+
+    public IEnumerable<CXXMethodDecl> GetMethods(CXXRecordDecl record)
+    {
+        foreach (var cxxBaseSpecifier in record.Bases)
+        {
+            if (cxxBaseSpecifier.Type.AsCXXRecordDecl is not { } baseDecl)
+            {
+                continue;
+            }
+
+            foreach (var methodDecl in GetMethods(baseDecl))
+            {
+                yield return methodDecl;
+            }
+        }
+
+        foreach (var recordMethod in record.Methods)
+        {
+            yield return recordMethod;
+        }
+    }
 }

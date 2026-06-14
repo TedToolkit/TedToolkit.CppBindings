@@ -16,6 +16,7 @@
     <None Include="..\..\tools\TedToolkit.Occt.Analyzer\bin\$(Configuration)\netstandard2.0\TedToolkit.RoslynHelper.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" PrivateAssets="All"/>
     <None Include="..\..\tools\TedToolkit.Occt.Analyzer\bin\$(Configuration)\netstandard2.0\ZString.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" PrivateAssets="All"/>
     <None Include="..\..\tools\TedToolkit.Occt.Analyzer\bin\$(Configuration)\netstandard2.0\System.Memory.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" PrivateAssets="All"/>
+    <PackageReference Include="TedToolkit.RoslynHelper" />
     <PackageReference Include="ZString" />
   </ItemGroup>
 
