@@ -50,12 +50,15 @@ public sealed class OcctHeaderTypeGenerator : IIncrementalGenerator
     {
         var enumDeclaration = Enum("OcctHeaderType");
 
-        foreach (var enumerateFile in directory.EnumerateFiles())
+        foreach (var enumerateFile in directory.EnumerateFiles("*.hxx"))
         {
-            var name = enumerateFile.Name.Replace('.', '_');
-            enumDeclaration.AddEnumMember(EnumMember(name)
-                .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Generator.Attributes.OcctHeaderFilePathAttribute"))
-                    .AddArgument(Argument(enumerateFile.FullName.ToLiteral()))));
+            var name = Path.GetFileNameWithoutExtension(enumerateFile.Name);
+            if (name.Contains('.'))
+            {
+                continue;
+            }
+
+            enumDeclaration.AddEnumMember(EnumMember(name));
         }
 
         return File()

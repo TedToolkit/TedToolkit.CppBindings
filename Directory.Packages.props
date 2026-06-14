@@ -3,8 +3,12 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
+    <PackageVersion Include="ClangSharp" Version="21.1.8.3" />
+    <PackageVersion Include="libclang.runtime.linux-x64" Version="21.1.8" />
+    <PackageVersion Include="libClangSharp.runtime.linux-x64" Version="21.1.8.2" />
     <PackageVersion Include="ModularPipelines" Version="3.2.8" />
     <PackageVersion Include="Sourcy.DotNet" Version="1.1.1" />
     <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.6.9" />
+    <PackageVersion Include="ZString" Version="2.6.0" />
   </ItemGroup>
 </Project>
