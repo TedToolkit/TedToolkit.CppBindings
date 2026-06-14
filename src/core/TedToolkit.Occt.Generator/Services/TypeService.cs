@@ -1,3 +1,5 @@
+using ClangSharp;
+
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
@@ -22,5 +24,11 @@ internal sealed class TypeService : ITypeService
             .Replace('<', '_')
             .Replace('>', '_')
             .Trim('_');
+    }
+
+    public ClangSharp.Type DesugarType(ClangSharp.Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        return type.CanonicalType;
     }
 }

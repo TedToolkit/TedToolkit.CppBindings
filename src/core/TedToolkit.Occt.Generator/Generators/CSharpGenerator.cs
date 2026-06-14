@@ -2,6 +2,7 @@
 using System.Runtime.InteropServices;
 
 using ClangSharp;
+using ClangSharp.Interop;
 
 using Cysharp.Text;
 
@@ -31,11 +32,13 @@ public sealed class CSharpGenerator(
         var cSharpName = typeService.GetCSharpName(type);
 
         var structName = recordDecl.Bases.Count > 0 ? ZString.Concat(cSharpName, "Data") : cSharpName;
-        var structDeclaration = Struct(structName).Unsafe;
+        var structDeclaration = Struct(structName).Unsafe
+            .AddAttribute(Attribute<StructLayoutAttribute>()
+                .AddArgument(Argument(LayoutKind.Explicit.ToExpression()))
+                .AddNamedArgument(nameof(StructLayoutAttribute.Size), recordService.GetSize(recordDecl).ToLiteral()));
 
         structDeclaration = generationOptions.Value.IsInternal ? structDeclaration.Internal : structDeclaration.Public;
         await GenerateFields(structDeclaration).ConfigureAwait(false);
-
 
         return File()
             .AddNameSpace(NameSpace("TedToolkit.Occt")
@@ -45,9 +48,6 @@ public sealed class CSharpGenerator(
 
     private async Task GenerateFields(TypeDeclaration structDeclaration)
     {
-        structDeclaration
-            .AddAttribute(Attribute<StructLayoutAttribute>()
-                .AddArgument(Argument(LayoutKind.Explicit.ToExpression())));
         foreach (var fieldDecl in recordService.GetFields(recordDecl))
         {
             var fieldName = fieldService.GetName(fieldDecl);

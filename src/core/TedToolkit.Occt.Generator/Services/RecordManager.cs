@@ -13,15 +13,17 @@ internal sealed class RecordManager(ITypeService typeService, IRecordService rec
 
     private readonly ConcurrentQueue<CXXRecordDecl> _decls = [];
 
-    public void Add(CXXRecordDecl record)
+    public bool Add(CXXRecordDecl record)
     {
+        record = record.Definition ?? record;
         var name = typeService.GetCppName(recordService.GetType(record));
         if (!_keys.TryAdd(name, 0))
         {
-            return;
+            return false;
         }
 
         _decls.Enqueue(record);
+        return true;
     }
 
     public bool TryPop([MaybeNullWhen(false)] out CXXRecordDecl record)

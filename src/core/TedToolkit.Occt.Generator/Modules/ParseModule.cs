@@ -5,6 +5,7 @@ using ClangSharp.Interop;
 
 using Cysharp.Text;
 
+using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
 using ModularPipelines.Context;
@@ -25,11 +26,11 @@ public sealed class ParseModule(
     private CXUnsavedFile CreateFile()
     {
         var stringBuilder = ZString.CreateStringBuilder();
-        foreach (var valueDeclOption in generationOptions.Value.DeclOptions)
+        foreach (var valueDeclOption in new DirectoryInfo(vcpkgService.GetOcctIncludeFolder()).EnumerateFiles("*.hxx"))
         {
             stringBuilder.Append("#include <");
-            stringBuilder.Append(valueDeclOption.FileName);
-            stringBuilder.AppendLine(".hxx>");
+            stringBuilder.Append(valueDeclOption.Name);
+            stringBuilder.AppendLine(">");
         }
 
         return CXUnsavedFile.Create(RELAY_FILE, stringBuilder.ToString());
@@ -40,6 +41,8 @@ public sealed class ParseModule(
     {
         var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs)
         {
+            "-x",
+            "c++",
             ZString.Concat("-I", vcpkgService.GetOcctIncludeFolder()),
             ZString.Concat("-I", vcpkgService.GetIncludeFolder()),
         };
@@ -61,6 +64,32 @@ public sealed class ParseModule(
             [file],
             CXTranslationUnit_Flags.CXTranslationUnit_None);
 
+        for (uint i = 0; i < translationUnit.NumDiagnostics; i++)
+        {
+            using var cxDiagnostic = translationUnit.GetDiagnostic(i);
+            var errorMessage = cxDiagnostic.Format(CXDiagnostic.DefaultDisplayOptions).ToString();
+            switch (cxDiagnostic.Severity)
+            {
+#pragma warning disable CA1848, CA2254
+                case CXDiagnosticSeverity.CXDiagnostic_Ignored:
+                    context.Logger.LogDebug(errorMessage);
+                    break;
+                case CXDiagnosticSeverity.CXDiagnostic_Note:
+                    context.Logger.LogInformation(errorMessage);
+                    break;
+                case CXDiagnosticSeverity.CXDiagnostic_Warning:
+                    context.Logger.LogWarning(errorMessage);
+                    break;
+                case CXDiagnosticSeverity.CXDiagnostic_Error:
+                    context.Logger.LogError(errorMessage);
+                    break;
+                case CXDiagnosticSeverity.CXDiagnostic_Fatal:
+                    context.Logger.LogCritical(errorMessage);
+                    break;
+#pragma warning restore CA1848, CA2254
+            }
+        }
+
         return TranslationUnit.GetOrCreate(translationUnit);
     }
 
@@ -80,6 +109,7 @@ public sealed class ParseModule(
             .Split(Environment.NewLine)
             .SkipWhile(s => s != "#include <...> search starts here:")
             .Skip(1)
-            .TakeWhile(s => s != "End of search list.");
+            .TakeWhile(s => s != "End of search list.")
+            .Select(s => s.Trim());
     }
 }

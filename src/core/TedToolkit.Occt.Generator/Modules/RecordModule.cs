@@ -18,7 +18,8 @@ namespace TedToolkit.Occt.Generator.Modules;
 public sealed class RecordModule(
     IOptions<GenerationOptions> generationOptions,
     IRecordManager recordManager,
-    IRecordService recordService):
+    IRecordService recordService,
+    ITypeService typeService) :
     Module<TranslationUnit>
 {
     protected override async Task<TranslationUnit?> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
@@ -35,22 +36,40 @@ public sealed class RecordModule(
                      .OfType<CXXRecordDecl>()
                      .Where(r => names.Contains(r.Name)))
         {
-            recordManager.Add(cxxRecordDecl);
-            foreach (var fieldDecl in recordService.GetFields(cxxRecordDecl))
-            {
-                recordManager.Add(fieldDecl.Type);
-            }
-
-            foreach (var methodDecl in recordService.GetMethods(cxxRecordDecl))
-            {
-                recordManager.Add(methodDecl.ReturnType);
-                foreach (var methodDeclParameter in methodDecl.Parameters)
-                {
-                    recordManager.Add(methodDeclParameter.Type);
-                }
-            }
+            AddRecordDecl(cxxRecordDecl);
         }
 
         return translationUnit;
+    }
+
+    private void AddRecordDecl(CXXRecordDecl decl)
+    {
+        if (!recordManager.Add(decl))
+        {
+            return;
+        }
+
+        foreach (var fieldDecl in recordService.GetFields(decl))
+        {
+            AddType(fieldDecl.Type);
+        }
+
+        foreach (var methodDecl in recordService.GetMethods(decl))
+        {
+            AddType(methodDecl.ReturnType);
+            foreach (var methodDeclParameter in methodDecl.Parameters)
+            {
+                AddType(methodDeclParameter.Type);
+            }
+        }
+    }
+
+    private void AddType(ClangSharp.Type type)
+    {
+        type = typeService.DesugarType(type);
+        if (type.AsCXXRecordDecl is { } decl)
+        {
+            AddRecordDecl(decl);
+        }
     }
 }

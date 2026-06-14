@@ -7,7 +7,7 @@ using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
 
-internal sealed class FieldService(IOptions<GenerationOptions> generationOption) : IFieldService
+internal sealed class FieldService(IOptions<GenerationOptions> generationOption, ITypeService typeService) : IFieldService
 {
     public string GetName(FieldDecl decl)
     {
@@ -16,7 +16,7 @@ internal sealed class FieldService(IOptions<GenerationOptions> generationOption)
 
     public ClangSharp.Type GetType(FieldDecl decl)
     {
-        return decl.Type;
+        return typeService.DesugarType(decl.Type);
     }
 
     public ValueTask<long> GetOffsetAsync(FieldDecl field)

@@ -1,4 +1,5 @@
 using ClangSharp;
+using ClangSharp.Interop;
 
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -56,5 +57,19 @@ internal sealed class RecordService : IRecordService
         {
             yield return recordMethod;
         }
+    }
+
+    public long GetSize(CXXRecordDecl record)
+    {
+        var type = record.TypeForDecl.Handle;
+        type = clang.getCanonicalType(type);
+        var size = clang.Type_getSizeOf(type);
+
+        if (size < 0)
+        {
+            throw new InvalidOperationException($"Cannot get sizeof record ({GetName(record)}): {size}");
+        }
+
+        return size;
     }
 }
