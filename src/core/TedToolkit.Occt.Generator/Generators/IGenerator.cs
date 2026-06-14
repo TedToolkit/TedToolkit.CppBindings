@@ -2,5 +2,5 @@ namespace TedToolkit.Occt.Generator.Generators;
 
 public interface IGenerator
 {
-    Task<string> GenerateAsync();
+    Task<string> GenerateAsync(CancellationToken cancellationToken);
 }

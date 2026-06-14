@@ -9,7 +9,12 @@ public interface IRecordManager
     void Add(ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-        var record = type.AsCXXRecordDecl ?? throw new InvalidOperationException("Decl should not be null.");
+        var record = type.AsCXXRecordDecl;
+        if (record is null)
+        {
+            return;
+        }
+
         Add(record);
     }
 

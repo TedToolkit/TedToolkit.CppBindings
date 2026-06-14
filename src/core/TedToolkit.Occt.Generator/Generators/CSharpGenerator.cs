@@ -3,6 +3,8 @@ using System.Runtime.InteropServices;
 
 using ClangSharp;
 
+using Cysharp.Text;
+
 using Microsoft.Extensions.Options;
 
 using TedToolkit.Occt.Generator.Options;
@@ -23,15 +25,29 @@ public sealed class CSharpGenerator(
     ITypeService typeService,
     IFieldService fieldService) : IGenerator
 {
-    public async Task<string> GenerateAsync()
+    public async Task<string> GenerateAsync(CancellationToken cancellationToken)
     {
         var type = recordService.GetType(recordDecl);
         var cSharpName = typeService.GetCSharpName(type);
-        var typeDeclaration = recordDecl.Bases.Count > 0 ? Class(cSharpName).Sealed : Struct(cSharpName);
 
-        typeDeclaration = typeDeclaration.Unsafe;
-        typeDeclaration = generationOptions.Value.IsInternal ? typeDeclaration.Internal : typeDeclaration.Public;
+        var structName = recordDecl.Bases.Count > 0 ? ZString.Concat(cSharpName, "Data") : cSharpName;
+        var structDeclaration = Struct(structName).Unsafe;
 
+        structDeclaration = generationOptions.Value.IsInternal ? structDeclaration.Internal : structDeclaration.Public;
+        await GenerateFields(structDeclaration).ConfigureAwait(false);
+
+
+        return File()
+            .AddNameSpace(NameSpace("TedToolkit.Occt")
+                .AddMember(structDeclaration))
+            .ToCode();
+    }
+
+    private async Task GenerateFields(TypeDeclaration structDeclaration)
+    {
+        structDeclaration
+            .AddAttribute(Attribute<StructLayoutAttribute>()
+                .AddArgument(Argument(LayoutKind.Explicit.ToExpression())));
         foreach (var fieldDecl in recordService.GetFields(recordDecl))
         {
             var fieldName = fieldService.GetName(fieldDecl);
@@ -41,15 +57,9 @@ public sealed class CSharpGenerator(
             var field = Field(new DataType(typeService.GetCSharpName(fieldType)), fieldName)
                 .AddAttribute(Attribute<FieldOffsetAttribute>()
                     .AddArgument(Argument(offset.ToLiteral())))
-                .Private;
+                .Public;
 
-            typeDeclaration.AddMember(field);
+            structDeclaration.AddMember(field);
         }
-
-        return File()
-            .AddNameSpace(NameSpace("TedToolkit.Occt")
-                .AddMember(typeDeclaration))
-            .ToString()
-            ?? throw new InvalidOperationException("Could not generate C# record");
     }
 }

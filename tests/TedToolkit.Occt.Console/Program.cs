@@ -5,8 +5,10 @@ using Sourcy.DotNet;
 using TedToolkit.Occt.Generator;
 using TedToolkit.Occt.Generator.Options;
 
-var outputFolder = Solutions.TedToolkit_Occt.Directory?.CreateSubdirectory("output")
-    ?? throw new InvalidOperationException("Output folder not found");
+var outputFolder = Solutions.TedToolkit_Occt.Directory
+                       ?.CreateSubdirectory("output")
+                       .CreateSubdirectory("generated")
+                   ?? throw new InvalidOperationException("Output folder not found");
 
 var pipeline = await Pipeline.CreateBuilder()
     .AddOcctGenerators(

@@ -18,14 +18,18 @@ namespace TedToolkit.Occt.Generator.Modules;
 public sealed class GenerateModule(
     IOptions<GenerationOptions> generationOptions,
     IRecordManager recordManager,
-    ITypeService typeService) :
+    ITypeService typeService,
+    IGeneratorService generatorService) :
     Module<bool>
 {
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var parseModule = await context.GetRecordModule();
 
+        using var translationUnit = parseModule.ValueOrDefault
+                                    ?? throw new InvalidOperationException("TranslationUnit is null");
         var tasks = new List<Task>();
         while (recordManager.TryPop(out var record))
         {
@@ -44,10 +48,18 @@ public sealed class GenerateModule(
     {
         var cppFile = Path.Combine(generationOptions.Value.CppFolder.FullName,
             ZString.Concat(typeService.GetCSharpName(record.TypeForDecl), ".cpp"));
+
+        var codes = await generatorService.GenerateCpp(record).GenerateAsync(cancellationToken).ConfigureAwait(false);
+        await File.WriteAllTextAsync(cppFile, codes, cancellationToken).ConfigureAwait(false);
     }
+
     private async Task GenerateCSharp(CXXRecordDecl record, CancellationToken cancellationToken)
     {
         var csharpFile = Path.Combine(generationOptions.Value.CSharpFolder.FullName,
             ZString.Concat(typeService.GetCSharpName(record.TypeForDecl), ".g.cs"));
+
+        var codes = await generatorService.GenerateCSharp(record).GenerateAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(csharpFile, codes, cancellationToken).ConfigureAwait(false);
     }
 }

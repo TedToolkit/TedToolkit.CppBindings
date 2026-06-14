@@ -1,3 +1,5 @@
+using System.Runtime.InteropServices;
+
 using ClangSharp;
 
 using Microsoft.Extensions.Options;
@@ -17,14 +19,14 @@ public sealed class RecordModule(
     IOptions<GenerationOptions> generationOptions,
     IRecordManager recordManager,
     IRecordService recordService):
-    Module<bool>
+    Module<TranslationUnit>
 {
-    protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
+    protected override async Task<TranslationUnit?> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
         var parseModule = await context.GetParseModule();
 
-        using var translationUnit = parseModule.ValueOrDefault
+        var translationUnit = parseModule.ValueOrDefault
                                     ?? throw new InvalidOperationException("TranslationUnit is null");
 
         var names = generationOptions.Value.DeclOptions.Select(i => i.FileName).ToArray();
@@ -49,6 +51,6 @@ public sealed class RecordModule(
             }
         }
 
-        return true;
+        return translationUnit;
     }
 }

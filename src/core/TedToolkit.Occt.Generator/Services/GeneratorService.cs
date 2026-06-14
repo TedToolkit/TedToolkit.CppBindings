@@ -11,11 +11,12 @@ namespace TedToolkit.Occt.Generator.Services;
 internal sealed class GeneratorService(
     IRecordService recordService,
     IOptions<GenerationOptions> generationOptions,
-    ITypeService typeService) : IGeneratorService
+    ITypeService typeService,
+    IFieldService fieldService) : IGeneratorService
 {
     public CSharpGenerator GenerateCSharp(CXXRecordDecl record)
     {
-        return new CSharpGenerator(record, recordService, generationOptions, typeService);
+        return new CSharpGenerator(record, recordService, generationOptions, typeService, fieldService);
     }
 
     public CppGenerator GenerateCpp(CXXRecordDecl record)
