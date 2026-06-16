@@ -12,12 +12,4 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 /// <summary>
 /// Provides metadata access for field declarations.
 /// </summary>
-public interface IFieldService : IDeclService<FieldDecl>
-{
-    /// <summary>
-    /// Gets the byte offset for a field.
-    /// </summary>
-    /// <param name="field">The field declaration.</param>
-    /// <returns>The field offset in bytes.</returns>
-    ValueTask<long> GetOffsetAsync(FieldDecl field);
-}
+public interface IFieldService : IDeclService<FieldDecl>;

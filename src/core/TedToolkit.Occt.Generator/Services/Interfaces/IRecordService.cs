@@ -27,11 +27,4 @@ public interface IRecordService : IDeclService<CXXRecordDecl>
     /// <param name="record">The record declaration.</param>
     /// <returns>The record methods.</returns>
     IEnumerable<CXXMethodDecl> GetMethods(CXXRecordDecl record);
-
-    /// <summary>
-    /// Gets the record size in bytes.
-    /// </summary>
-    /// <param name="record">The record declaration.</param>
-    /// <returns>The record size.</returns>
-    Task<long> GetSizeAsync(CXXRecordDecl record);
 }

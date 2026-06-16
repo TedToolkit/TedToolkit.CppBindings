@@ -42,6 +42,12 @@ public sealed class RecordManager(ITypeService typeService, IRecordService recor
     }
 
     /// <inheritdoc/>
+    public IReadOnlyList<CXXRecordDecl> GetRecords()
+    {
+        return _decls.ToArray();
+    }
+
+    /// <inheritdoc/>
     public bool TryPop([MaybeNullWhen(false)] out CXXRecordDecl record)
     {
         return _decls.TryDequeue(out record);

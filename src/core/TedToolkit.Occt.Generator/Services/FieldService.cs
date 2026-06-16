@@ -7,19 +7,15 @@
 
 using ClangSharp;
 
-using Microsoft.Extensions.Options;
-
-using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
 
 /// <summary>
-/// Provides field metadata and offset calculations.
+/// Provides field metadata.
 /// </summary>
-/// <param name="generationOption">The generation options.</param>
 /// <param name="typeService">The type naming service.</param>
-public sealed class FieldService(IOptions<GenerationOptions> generationOption, ITypeService typeService) : IFieldService
+public sealed class FieldService(ITypeService typeService) : IFieldService
 {
     /// <inheritdoc/>
     public string GetName(FieldDecl decl)
@@ -35,20 +31,5 @@ public sealed class FieldService(IOptions<GenerationOptions> generationOption, I
         ArgumentNullException.ThrowIfNull(decl);
 
         return typeService.DesugarType(decl.Type);
-    }
-
-    /// <inheritdoc/>
-    public ValueTask<long> GetOffsetAsync(FieldDecl field)
-    {
-        ArgumentNullException.ThrowIfNull(field);
-
-        var rawOffset = field.Handle.OffsetOfField;
-        if (!generationOption.Value.GetFieldOffsetByRunning && rawOffset >= 0)
-        {
-            return ValueTask.FromResult(rawOffset / 8);
-        }
-
-        // TODO: Vcpkg running check for the offset? It needs the options.
-        return ValueTask.FromResult(field.Handle.OffsetOfField / 8);
     }
 }

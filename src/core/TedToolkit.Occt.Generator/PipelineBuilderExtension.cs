@@ -35,11 +35,13 @@ public static class PipelineBuilderExtension
             .AddSingleton<IVcpkgService, VcpkgService>()
             .AddSingleton<IRecordManager, RecordManager>()
             .AddSingleton<ITypeService, TypeService>()
+            .AddSingleton<IRecordLayoutService, RecordLayoutService>()
             .AddSingleton<IFieldService, FieldService>()
             .AddSingleton<IRecordService, RecordService>()
             .AddSingleton<IGeneratorService, GeneratorService>()
             .AddModule<ParseModule>()
             .AddModule<RecordModule>()
+            .AddModule<RecordLayoutModule>()
             .AddModule<GenerateModule>()
             .AddSingleton(
                 Microsoft.Extensions.Options.Options.Create(options));

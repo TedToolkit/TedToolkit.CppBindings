@@ -19,11 +19,13 @@ namespace TedToolkit.Occt.Generator.Services;
 /// Creates generator instances for record declarations.
 /// </summary>
 /// <param name="recordService">The record metadata service.</param>
+/// <param name="recordLayoutService">The native record layout service.</param>
 /// <param name="generationOptions">The generation options.</param>
 /// <param name="typeService">The type naming service.</param>
 /// <param name="fieldService">The field metadata service.</param>
 public sealed class GeneratorService(
     IRecordService recordService,
+    IRecordLayoutService recordLayoutService,
     IOptions<GenerationOptions> generationOptions,
     ITypeService typeService,
     IFieldService fieldService) : IGeneratorService
@@ -31,7 +33,7 @@ public sealed class GeneratorService(
     /// <inheritdoc/>
     public CSharpGenerator GenerateCSharp(CXXRecordDecl record)
     {
-        return new(record, recordService, generationOptions, typeService, fieldService);
+        return new(record, recordService, recordLayoutService, generationOptions, typeService, fieldService);
     }
 
     /// <inheritdoc/>

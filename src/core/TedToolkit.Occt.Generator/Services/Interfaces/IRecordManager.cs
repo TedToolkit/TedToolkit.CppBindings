@@ -24,6 +24,12 @@ public interface IRecordManager
     bool Add(CXXRecordDecl record);
 
     /// <summary>
+    /// Gets the records currently queued for generation.
+    /// </summary>
+    /// <returns>The queued records.</returns>
+    IReadOnlyList<CXXRecordDecl> GetRecords();
+
+    /// <summary>
     /// Removes the next queued record declaration, if any.
     /// </summary>
     /// <param name="record">The dequeued record declaration.</param>

@@ -6,7 +6,6 @@
 // -----------------------------------------------------------------------
 
 using ClangSharp;
-using ClangSharp.Interop;
 
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -15,7 +14,8 @@ namespace TedToolkit.Occt.Generator.Services;
 /// <summary>
 /// Provides record metadata, including inherited fields and methods.
 /// </summary>
-public sealed class RecordService : IRecordService
+/// <param name="recordLayoutService">The native record layout service.</param>
+public sealed class RecordService(IRecordLayoutService recordLayoutService) : IRecordService
 {
     /// <inheritdoc/>
     public string GetName(CXXRecordDecl decl)
@@ -87,22 +87,5 @@ public sealed class RecordService : IRecordService
         {
             yield return recordMethod;
         }
-    }
-
-    /// <inheritdoc/>
-    public async Task<long> GetSizeAsync(CXXRecordDecl record)
-    {
-        ArgumentNullException.ThrowIfNull(record);
-
-        var type = record.TypeForDecl.Handle;
-        type = clang.getCanonicalType(type);
-        var size = clang.Type_getSizeOf(type);
-
-        if (size < 0)
-        {
-            throw new InvalidOperationException($"Cannot get sizeof record ({GetName(record)}): {size}");
-        }
-
-        return size;
     }
 }

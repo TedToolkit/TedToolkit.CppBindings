@@ -29,12 +29,14 @@ namespace TedToolkit.Occt.Generator.Generators;
 /// </summary>
 /// <param name="recordDecl">The record declaration being generated.</param>
 /// <param name="recordService">The record metadata service.</param>
+/// <param name="recordLayoutService">The native record layout service.</param>
 /// <param name="generationOptions">The generator options.</param>
 /// <param name="typeService">The type naming service.</param>
 /// <param name="fieldService">The field metadata service.</param>
 public sealed class CSharpGenerator(
     CXXRecordDecl recordDecl,
     IRecordService recordService,
+    IRecordLayoutService recordLayoutService,
     IOptions<GenerationOptions> generationOptions,
     ITypeService typeService,
     IFieldService fieldService) : IGenerator
@@ -50,7 +52,7 @@ public sealed class CSharpGenerator(
             .AddAttribute(Attribute<StructLayoutAttribute>()
                 .AddArgument(Argument(LayoutKind.Explicit.ToExpression()))
                 .AddNamedArgument(nameof(StructLayoutAttribute.Size),
-                    (await recordService.GetSizeAsync(recordDecl).ConfigureAwait(false)).ToLiteral()));
+                    recordLayoutService.GetSize(recordDecl).ToLiteral()));
 
         structDeclaration = generationOptions.Value.IsInternal ? structDeclaration.Internal : structDeclaration.Public;
         await GenerateFieldsAsync(structDeclaration).ConfigureAwait(false);
@@ -67,7 +69,7 @@ public sealed class CSharpGenerator(
         {
             var fieldName = fieldService.GetName(fieldDecl);
             var fieldType = fieldService.GetType(fieldDecl);
-            var offset = await fieldService.GetOffsetAsync(fieldDecl).ConfigureAwait(false);
+            var offset = recordLayoutService.GetOffset(recordDecl, fieldDecl);
 
             var field = Field(new DataType(typeService.GetCSharpName(fieldType)), fieldName)
                 .AddAttribute(Attribute<FieldOffsetAttribute>()
