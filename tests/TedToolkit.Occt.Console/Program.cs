@@ -1,4 +1,11 @@
-﻿using System.Text;
+// -----------------------------------------------------------------------
+// <copyright file="Program.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
+using System.Text;
 
 using ModularPipelines;
 
@@ -16,15 +23,16 @@ var outputFolder = Solutions.TedToolkit_Occt.Directory
 
 var pipeline = await Pipeline.CreateBuilder()
     .AddOcctGenerators(
-        new GenerationOptions
+        new GenerationOptions()
         {
             DeclOptions =
             [
-                new(OcctHeaderType.Geom2d_BSplineCurve)
+                new(OcctHeaderType.Geom2d_BSplineCurve),
             ],
             CSharpFolder = outputFolder.CreateSubdirectory("csharp"),
             CppFolder = outputFolder.CreateSubdirectory("cpp"),
             CommandLineArgs = [],
         }).BuildAsync().ConfigureAwait(false);
+
 await pipeline
     .RunAsync().ConfigureAwait(false);

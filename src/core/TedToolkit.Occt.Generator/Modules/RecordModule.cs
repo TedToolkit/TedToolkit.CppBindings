@@ -1,4 +1,9 @@
-using System.Runtime.InteropServices;
+// -----------------------------------------------------------------------
+// <copyright file="RecordModule.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
 
 using ClangSharp;
 
@@ -14,6 +19,13 @@ using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Modules;
 
+/// <summary>
+/// Collects the record declarations that need to be generated.
+/// </summary>
+/// <param name="generationOptions">The generation options.</param>
+/// <param name="recordManager">The record queue manager.</param>
+/// <param name="recordService">The record metadata service.</param>
+/// <param name="typeService">The type naming service.</param>
 [DependsOn<ParseModule>]
 public sealed class RecordModule(
     IOptions<GenerationOptions> generationOptions,
@@ -22,6 +34,7 @@ public sealed class RecordModule(
     ITypeService typeService) :
     Module<TranslationUnit>
 {
+    /// <inheritdoc />
     protected override async Task<TranslationUnit?> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
@@ -69,9 +82,11 @@ public sealed class RecordModule(
     private void AddType(ClangSharp.Type type)
     {
         type = typeService.DesugarType(type);
-        if (type.AsCXXRecordDecl is { } decl)
+        if (type.AsCXXRecordDecl is not { } decl)
         {
-            AddRecordDecl(decl);
+            return;
         }
+
+        AddRecordDecl(decl);
     }
 }

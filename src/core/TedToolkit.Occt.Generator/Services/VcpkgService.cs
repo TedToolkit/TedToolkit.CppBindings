@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="VcpkgService.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
@@ -5,11 +12,17 @@ using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
 
-internal sealed partial class VcpkgService : IVcpkgService
+/// <summary>
+/// Resolves the local vcpkg installation and OCCT metadata.
+/// </summary>
+public sealed partial class VcpkgService : IVcpkgService
 {
     private const string VCPKG_ROOT_ENVIRONMENT_VARIABLE_NAME = "VCPKG_ROOT";
+
     private const string INSTALLED_FOLDER_NAME = "installed";
+
     private const string BUILDTREES_FOLDER_NAME = "buildtrees";
+
     private const string OCCT_FOLDER_NAME = "opencascade";
 
     private static readonly Regex[] _standardPatterns =
@@ -19,6 +32,7 @@ internal sealed partial class VcpkgService : IVcpkgService
         CmakeStandardRegex(),
     ];
 
+    /// <inheritdoc/>
     public string GetRoot()
     {
 #pragma warning disable RS1035
@@ -27,17 +41,20 @@ internal sealed partial class VcpkgService : IVcpkgService
 
         if (string.IsNullOrEmpty(vcpkgRoot))
         {
-            throw new InvalidOperationException($"{VCPKG_ROOT_ENVIRONMENT_VARIABLE_NAME} cannot be empty. Please check your environment variables.");
+            throw new InvalidOperationException(
+                $"{VCPKG_ROOT_ENVIRONMENT_VARIABLE_NAME} cannot be empty. Please check your environment variables.");
         }
 
         return vcpkgRoot;
     }
 
+    /// <inheritdoc/>
     public string GetIncludeFolder()
     {
         return Path.Combine(GetRoot(), INSTALLED_FOLDER_NAME, GetTriplet(), "include");
     }
 
+    /// <inheritdoc/>
     public string GetTriplet()
     {
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
@@ -60,11 +77,13 @@ internal sealed partial class VcpkgService : IVcpkgService
         throw new InvalidOperationException("Can't identify which system it is.");
     }
 
+    /// <inheritdoc/>
     public string GetOcctIncludeFolder()
     {
         return Path.Combine(GetIncludeFolder(), OCCT_FOLDER_NAME);
     }
 
+    /// <inheritdoc/>
     public async Task<int> GetOcctCppVersionAsync()
     {
         var vcpkgRoot = GetRoot();

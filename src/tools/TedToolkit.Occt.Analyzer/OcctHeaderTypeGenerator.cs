@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="OcctHeaderTypeGenerator.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using System.Runtime.InteropServices;
 
 using Microsoft.CodeAnalysis;
@@ -8,8 +15,13 @@ using static TedToolkit.RoslynHelper.Generators.SourceComposer;
 using static TedToolkit.RoslynHelper.Generators.SourceComposer<
     TedToolkit.Occt.Analyzer.OcctHeaderTypeGenerator>;
 
+#pragma warning disable RCS0058
+
 namespace TedToolkit.Occt.Analyzer;
 
+/// <summary>
+/// Generates the OCCT header type enum from the installed vcpkg headers.
+/// </summary>
 [Generator(LanguageNames.CSharp)]
 public sealed class OcctHeaderTypeGenerator : IIncrementalGenerator
 {

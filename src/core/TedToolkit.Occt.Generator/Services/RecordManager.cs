@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="RecordManager.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using System.Collections.Concurrent;
 using System.Diagnostics.CodeAnalysis;
 
@@ -7,14 +14,22 @@ using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
 
-internal sealed class RecordManager(ITypeService typeService, IRecordService recordService) : IRecordManager
+/// <summary>
+/// Tracks the unique record declarations queued for generation.
+/// </summary>
+/// <param name="typeService">The type naming service.</param>
+/// <param name="recordService">The record metadata service.</param>
+public sealed class RecordManager(ITypeService typeService, IRecordService recordService) : IRecordManager
 {
     private readonly ConcurrentDictionary<string, byte> _keys = [];
 
     private readonly ConcurrentQueue<CXXRecordDecl> _decls = [];
 
+    /// <inheritdoc/>
     public bool Add(CXXRecordDecl record)
     {
+        ArgumentNullException.ThrowIfNull(record);
+
         record = record.Definition ?? record;
         var name = typeService.GetCppName(recordService.GetType(record));
         if (!_keys.TryAdd(name, 0))
@@ -26,6 +41,7 @@ internal sealed class RecordManager(ITypeService typeService, IRecordService rec
         return true;
     }
 
+    /// <inheritdoc/>
     public bool TryPop([MaybeNullWhen(false)] out CXXRecordDecl record)
     {
         return _decls.TryDequeue(out record);

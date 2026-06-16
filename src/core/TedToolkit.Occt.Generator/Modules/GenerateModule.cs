@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="GenerateModule.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using ClangSharp;
 
 using Cysharp.Text;
@@ -14,6 +21,13 @@ using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Modules;
 
+/// <summary>
+/// Generates the C++ and C# source files for each parsed record.
+/// </summary>
+/// <param name="generationOptions">The generation options.</param>
+/// <param name="recordManager">The record queue manager.</param>
+/// <param name="typeService">The type naming service.</param>
+/// <param name="generatorService">The generator service.</param>
 [DependsOn<RecordModule>]
 public sealed class GenerateModule(
     IOptions<GenerationOptions> generationOptions,
@@ -36,15 +50,15 @@ public sealed class GenerateModule(
             tasks.Add(context.SubModule(
                 record.Name,
                 () => Task.WhenAll(
-                    GenerateCpp(record, cancellationToken),
-                    GenerateCSharp(record, cancellationToken))));
+                    GenerateCppAsync(record, cancellationToken),
+                    GenerateCSharpAsync(record, cancellationToken))));
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
         return true;
     }
 
-    private async Task GenerateCpp(CXXRecordDecl record, CancellationToken cancellationToken)
+    private async Task GenerateCppAsync(CXXRecordDecl record, CancellationToken cancellationToken)
     {
         var cppFile = Path.Combine(generationOptions.Value.CppFolder.FullName,
             ZString.Concat(typeService.GetCSharpName(record.TypeForDecl), ".cpp"));
@@ -53,7 +67,7 @@ public sealed class GenerateModule(
         await File.WriteAllTextAsync(cppFile, codes, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task GenerateCSharp(CXXRecordDecl record, CancellationToken cancellationToken)
+    private async Task GenerateCSharpAsync(CXXRecordDecl record, CancellationToken cancellationToken)
     {
         var csharpFile = Path.Combine(generationOptions.Value.CSharpFolder.FullName,
             ZString.Concat(typeService.GetCSharpName(record.TypeForDecl), ".g.cs"));

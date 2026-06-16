@@ -1,12 +1,12 @@
 ﻿<Project Sdk="Microsoft.NET.Sdk">
 
   <Import Project="..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
-  <Import Project="..\..\externals\TedToolkit\props\NugetPackage.props"/>
 
   <PropertyGroup>
     <OutputType>exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
     <NoWarn>$(NoWarn);ConsoleUse</NoWarn>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
   </PropertyGroup>
 
   <ItemGroup>

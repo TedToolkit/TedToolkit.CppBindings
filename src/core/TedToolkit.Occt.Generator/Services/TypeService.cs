@@ -1,13 +1,24 @@
-using ClangSharp;
+// -----------------------------------------------------------------------
+// <copyright file="TypeService.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
 
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
 
-internal sealed class TypeService : ITypeService
+/// <summary>
+/// Normalizes Clang type names for generator output.
+/// </summary>
+public sealed class TypeService : ITypeService
 {
+    /// <inheritdoc/>
     public string GetCppName(ClangSharp.Type type)
     {
+        ArgumentNullException.ThrowIfNull(type);
+
         var result = type.AsString;
 
         if (string.IsNullOrEmpty(result))
@@ -18,8 +29,11 @@ internal sealed class TypeService : ITypeService
         return result;
     }
 
+    /// <inheritdoc/>
     public string GetCSharpName(ClangSharp.Type type)
     {
+        ArgumentNullException.ThrowIfNull(type);
+
         return GetCppName(type)
             .Replace("::", "_", StringComparison.InvariantCulture)
             .Replace('<', '_')
@@ -27,6 +41,7 @@ internal sealed class TypeService : ITypeService
             .Trim('_');
     }
 
+    /// <inheritdoc/>
     public ClangSharp.Type DesugarType(ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);

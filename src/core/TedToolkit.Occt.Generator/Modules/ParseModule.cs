@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="ParseModule.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using System.Runtime.InteropServices;
 
 using ClangSharp;
@@ -10,18 +17,22 @@ using Microsoft.Extensions.Options;
 
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
-using ModularPipelines.Options;
 
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Modules;
 
+/// <summary>
+/// Parses the OCCT headers into a translation unit.
+/// </summary>
+/// <param name="generationOptions">The generation options.</param>
+/// <param name="vcpkgService">The vcpkg environment service.</param>
 public sealed class ParseModule(
     IOptions<GenerationOptions> generationOptions,
     IVcpkgService vcpkgService) : Module<TranslationUnit>
 {
-    private const string RelayFileName = "main.cpp";
+    private const string RELAY_FILE_NAME = "main.cpp";
 
     private CXUnsavedFile CreateFile()
     {
@@ -34,20 +45,22 @@ public sealed class ParseModule(
             stringBuilder.AppendLine(".hxx>");
         }
 
-        return CXUnsavedFile.Create(RelayFileName, stringBuilder.ToString());
+        return CXUnsavedFile.Create(RELAY_FILE_NAME, stringBuilder.ToString());
     }
 
     private async Task<List<string>> CreateCommandLineArgsAsync()
     {
-        return new List<string>(generationOptions.Value.CommandLineArgs)
-        {
-            ZString.Concat("-std=c++", await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false)),
-        };
+        var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs);
+        commandLineArgs.Add(ZString.Concat("-std=c++", await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false)));
+        return commandLineArgs;
     }
 
+    /// <inheritdoc />
     protected override async Task<TranslationUnit?> ExecuteAsync(IModuleContext context,
         CancellationToken cancellationToken)
     {
+        ArgumentNullException.ThrowIfNull(context);
+
         var commandLineArgs = await CreateCommandLineArgsAsync().ConfigureAwait(false);
         commandLineArgs.Add("-x");
         commandLineArgs.Add("c++");
@@ -60,9 +73,9 @@ public sealed class ParseModule(
         var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
             index,
-            RelayFileName,
+            RELAY_FILE_NAME,
             CollectionsMarshal.AsSpan(commandLineArgs),
-            [file],
+            [file,],
             CXTranslationUnit_Flags.CXTranslationUnit_None);
 
         for (uint i = 0; i < translationUnit.NumDiagnostics; i++)
@@ -75,15 +88,19 @@ public sealed class ParseModule(
                 case CXDiagnosticSeverity.CXDiagnostic_Ignored:
                     context.Logger.LogDebug(errorMessage);
                     break;
+
                 case CXDiagnosticSeverity.CXDiagnostic_Note:
                     context.Logger.LogInformation(errorMessage);
                     break;
+
                 case CXDiagnosticSeverity.CXDiagnostic_Warning:
                     context.Logger.LogWarning(errorMessage);
                     break;
+
                 case CXDiagnosticSeverity.CXDiagnostic_Error:
                     context.Logger.LogError(errorMessage);
                     break;
+
                 case CXDiagnosticSeverity.CXDiagnostic_Fatal:
                     context.Logger.LogCritical(errorMessage);
                     break;

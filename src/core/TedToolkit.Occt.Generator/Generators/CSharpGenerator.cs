@@ -1,8 +1,13 @@
+// -----------------------------------------------------------------------
+// <copyright file="CSharpGenerator.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
 
 using System.Runtime.InteropServices;
 
 using ClangSharp;
-using ClangSharp.Interop;
 
 using Cysharp.Text;
 
@@ -19,6 +24,14 @@ using static TedToolkit.RoslynHelper.Generators.SourceComposer<
 
 namespace TedToolkit.Occt.Generator.Generators;
 
+/// <summary>
+/// Produces the generated C# partial struct for a parsed OCCT record.
+/// </summary>
+/// <param name="recordDecl">The record declaration being generated.</param>
+/// <param name="recordService">The record metadata service.</param>
+/// <param name="generationOptions">The generator options.</param>
+/// <param name="typeService">The type naming service.</param>
+/// <param name="fieldService">The field metadata service.</param>
 public sealed class CSharpGenerator(
     CXXRecordDecl recordDecl,
     IRecordService recordService,
@@ -26,6 +39,7 @@ public sealed class CSharpGenerator(
     ITypeService typeService,
     IFieldService fieldService) : IGenerator
 {
+    /// <inheritdoc />
     public async Task<string> GenerateAsync(CancellationToken cancellationToken)
     {
         var type = recordService.GetType(recordDecl);
@@ -39,7 +53,7 @@ public sealed class CSharpGenerator(
                     (await recordService.GetSizeAsync(recordDecl).ConfigureAwait(false)).ToLiteral()));
 
         structDeclaration = generationOptions.Value.IsInternal ? structDeclaration.Internal : structDeclaration.Public;
-        await GenerateFields(structDeclaration).ConfigureAwait(false);
+        await GenerateFieldsAsync(structDeclaration).ConfigureAwait(false);
 
         return File()
             .AddNameSpace(NameSpace("TedToolkit.Occt")
@@ -47,7 +61,7 @@ public sealed class CSharpGenerator(
             .ToCode();
     }
 
-    private async Task GenerateFields(TypeDeclaration structDeclaration)
+    private async Task GenerateFieldsAsync(TypeDeclaration structDeclaration)
     {
         foreach (var fieldDecl in recordService.GetFields(recordDecl))
         {
