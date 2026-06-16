@@ -14,8 +14,9 @@ namespace TedToolkit.Occt.Generator.Services;
 /// <summary>
 /// Provides record metadata, including inherited fields and methods.
 /// </summary>
-/// <param name="recordLayoutService">The native record layout service.</param>
-public sealed class RecordService(IRecordLayoutService recordLayoutService) : IRecordService
+/// <param name="typeService">The type parsing service.</param>
+/// <param name="fieldService">The field parsing service.</param>
+public sealed class RecordService(ITypeService typeService, IFieldService fieldService) : IRecordService
 {
     /// <inheritdoc/>
     public string GetName(CXXRecordDecl decl)
@@ -57,6 +58,11 @@ public sealed class RecordService(IRecordLayoutService recordLayoutService) : IR
 
         foreach (var recordField in record.Fields)
         {
+            if (!typeService.ShouldParse(fieldService.GetType(recordField)))
+            {
+                continue;
+            }
+
             yield return recordField;
         }
     }

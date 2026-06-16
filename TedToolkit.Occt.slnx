@@ -21,6 +21,7 @@
     <Project Path="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />
   </Folder>
   <Folder Name="/tests/">
+    <Project Path="tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj" />
     <Project Path="tests\TedToolkit.Occt.Console\TedToolkit.Occt.Console.csproj" />
   </Folder>
 </Solution>

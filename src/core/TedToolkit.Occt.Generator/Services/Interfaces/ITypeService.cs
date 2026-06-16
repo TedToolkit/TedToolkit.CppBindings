@@ -32,4 +32,11 @@ public interface ITypeService
     /// <param name="type">The type.</param>
     /// <returns>The desugared type.</returns>
     ClangSharp.Type DesugarType(ClangSharp.Type type);
+
+    /// <summary>
+    /// Determines whether a type should be parsed by the generator.
+    /// </summary>
+    /// <param name="type">The type.</param>
+    /// <returns><see langword="true"/> when the type should be parsed; otherwise, <see langword="false"/>.</returns>
+    bool ShouldParse(ClangSharp.Type type);
 }

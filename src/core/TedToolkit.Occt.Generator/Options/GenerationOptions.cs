@@ -41,4 +41,9 @@ public sealed record GenerationOptions()
     /// Gets a value indicating whether generated types should be internal.
     /// </summary>
     public bool IsInternal { get; init; }
+
+    /// <summary>
+    /// Gets a predicate that skips matching clang types during generation.
+    /// </summary>
+    public Predicate<ClangSharp.Type> ShouldSkip { get; init; } = _ => false;
 }

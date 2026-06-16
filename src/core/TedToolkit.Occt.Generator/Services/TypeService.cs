@@ -5,6 +5,9 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using Microsoft.Extensions.Options;
+
+using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
@@ -12,7 +15,8 @@ namespace TedToolkit.Occt.Generator.Services;
 /// <summary>
 /// Normalizes Clang type names for generator output.
 /// </summary>
-public sealed class TypeService : ITypeService
+/// <param name="generationOptions">The generator options.</param>
+public sealed class TypeService(IOptions<GenerationOptions> generationOptions) : ITypeService
 {
     /// <inheritdoc/>
     public string GetCppName(ClangSharp.Type type)
@@ -46,5 +50,15 @@ public sealed class TypeService : ITypeService
     {
         ArgumentNullException.ThrowIfNull(type);
         return type.CanonicalType;
+    }
+
+    /// <inheritdoc/>
+    public bool ShouldParse(ClangSharp.Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        var typeName = GetCppName(type);
+        return !typeName.Contains("std::", StringComparison.Ordinal)
+               && !generationOptions.Value.ShouldSkip(type);
     }
 }

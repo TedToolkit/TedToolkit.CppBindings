@@ -16,6 +16,7 @@ using Microsoft.Extensions.Options;
 using ModularPipelines.Context.Domains;
 using ModularPipelines.Options;
 
+using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -26,10 +27,12 @@ namespace TedToolkit.Occt.Generator.Services;
 /// </summary>
 /// <param name="generationOptions">The generation options.</param>
 /// <param name="typeService">The type naming service.</param>
+/// <param name="recordService">The record metadata service.</param>
 /// <param name="vcpkgService">The vcpkg environment service.</param>
 public sealed class RecordLayoutService(
     IOptions<GenerationOptions> generationOptions,
     ITypeService typeService,
+    IRecordService recordService,
     IVcpkgService vcpkgService) : IRecordLayoutService
 {
     private const string PROBE_FOLDER_NAME = "__layout_probe";
@@ -44,9 +47,7 @@ public sealed class RecordLayoutService(
 
     private const string PROBE_FILE_NAME = "layout_probe.cpp";
 
-    private readonly Dictionary<string, long> _sizes = new(StringComparer.Ordinal);
-
-    private readonly Dictionary<FieldKey, long> _offsets = [];
+    private readonly Dictionary<string, RecordInfo> _recordInfos = new(StringComparer.Ordinal);
 
     /// <inheritdoc/>
     public async Task PrepareAsync(IEnumerable<CXXRecordDecl> records, IShellContext shell, CancellationToken cancellationToken)
@@ -87,6 +88,7 @@ public sealed class RecordLayoutService(
                 sourceDirectory,
                 "-B",
                 buildDirectory,
+                "-DCMAKE_BUILD_TYPE=Release",
                 ZString.Concat("-DCMAKE_TOOLCHAIN_FILE=", Path.Combine(vcpkgService.GetRoot(), "scripts", "buildsystems", "vcpkg.cmake")),
                 ZString.Concat("-DVCPKG_TARGET_TRIPLET=", vcpkgService.GetTriplet()),
             ],
@@ -97,12 +99,9 @@ public sealed class RecordLayoutService(
         {
             "--build",
             buildDirectory,
+            "--config",
+            "Release",
         };
-
-        if (OperatingSystem.IsWindows())
-        {
-            buildArguments.AddRange(["--config", "Release",]);
-        }
 
         await RunCommandAsync(
             shell,
@@ -128,12 +127,7 @@ public sealed class RecordLayoutService(
         ArgumentNullException.ThrowIfNull(record);
 
         var key = GetRecordKey(record.Definition ?? record);
-        if (_sizes.TryGetValue(key, out var size))
-        {
-            return size;
-        }
-
-        throw new InvalidOperationException($"Native layout probe did not produce sizeof record ({key}).");
+        return GetRecordInfo(key).Size;
     }
 
     /// <inheritdoc/>
@@ -142,14 +136,17 @@ public sealed class RecordLayoutService(
         ArgumentNullException.ThrowIfNull(record);
         ArgumentNullException.ThrowIfNull(field);
 
-        var key = new FieldKey(GetRecordKey(record.Definition ?? record), field.Name);
-        if (_offsets.TryGetValue(key, out var offset))
+        var recordKey = GetRecordKey(record.Definition ?? record);
+        try
         {
-            return offset;
+            return GetRecordInfo(recordKey).GetOffset(field.Name);
         }
-
-        throw new InvalidOperationException(
-            $"Native layout probe did not produce offset for field ({key.RecordName}::{key.FieldName}).");
+        catch (InvalidOperationException exception)
+        {
+            throw new InvalidOperationException(
+                $"Native layout probe did not produce offset for field ({recordKey}::{field.Name}).",
+                exception);
+        }
     }
 
     private static string EscapeCppString(string value)
@@ -164,16 +161,10 @@ public sealed class RecordLayoutService(
             ? ZString.Concat(PROBE_TARGET_NAME, ".exe")
             : PROBE_TARGET_NAME;
 
-        foreach (var candidate in new[]
-                 {
-                     Path.Combine(buildDirectory, "Release", executableName),
-                     Path.Combine(buildDirectory, executableName),
-                 })
+        var probePath = Path.Combine(buildDirectory, executableName);
+        if (File.Exists(probePath))
         {
-            if (File.Exists(candidate))
-            {
-                return candidate;
-            }
+            return probePath;
         }
 
         throw new FileNotFoundException($"Cannot find native layout probe executable under {buildDirectory}.");
@@ -255,11 +246,9 @@ public sealed class RecordLayoutService(
             builder.Append(i.ToString(CultureInfo.InvariantCulture));
             builder.AppendLine(") << '\\n';");
 
-            foreach (var field in GetFields(record))
+            foreach (var field in recordService.GetFields(record))
             {
                 builder.Append("    std::cout << \"F\\t");
-                builder.Append(EscapeCppString(recordKey));
-                builder.Append("\\t");
                 builder.Append(EscapeCppString(field.Name));
                 builder.Append("\\t\" << offsetof(record_");
                 builder.Append(i.ToString(CultureInfo.InvariantCulture));
@@ -288,8 +277,22 @@ public sealed class RecordLayoutService(
             find_package(OpenCASCADE CONFIG REQUIRED)
 
             add_executable({{PROBE_TARGET_NAME}} {{PROBE_FILE_NAME}})
+            {{GenerateProbeOutputDirectoryCMake()}}
             target_include_directories({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_INCLUDE_DIR})
             target_link_libraries({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_LIBRARIES})
+            """;
+    }
+
+    /// <summary>
+    /// Generates the CMake target properties that keep the probe executable in the build directory.
+    /// </summary>
+    /// <returns>The CMake snippet that pins the probe runtime output path.</returns>
+    internal static string GenerateProbeOutputDirectoryCMake()
+    {
+        return $$"""
+            set_target_properties({{PROBE_TARGET_NAME}} PROPERTIES
+                RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
+                RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}")
             """;
     }
 
@@ -298,51 +301,22 @@ public sealed class RecordLayoutService(
         return typeService.GetCppName(record.TypeForDecl);
     }
 
-    private static IEnumerable<FieldDecl> GetFields(CXXRecordDecl record)
-    {
-        foreach (var cxxBaseSpecifier in record.Bases)
-        {
-            if (cxxBaseSpecifier.Type.AsCXXRecordDecl is not { } baseDecl)
-            {
-                continue;
-            }
-
-            foreach (var fieldDecl in GetFields(baseDecl.Definition ?? baseDecl))
-            {
-                yield return fieldDecl;
-            }
-        }
-
-        foreach (var recordField in record.Fields)
-        {
-            yield return recordField;
-        }
-    }
-
     private void ParseProbeOutput(string output)
     {
-        _sizes.Clear();
-        _offsets.Clear();
-
-        using var reader = new StringReader(output);
-        while (reader.ReadLine() is { } line)
+        _recordInfos.Clear();
+        foreach (var pair in RecordInfo.ParseMany(output))
         {
-            var parts = line.Split('\t');
-            if (parts is ["S", _, _])
-            {
-                _sizes[parts[1]] = long.Parse(parts[2], CultureInfo.InvariantCulture);
-                continue;
-            }
-
-            if (parts is ["F", _, _, _])
-            {
-                _offsets[new FieldKey(parts[1], parts[2])] = long.Parse(parts[3], CultureInfo.InvariantCulture);
-                continue;
-            }
-
-            throw new InvalidOperationException($"Unexpected native layout probe output line: {line}");
+            _recordInfos[pair.Key] = pair.Value;
         }
     }
 
-    private readonly record struct FieldKey(string RecordName, string FieldName);
+    private RecordInfo GetRecordInfo(string recordKey)
+    {
+        if (_recordInfos.TryGetValue(recordKey, out var recordInfo))
+        {
+            return recordInfo;
+        }
+
+        throw new InvalidOperationException($"Native layout probe did not produce sizeof record ({recordKey}).");
+    }
 }
