@@ -44,6 +44,8 @@ public sealed class RecordModule(
 
     private void AddRecordDecl(CXXRecordDecl decl)
     {
+        decl = decl.Definition ?? decl;
+
         if (!recordManager.Add(decl))
         {
             return;

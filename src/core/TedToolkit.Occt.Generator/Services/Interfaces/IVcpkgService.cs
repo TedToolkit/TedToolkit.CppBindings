@@ -9,4 +9,6 @@ public interface IVcpkgService
     string GetOcctIncludeFolder();
 
     string GetTriplet();
+
+    Task<int> GetOcctCppVersionAsync();
 }

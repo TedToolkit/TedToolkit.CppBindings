@@ -59,7 +59,7 @@ internal sealed class RecordService : IRecordService
         }
     }
 
-    public long GetSize(CXXRecordDecl record)
+    public async Task<long> GetSizeAsync(CXXRecordDecl record)
     {
         var type = record.TypeForDecl.Handle;
         type = clang.getCanonicalType(type);

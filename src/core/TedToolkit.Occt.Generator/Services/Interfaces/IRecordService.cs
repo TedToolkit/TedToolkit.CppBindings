@@ -8,5 +8,5 @@ public interface IRecordService : IDeclService<CXXRecordDecl>
 
     IEnumerable<CXXMethodDecl> GetMethods(CXXRecordDecl record);
 
-    long GetSize(CXXRecordDecl record);
+    Task<long> GetSizeAsync(CXXRecordDecl record);
 }

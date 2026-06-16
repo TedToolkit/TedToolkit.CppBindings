@@ -21,37 +21,38 @@ public sealed class ParseModule(
     IOptions<GenerationOptions> generationOptions,
     IVcpkgService vcpkgService) : Module<TranslationUnit>
 {
-    private const string RELAY_FILE = "main.cpp";
+    private const string RelayFileName = "main.cpp";
 
     private CXUnsavedFile CreateFile()
     {
         var stringBuilder = ZString.CreateStringBuilder();
-        foreach (var valueDeclOption in new DirectoryInfo(vcpkgService.GetOcctIncludeFolder()).EnumerateFiles("*.hxx"))
+
+        foreach (var valueDeclOption in generationOptions.Value.DeclOptions)
         {
             stringBuilder.Append("#include <");
-            stringBuilder.Append(valueDeclOption.Name);
-            stringBuilder.AppendLine(">");
+            stringBuilder.Append(valueDeclOption.FileName);
+            stringBuilder.AppendLine(".hxx>");
         }
 
-        return CXUnsavedFile.Create(RELAY_FILE, stringBuilder.ToString());
+        return CXUnsavedFile.Create(RelayFileName, stringBuilder.ToString());
+    }
+
+    private async Task<List<string>> CreateCommandLineArgsAsync()
+    {
+        return new List<string>(generationOptions.Value.CommandLineArgs)
+        {
+            ZString.Concat("-std=c++", await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false)),
+        };
     }
 
     protected override async Task<TranslationUnit?> ExecuteAsync(IModuleContext context,
         CancellationToken cancellationToken)
     {
-        var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs)
-        {
-            "-x",
-            "c++",
-            ZString.Concat("-I", vcpkgService.GetOcctIncludeFolder()),
-            ZString.Concat("-I", vcpkgService.GetIncludeFolder()),
-        };
-        var systemArguments = await GetSystemArguments(context, cancellationToken).ConfigureAwait(false);
-        foreach (var argument in systemArguments)
-        {
-            commandLineArgs.Add("-isystem");
-            commandLineArgs.Add(argument);
-        }
+        var commandLineArgs = await CreateCommandLineArgsAsync().ConfigureAwait(false);
+        commandLineArgs.Add("-x");
+        commandLineArgs.Add("c++");
+        commandLineArgs.Add(ZString.Concat("-I", vcpkgService.GetOcctIncludeFolder()));
+        commandLineArgs.Add(ZString.Concat("-I", vcpkgService.GetIncludeFolder()));
 
         using var file = CreateFile();
 
@@ -59,7 +60,7 @@ public sealed class ParseModule(
         var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
             index,
-            RELAY_FILE,
+            RelayFileName,
             CollectionsMarshal.AsSpan(commandLineArgs),
             [file],
             CXTranslationUnit_Flags.CXTranslationUnit_None);
@@ -91,25 +92,5 @@ public sealed class ParseModule(
         }
 
         return TranslationUnit.GetOrCreate(translationUnit);
-    }
-
-    private async Task<IEnumerable<string>> GetSystemArguments(IModuleContext context,
-        CancellationToken cancellationToken)
-    {
-        var nullFile = OperatingSystem.IsWindows()
-            ? "NUL"
-            : "/dev/null";
-
-        var result = await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("clang++") { Arguments = ["-E", "-x", "c++", nullFile, "-v"], },
-            new CommandExecutionOptions() { ThrowOnNonZeroExitCode = true, },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return result.StandardError
-            .Split(Environment.NewLine)
-            .SkipWhile(s => s != "#include <...> search starts here:")
-            .Skip(1)
-            .TakeWhile(s => s != "End of search list.")
-            .Select(s => s.Trim());
     }
 }

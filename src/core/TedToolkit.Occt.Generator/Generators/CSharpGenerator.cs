@@ -35,7 +35,8 @@ public sealed class CSharpGenerator(
         var structDeclaration = Struct(structName).Unsafe
             .AddAttribute(Attribute<StructLayoutAttribute>()
                 .AddArgument(Argument(LayoutKind.Explicit.ToExpression()))
-                .AddNamedArgument(nameof(StructLayoutAttribute.Size), recordService.GetSize(recordDecl).ToLiteral()));
+                .AddNamedArgument(nameof(StructLayoutAttribute.Size),
+                    (await recordService.GetSizeAsync(recordDecl).ConfigureAwait(false)).ToLiteral()));
 
         structDeclaration = generationOptions.Value.IsInternal ? structDeclaration.Internal : structDeclaration.Public;
         await GenerateFields(structDeclaration).ConfigureAwait(false);

@@ -21,6 +21,7 @@ internal sealed class TypeService : ITypeService
     public string GetCSharpName(ClangSharp.Type type)
     {
         return GetCppName(type)
+            .Replace("::", "_", StringComparison.InvariantCulture)
             .Replace('<', '_')
             .Replace('>', '_')
             .Trim('_');
