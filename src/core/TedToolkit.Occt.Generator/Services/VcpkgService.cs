@@ -25,7 +25,7 @@ public sealed partial class VcpkgService : IVcpkgService
 
     private const string OCCT_FOLDER_NAME = "opencascade";
 
-    private static readonly Regex[] _standardPatterns =
+    private readonly Regex[] _standardPatterns =
     [
         CxxStandardRegex(),
         BuildCppStandardRegex(),
@@ -100,7 +100,7 @@ public sealed partial class VcpkgService : IVcpkgService
             $"Could not find OCCT build metadata under {vcpkgRoot}. Expected {BUILDTREES_FOLDER_NAME}/{OCCT_FOLDER_NAME} or {INSTALLED_FOLDER_NAME}/*/share/{OCCT_FOLDER_NAME}.");
     }
 
-    private static async Task<int?> TryGetOcctCppVersionFromBuildTreesAsync(string vcpkgRoot)
+    private async Task<int?> TryGetOcctCppVersionFromBuildTreesAsync(string vcpkgRoot)
     {
         var buildtrees = Path.Combine(vcpkgRoot, BUILDTREES_FOLDER_NAME, OCCT_FOLDER_NAME);
         if (!Directory.Exists(buildtrees))
@@ -121,7 +121,7 @@ public sealed partial class VcpkgService : IVcpkgService
         return null;
     }
 
-    private static async Task<int?> TryGetOcctCppVersionFromInstalledExportsAsync(string vcpkgRoot, string triplet)
+    private async Task<int?> TryGetOcctCppVersionFromInstalledExportsAsync(string vcpkgRoot, string triplet)
     {
         var share = Path.Combine(vcpkgRoot, INSTALLED_FOLDER_NAME, triplet, "share", OCCT_FOLDER_NAME);
         if (!Directory.Exists(share))
@@ -146,7 +146,7 @@ public sealed partial class VcpkgService : IVcpkgService
         return null;
     }
 
-    private static async Task<int?> TryGetOcctCppVersionFromFileAsync(string path)
+    private async Task<int?> TryGetOcctCppVersionFromFileAsync(string path)
     {
         if (!File.Exists(path))
         {
@@ -157,7 +157,7 @@ public sealed partial class VcpkgService : IVcpkgService
         return TryParseOcctCppVersion(text);
     }
 
-    private static int? TryParseOcctCppVersion(string text)
+    private int? TryParseOcctCppVersion(string text)
     {
         foreach (var pattern in _standardPatterns)
         {

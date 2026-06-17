@@ -15,6 +15,7 @@ using Cysharp.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
+using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
 

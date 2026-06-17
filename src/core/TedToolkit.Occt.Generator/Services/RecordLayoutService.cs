@@ -149,13 +149,13 @@ public sealed class RecordLayoutService(
         }
     }
 
-    private static string EscapeCppString(string value)
+    private string EscapeCppString(string value)
     {
         return value.Replace("\\", "\\\\", StringComparison.Ordinal)
             .Replace("\"", "\\\"", StringComparison.Ordinal);
     }
 
-    private static string GetProbePath(string buildDirectory)
+    private string GetProbePath(string buildDirectory)
     {
         var executableName = OperatingSystem.IsWindows()
             ? ZString.Concat(PROBE_TARGET_NAME, ".exe")
@@ -170,7 +170,7 @@ public sealed class RecordLayoutService(
         throw new FileNotFoundException($"Cannot find native layout probe executable under {buildDirectory}.");
     }
 
-    private static async Task<string> RunCommandAsync(
+    private async Task<string> RunCommandAsync(
         IShellContext shell,
         string fileName,
         IReadOnlyList<string> arguments,
@@ -277,22 +277,11 @@ public sealed class RecordLayoutService(
             find_package(OpenCASCADE CONFIG REQUIRED)
 
             add_executable({{PROBE_TARGET_NAME}} {{PROBE_FILE_NAME}})
-            {{GenerateProbeOutputDirectoryCMake()}}
-            target_include_directories({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_INCLUDE_DIR})
-            target_link_libraries({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_LIBRARIES})
-            """;
-    }
-
-    /// <summary>
-    /// Generates the CMake target properties that keep the probe executable in the build directory.
-    /// </summary>
-    /// <returns>The CMake snippet that pins the probe runtime output path.</returns>
-    internal static string GenerateProbeOutputDirectoryCMake()
-    {
-        return $$"""
             set_target_properties({{PROBE_TARGET_NAME}} PROPERTIES
                 RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
                 RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}")
+            target_include_directories({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_INCLUDE_DIR})
+            target_link_libraries({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_LIBRARIES})
             """;
     }
 

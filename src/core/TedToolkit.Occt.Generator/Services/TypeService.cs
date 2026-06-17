@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using Cysharp.Text;
+
 using Microsoft.Extensions.Options;
 
 using TedToolkit.Occt.Generator.Options;
@@ -38,11 +40,71 @@ public sealed class TypeService(IOptions<GenerationOptions> generationOptions) :
     {
         ArgumentNullException.ThrowIfNull(type);
 
-        return GetCppName(type)
-            .Replace("::", "_", StringComparison.InvariantCulture)
-            .Replace('<', '_')
-            .Replace('>', '_')
-            .Trim('_');
+        return NormalizeCSharpTypeName(GetCppName(type));
+    }
+
+    /// <summary>
+    /// Normalizes a C++ type display name into a legal C# identifier for generated type names.
+    /// </summary>
+    /// <param name="typeName">The C++ type name.</param>
+    /// <returns>The normalized C# type name.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="typeName"/> does not contain any identifier characters.</exception>
+    private string NormalizeCSharpTypeName(string typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            throw new InvalidOperationException("Field type name cannot be empty. Please check your arguments.");
+        }
+
+        var builder = ZString.CreateStringBuilder();
+        var previousWasUnderscore = false;
+
+        foreach (var character in typeName)
+        {
+            if (char.IsLetterOrDigit(character))
+            {
+                builder.Append(character);
+                previousWasUnderscore = false;
+                continue;
+            }
+
+            if (builder.Length > 0 && !previousWasUnderscore)
+            {
+                builder.Append('_');
+                previousWasUnderscore = true;
+            }
+        }
+
+        var normalizedTypeName = builder.ToString().Trim('_');
+
+        if (normalizedTypeName.Length == 0)
+        {
+            throw new InvalidOperationException("Field type name cannot be empty. Please check your arguments.");
+        }
+
+        if (char.IsDigit(normalizedTypeName[0]))
+        {
+            return ZString.Concat("_", normalizedTypeName);
+        }
+
+        return normalizedTypeName;
+    }
+
+    /// <summary>
+    /// Determines whether a C++ type name should be parsed by the generator.
+    /// </summary>
+    /// <param name="typeName">The C++ type name.</param>
+    /// <returns><see langword="true"/> when the type should be parsed; otherwise, <see langword="false"/>.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when <paramref name="typeName"/> does not contain any non-whitespace characters.</exception>
+    private bool ShouldParseTypeName(string typeName)
+    {
+        if (string.IsNullOrWhiteSpace(typeName))
+        {
+            throw new InvalidOperationException("Field type name cannot be empty. Please check your arguments.");
+        }
+
+        return !typeName.Contains("std::", StringComparison.Ordinal)
+               && !typeName.Contains("NCollection_Allocator", StringComparison.Ordinal);
     }
 
     /// <inheritdoc/>
@@ -58,7 +120,7 @@ public sealed class TypeService(IOptions<GenerationOptions> generationOptions) :
         ArgumentNullException.ThrowIfNull(type);
 
         var typeName = GetCppName(type);
-        return !typeName.Contains("std::", StringComparison.Ordinal)
+        return ShouldParseTypeName(typeName)
                && !generationOptions.Value.ShouldSkip(type);
     }
 }
