@@ -10,7 +10,7 @@
     <PackageVersion Include="libClangSharp.runtime.win-x64" Version="21.1.8.2" />
     <PackageVersion Include="ModularPipelines" Version="3.2.8" />
     <PackageVersion Include="Sourcy.DotNet" Version="1.1.1" />
-    <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.6.9" />
+    <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.6.18" />
     <PackageVersion Include="TUnit" Version="1.54.0" />
     <PackageVersion Include="TUnit.Mocks" Version="1.54.0" />
     <PackageVersion Include="ZString" Version="2.6.0" />

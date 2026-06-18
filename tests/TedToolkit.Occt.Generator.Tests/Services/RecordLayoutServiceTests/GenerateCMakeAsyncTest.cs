@@ -7,9 +7,10 @@
 
 using System.Reflection;
 
+using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
-using TedToolkit.Occt.Generator.Services;
 using TedToolkit.Occt.Generator.Services.Interfaces;
+using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests.Services.RecordLayoutServiceTests;
 
@@ -55,12 +56,27 @@ internal sealed class GenerateCMakeAsyncTest
 
     private sealed class TypeServiceStub : ITypeService
     {
+        public RecordModel Resolve(ClangSharp.Type type)
+        {
+            throw new NotSupportedException();
+        }
+
         public string GetCppName(ClangSharp.Type type)
         {
             throw new NotSupportedException();
         }
 
         public string GetCSharpName(ClangSharp.Type type)
+        {
+            throw new NotSupportedException();
+        }
+
+        public DataType GetCSharpPInvokeType(ClangSharp.Type type)
+        {
+            throw new NotSupportedException();
+        }
+
+        public ClangSharp.CXXRecordDecl? GetReferencedRecord(ClangSharp.Type type)
         {
             throw new NotSupportedException();
         }

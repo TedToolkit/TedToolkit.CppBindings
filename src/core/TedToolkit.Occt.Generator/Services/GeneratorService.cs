@@ -5,11 +5,10 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using ClangSharp;
-
 using Microsoft.Extensions.Options;
 
 using TedToolkit.Occt.Generator.Generators;
+using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -18,26 +17,19 @@ namespace TedToolkit.Occt.Generator.Services;
 /// <summary>
 /// Creates generator instances for record declarations.
 /// </summary>
-/// <param name="recordService">The record metadata service.</param>
 /// <param name="recordLayoutService">The native record layout service.</param>
 /// <param name="generationOptions">The generation options.</param>
-/// <param name="typeService">The type naming service.</param>
-/// <param name="fieldService">The field metadata service.</param>
 public sealed class GeneratorService(
-    IRecordService recordService,
-    IRecordLayoutService recordLayoutService,
-    IOptions<GenerationOptions> generationOptions,
-    ITypeService typeService,
-    IFieldService fieldService) : IGeneratorService
+    IOptions<GenerationOptions> generationOptions) : IGeneratorService
 {
     /// <inheritdoc/>
-    public CSharpGenerator GenerateCSharp(CXXRecordDecl record)
+    public CSharpGenerator GenerateCSharp(RecordModel record)
     {
-        return new(record, recordService, recordLayoutService, generationOptions, typeService, fieldService);
+        return new(record, generationOptions);
     }
 
     /// <inheritdoc/>
-    public CppGenerator GenerateCpp(CXXRecordDecl record)
+    public CppGenerator GenerateCpp(RecordModel record)
     {
         return new();
     }

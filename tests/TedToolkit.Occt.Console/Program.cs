@@ -32,6 +32,16 @@ var pipeline = await Pipeline.CreateBuilder()
             CSharpFolder = outputFolder.CreateSubdirectory("csharp"),
             CppFolder = outputFolder.CreateSubdirectory("cpp"),
             CommandLineArgs = [],
+            FieldTypeToGenerate = field =>
+            {
+                var type = field.Type.CanonicalType;
+                if (type.AsString.Contains("std::"))
+                {
+                    return false;
+                }
+
+                return true;
+            },
         }).BuildAsync().ConfigureAwait(false);
 
 await pipeline

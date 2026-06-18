@@ -1,0 +1,13 @@
+﻿<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
+  <Import Project="..\..\..\externals\TedToolkit\props\NugetPackage.props"/>
+  <Import Project="..\..\..\externals\TedToolkit\props\AlmostAllFrameworks.props"/>
+
+  <PropertyGroup>
+    <Title>Occt</Title>
+    <Description>The Occt basic runtime.</Description>
+    <RootNamespace>TedToolkit.Occt</RootNamespace>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+</Project>

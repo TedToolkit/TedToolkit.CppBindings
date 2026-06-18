@@ -15,7 +15,6 @@ using Cysharp.Text;
 using Microsoft.Extensions.Logging;
 using Microsoft.Extensions.Options;
 
-using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
 
@@ -30,8 +29,9 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// <param name="generationOptions">The generation options.</param>
 /// <param name="vcpkgService">The vcpkg environment service.</param>
 public sealed class ParseModule(
+    IRecordModelManager recordModelManager,
     IOptions<GenerationOptions> generationOptions,
-    IVcpkgService vcpkgService) : Module<TranslationUnit>
+    IVcpkgService vcpkgService) : Module<bool>
 {
     private const string RELAY_FILE_NAME = "main.cpp";
 
@@ -53,32 +53,15 @@ public sealed class ParseModule(
     {
         var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs);
         commandLineArgs.Add(ZString.Concat("-std=c++", await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false)));
-        return commandLineArgs;
-    }
-
-    /// <inheritdoc />
-    protected override async Task<TranslationUnit?> ExecuteAsync(IModuleContext context,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(context);
-
-        var commandLineArgs = await CreateCommandLineArgsAsync().ConfigureAwait(false);
         commandLineArgs.Add("-x");
         commandLineArgs.Add("c++");
         commandLineArgs.Add(ZString.Concat("-I", vcpkgService.GetOcctIncludeFolder()));
         commandLineArgs.Add(ZString.Concat("-I", vcpkgService.GetIncludeFolder()));
+        return commandLineArgs;
+    }
 
-        using var file = CreateFile();
-
-        // TODO: Memory leak by the index?
-        var index = CXIndex.Create();
-        var translationUnit = CXTranslationUnit.Parse(
-            index,
-            RELAY_FILE_NAME,
-            CollectionsMarshal.AsSpan(commandLineArgs),
-            [file,],
-            CXTranslationUnit_Flags.CXTranslationUnit_None);
-
+    private void LogDiagnostics(IModuleContext context, ref CXTranslationUnit translationUnit)
+    {
         for (uint i = 0; i < translationUnit.NumDiagnostics; i++)
         {
             using var cxDiagnostic = translationUnit.GetDiagnostic(i);
@@ -108,7 +91,36 @@ public sealed class ParseModule(
 #pragma warning restore CA1848, CA2254
             }
         }
+    }
 
-        return TranslationUnit.GetOrCreate(translationUnit);
+    /// <inheritdoc />
+    protected override async Task<bool> ExecuteAsync(IModuleContext context,
+        CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(context);
+
+        using var file = CreateFile();
+
+        using var index = CXIndex.Create();
+        var translationUnit = CXTranslationUnit.Parse(
+            index,
+            RELAY_FILE_NAME,
+            CollectionsMarshal.AsSpan( await CreateCommandLineArgsAsync().ConfigureAwait(false)),
+            [file,],
+            CXTranslationUnit_Flags.CXTranslationUnit_None);
+
+        LogDiagnostics(context, ref translationUnit);
+
+        using var unit = TranslationUnit.GetOrCreate(translationUnit);
+
+        var names = generationOptions.Value.DeclOptions.Select(i => i.FileName).ToArray();
+        foreach (var cxxRecordDecl in unit.TranslationUnitDecl.CursorChildren
+                     .OfType<CXXRecordDecl>()
+                     .Where(r => names.Contains(r.Name)))
+        {
+            recordModelManager.Add(cxxRecordDecl);
+        }
+
+        return true;
     }
 }

@@ -14,6 +14,7 @@ using TedToolkit.Occt.Generator.Modules;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services;
 using TedToolkit.Occt.Generator.Services.Interfaces;
+using TedToolkit.Occt.Generator.Services.Rules;
 
 namespace TedToolkit.Occt.Generator;
 
@@ -33,16 +34,13 @@ public static class PipelineBuilderExtension
         ArgumentNullException.ThrowIfNull(builder);
         builder.Services
             .AddSingleton<IVcpkgService, VcpkgService>()
-            .AddSingleton<IRecordManager, RecordManager>()
-            .AddSingleton<ITypeService, TypeService>()
+            .AddSingleton<ITypeRule, DefaultTypeRule>()
+            .AddSingleton<IResolver, Resolver>()
             .AddSingleton<IGenerationOutputCleaner, GenerationOutputCleaner>()
-            .AddSingleton<IRecordLayoutService, RecordLayoutService>()
-            .AddSingleton<IFieldService, FieldService>()
-            .AddSingleton<IRecordService, RecordService>()
+            .AddSingleton<IRecordModelManager, RecordModelManager>()
             .AddSingleton<IGeneratorService, GeneratorService>()
             .AddModule<CleanGenerationOutputModule>()
             .AddModule<ParseModule>()
-            .AddModule<RecordModule>()
             .AddModule<RecordLayoutModule>()
             .AddModule<GenerateModule>()
             .AddSingleton(

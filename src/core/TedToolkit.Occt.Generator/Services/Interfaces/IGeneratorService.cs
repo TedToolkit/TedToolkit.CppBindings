@@ -5,9 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using ClangSharp;
-
 using TedToolkit.Occt.Generator.Generators;
+using TedToolkit.Occt.Generator.Models;
 
 namespace TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -21,12 +20,12 @@ public interface IGeneratorService
     /// </summary>
     /// <param name="record">The record declaration.</param>
     /// <returns>The generator instance.</returns>
-    CSharpGenerator GenerateCSharp(CXXRecordDecl record);
+    CSharpGenerator GenerateCSharp(RecordModel record);
 
     /// <summary>
     /// Creates a C++ generator for the specified record.
     /// </summary>
     /// <param name="record">The record declaration.</param>
     /// <returns>The generator instance.</returns>
-    CppGenerator GenerateCpp(CXXRecordDecl record);
+    CppGenerator GenerateCpp(RecordModel record);
 }

@@ -14,8 +14,6 @@ using ModularPipelines.Context;
 using TedToolkit.Occt.Generator.Modules;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
-using TUnit.Mocks;
-
 namespace TedToolkit.Occt.Generator.Tests.Modules.CleanGenerationOutputModuleTests;
 
 /// <summary>

@@ -16,6 +16,7 @@
     <Project Path="src/core/TedToolkit.Occt.Generator/TedToolkit.Occt.Generator.csproj">
       <BuildDependency Project="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />
     </Project>
+    <Project Path="src/core/TedToolkit.Occt.Runtime/TedToolkit.Occt.Runtime.csproj" />
   </Folder>
   <Folder Name="/src/tools/">
     <Project Path="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />

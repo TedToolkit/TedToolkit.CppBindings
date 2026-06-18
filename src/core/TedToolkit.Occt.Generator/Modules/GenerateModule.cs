@@ -5,19 +5,18 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using ClangSharp;
-
 using Cysharp.Text;
 
 using Microsoft.Extensions.Options;
 
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
-using ModularPipelines.Generated;
 using ModularPipelines.Modules;
 
+using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
+using TedToolkit.RoslynHelper.Generators;
 
 namespace TedToolkit.Occt.Generator.Modules;
 
@@ -26,14 +25,12 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// </summary>
 /// <param name="generationOptions">The generation options.</param>
 /// <param name="recordManager">The record queue manager.</param>
-/// <param name="typeService">The type naming service.</param>
 /// <param name="generatorService">The generator service.</param>
 [DependsOn<CleanGenerationOutputModule>]
 [DependsOn<RecordLayoutModule>]
 public sealed class GenerateModule(
     IOptions<GenerationOptions> generationOptions,
-    IRecordManager recordManager,
-    ITypeService typeService,
+    IRecordModelManager recordManager,
     IGeneratorService generatorService) :
     Module<bool>
 {
@@ -41,37 +38,33 @@ public sealed class GenerateModule(
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var parseModule = await context.GetRecordModule();
-
-        using var translationUnit = parseModule.ValueOrDefault
-                                    ?? throw new InvalidOperationException("TranslationUnit is null");
         var tasks = new List<Task>();
-        while (recordManager.TryPop(out var record))
+        foreach (var recordManagerRecordModel in recordManager.RecordModels)
         {
             tasks.Add(context.SubModule(
-                record.Name,
+                recordManagerRecordModel.Type.SourceType,
                 () => Task.WhenAll(
-                    GenerateCppAsync(record, cancellationToken),
-                    GenerateCSharpAsync(record, cancellationToken))));
+                    GenerateCppAsync(recordManagerRecordModel, cancellationToken),
+                    GenerateCSharpAsync(recordManagerRecordModel, cancellationToken))));
         }
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
         return true;
     }
 
-    private async Task GenerateCppAsync(CXXRecordDecl record, CancellationToken cancellationToken)
+    private async Task GenerateCppAsync(RecordModel record, CancellationToken cancellationToken)
     {
         var cppFile = Path.Combine(generationOptions.Value.CppFolder.FullName,
-            ZString.Concat(typeService.GetCSharpName(record.TypeForDecl), ".cpp"));
+            ZString.Concat(record.Type.CSharpPublicType.ToCode(), ".cpp"));
 
         var codes = await generatorService.GenerateCpp(record).GenerateAsync(cancellationToken).ConfigureAwait(false);
         await File.WriteAllTextAsync(cppFile, codes, cancellationToken).ConfigureAwait(false);
     }
 
-    private async Task GenerateCSharpAsync(CXXRecordDecl record, CancellationToken cancellationToken)
+    private async Task GenerateCSharpAsync(RecordModel record, CancellationToken cancellationToken)
     {
         var csharpFile = Path.Combine(generationOptions.Value.CSharpFolder.FullName,
-            ZString.Concat(typeService.GetCSharpName(record.TypeForDecl), ".g.cs"));
+            ZString.Concat(record.Type.CSharpPublicType.ToCode(), ".g.cs"));
 
         var codes = await generatorService.GenerateCSharp(record).GenerateAsync(cancellationToken)
             .ConfigureAwait(false);

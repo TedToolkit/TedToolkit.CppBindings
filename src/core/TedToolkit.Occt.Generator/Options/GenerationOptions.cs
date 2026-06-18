@@ -5,6 +5,10 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using ClangSharp;
+
+using TedToolkit.Occt.Generator.Models;
+
 namespace TedToolkit.Occt.Generator.Options;
 
 /// <summary>
@@ -45,5 +49,5 @@ public sealed record GenerationOptions()
     /// <summary>
     /// Gets a predicate that skips matching clang types during generation.
     /// </summary>
-    public Predicate<ClangSharp.Type> ShouldSkip { get; init; } = _ => false;
+    public Func<FieldDecl, bool> FieldTypeToGenerate { get; init; } = _ => true;
 }
