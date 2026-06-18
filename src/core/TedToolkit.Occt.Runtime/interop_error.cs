@@ -42,7 +42,25 @@ public readonly unsafe struct interop_error
 
         static string? PtrToString(byte* value)
         {
-            return value is null ? null : Marshal.PtrToStringUTF8((nint)value);
+            if (value is null)
+            {
+                return null;
+            }
+
+#if NET6_0_OR_GREATER
+            return Marshal.PtrToStringUTF8((nint)value);
+#else
+            var length = 0;
+            while (Marshal.ReadByte((nint)value, length) != 0)
+            {
+                length++;
+            }
+
+            var buffer = new byte[length];
+            Marshal.Copy((nint)value, buffer, 0, length);
+
+            return System.Text.Encoding.UTF8.GetString(buffer);
+#endif
         }
     }
 
@@ -89,17 +107,17 @@ public readonly unsafe struct interop_error
             _ when Contains(normalizedTypeName, "out_of_range") || Contains(normalizedTypeName, "OutOfRange")
                 => new ArgumentOutOfRangeException(paramName: null, message: normalizedMessage),
             _ when Contains(normalizedTypeName, "domain_error")
-                     || Contains(normalizedTypeName, "DomainError")
-                     || Contains(normalizedTypeName, "ConstructionError")
-                     || Contains(normalizedTypeName, "DimensionError")
+                   || Contains(normalizedTypeName, "DomainError")
+                   || Contains(normalizedTypeName, "ConstructionError")
+                   || Contains(normalizedTypeName, "DimensionError")
                 => new ArgumentException(normalizedMessage),
             _ when Contains(normalizedTypeName, "overflow_error") || Contains(normalizedTypeName, "Overflow")
                 => new OverflowException(normalizedMessage),
             _ when Contains(normalizedTypeName, "underflow_error") || Contains(normalizedTypeName, "Underflow")
                 => new ArithmeticException(normalizedMessage),
             _ when Contains(normalizedTypeName, "logic_error")
-                     || Contains(normalizedTypeName, "ProgramError")
-                     || Contains(normalizedTypeName, "NoSuchObject")
+                   || Contains(normalizedTypeName, "ProgramError")
+                   || Contains(normalizedTypeName, "NoSuchObject")
                 => new InvalidOperationException(normalizedMessage),
             _ when Contains(normalizedTypeName, "NullObject") || Contains(normalizedTypeName, "NullValue")
 #pragma warning disable CA2201
@@ -114,7 +132,11 @@ public readonly unsafe struct interop_error
 
     private static bool Contains(string source, string value)
     {
+#if NET6_0_OR_GREATER
         return source.Contains(value, StringComparison.OrdinalIgnoreCase);
+#else
+        return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+#endif
     }
 
     private static void Annotate(Exception exception, string? nativeTypeName, string? nativeStackTrace)

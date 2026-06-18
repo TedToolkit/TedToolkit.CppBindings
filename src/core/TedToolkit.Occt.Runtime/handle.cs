@@ -52,7 +52,9 @@ public sealed unsafe class handle<TElement> : IDisposable
         }
     }
 
+#if NET6_0_OR_GREATER
     [DoesNotReturn]
+#endif
     private static void ThrowObjectDisposedException()
     {
         throw new ObjectDisposedException(typeof(handle<TElement>).FullName);
@@ -60,15 +62,19 @@ public sealed unsafe class handle<TElement> : IDisposable
 
     public bool IsDisposed
     {
-        get
-        {
-            return Volatile.Read(ref _handle) == IntPtr.Zero;
-        }
+        get { return Volatile.Read(ref _handle) == IntPtr.Zero; }
     }
 
     public handle(TElement* handle)
     {
+#if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(handle);
+#else
+        if (handle is null)
+        {
+            throw new ArgumentNullException(nameof(handle));
+        }
+#endif
         _handle = (nint)handle;
     }
 

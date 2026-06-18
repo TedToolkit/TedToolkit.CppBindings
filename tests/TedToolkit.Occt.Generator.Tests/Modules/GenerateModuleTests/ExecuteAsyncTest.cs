@@ -37,7 +37,7 @@ internal sealed class ExecuteAsyncTest
         try
         {
             var module = new GenerateModule(
-                Options.Create(new GenerationOptions
+                Microsoft.Extensions.Options.Options.Create(new GenerationOptions
                 {
                     DeclOptions = [],
                     CSharpFolder = csharpDirectory,
@@ -75,6 +75,8 @@ internal sealed class ExecuteAsyncTest
 
     private sealed class EmptyRecordModelManager : IRecordModelManager
     {
+        public IReadOnlyList<EnumModel> EnumModels { get; } = [];
+
         public IReadOnlyList<RecordModel> RecordModels { get; } = [];
 
         public void Add(ClangSharp.CXXRecordDecl record)
@@ -85,6 +87,11 @@ internal sealed class ExecuteAsyncTest
 
     private sealed class ThrowingGeneratorService : IGeneratorService
     {
+        public TedToolkit.Occt.Generator.Generators.EnumGenerator GenerateCSharp(EnumModel enumModel)
+        {
+            throw new NotSupportedException();
+        }
+
         public TedToolkit.Occt.Generator.Generators.CSharpGenerator GenerateCSharp(RecordModel record)
         {
             throw new NotSupportedException();

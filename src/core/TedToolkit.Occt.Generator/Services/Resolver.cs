@@ -18,15 +18,14 @@ namespace TedToolkit.Occt.Generator.Services;
 /// </summary>
 public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
 {
-
-    public TypeModel Resolve(ClangSharp.Type type, out CXXRecordDecl? decl)
+    public TypeResolveResult Resolve(ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
         foreach (var typeRule in typeRules)
         {
-            if (typeRule.TryResolve(type, out var model, out decl))
+            if (typeRule.TryResolve(type, out var result))
             {
-                return model;
+                return result;
             }
         }
 

@@ -6,5 +6,5 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 
 public interface IResolver
 {
-    TypeModel Resolve(ClangSharp.Type type, out CXXRecordDecl? decl);
+    TypeResolveResult Resolve(ClangSharp.Type type);
 }

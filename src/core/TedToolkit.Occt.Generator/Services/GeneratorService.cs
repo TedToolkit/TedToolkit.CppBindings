@@ -33,4 +33,10 @@ public sealed class GeneratorService(
     {
         return new();
     }
+
+    /// <inheritdoc/>
+    public EnumGenerator GenerateCSharp(EnumModel enumModel)
+    {
+        return new(enumModel);
+    }
 }

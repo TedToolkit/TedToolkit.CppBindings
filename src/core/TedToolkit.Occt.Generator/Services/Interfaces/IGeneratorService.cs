@@ -28,4 +28,11 @@ public interface IGeneratorService
     /// <param name="record">The record declaration.</param>
     /// <returns>The generator instance.</returns>
     CppGenerator GenerateCpp(RecordModel record);
+
+    /// <summary>
+    /// Creates a C# generator for the specified enum.
+    /// </summary>
+    /// <param name="enumModel">The enum declaration.</param>
+    /// <returns>The generator instance.</returns>
+    EnumGenerator GenerateCSharp(EnumModel enumModel);
 }

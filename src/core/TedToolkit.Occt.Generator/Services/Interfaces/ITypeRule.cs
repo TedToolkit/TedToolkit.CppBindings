@@ -20,7 +20,7 @@ public interface ITypeRule
     /// Tries to project a type with this rule.
     /// </summary>
     /// <param name="type">The rule context.</param>
-    /// <param name="recordModel">The projected model when the rule matches.</param>
+    /// <param name="result">The projected model when the rule matches.</param>
     /// <returns><see langword="true"/> when the rule matched; otherwise, <see langword="false"/>.</returns>
-    bool TryResolve(ClangSharp.Type type, out TypeModel recordModel, out CXXRecordDecl? decl);
+    bool TryResolve(ClangSharp.Type type, out TypeResolveResult result);
 }

@@ -54,6 +54,13 @@ public sealed class GenerateModule(
                     GenerateCSharpAsync(recordManagerRecordModel, cancellationToken))));
         }
 
+        foreach (var enumModel in recordManager.EnumModels)
+        {
+            tasks.Add(context.SubModule(
+                enumModel.SourceType,
+                () => GenerateCSharpAsync(enumModel, cancellationToken)));
+        }
+
         await Task.WhenAll(tasks).ConfigureAwait(false);
         return true;
     }
@@ -73,6 +80,16 @@ public sealed class GenerateModule(
             ZString.Concat(record.Type.CSharpPublicType.ToCode(), ".g.cs"));
 
         var codes = await generatorService.GenerateCSharp(record).GenerateAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(csharpFile, codes, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task GenerateCSharpAsync(EnumModel enumModel, CancellationToken cancellationToken)
+    {
+        var csharpFile = Path.Combine(generationOptions.Value.CSharpFolder.FullName,
+            ZString.Concat(enumModel.Name, ".g.cs"));
+
+        var codes = await generatorService.GenerateCSharp(enumModel).GenerateAsync(cancellationToken)
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(csharpFile, codes, cancellationToken).ConfigureAwait(false);
     }

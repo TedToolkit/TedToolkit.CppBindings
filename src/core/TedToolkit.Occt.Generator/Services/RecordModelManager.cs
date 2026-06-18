@@ -10,9 +10,15 @@ namespace TedToolkit.Occt.Generator.Services;
 
 internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IResolver resolver) : IRecordModelManager
 {
+    private readonly List<EnumModel> _enumModels = [];
+
     private readonly List<RecordModel> _recordModels = [];
 
+    private readonly HashSet<string> _enumNames = [];
+
     private readonly HashSet<string> _recordNames = [];
+
+    public IReadOnlyList<EnumModel> EnumModels => _enumModels;
 
     public IReadOnlyList<RecordModel> RecordModels
     {
@@ -35,8 +41,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
         _recordModels.Add(new RecordModel
         {
-            Type = resolver.Resolve(type,
-                out _),
+            Type = resolver.Resolve(type).Type,
             FieldModels = GetAllDecls(record)
                 .SelectMany(r => r.Fields)
                 .Where(options.Value.FieldTypeToGenerate)
@@ -54,14 +59,20 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
     private TypeModel ToModel(ClangSharp.Type type)
     {
-        var result = resolver.Resolve(type.CanonicalType, out var recordDecl);
-        if (recordDecl is null)
+        var canonicalType = type.CanonicalType;
+        var result = resolver.Resolve(canonicalType);
+
+        if (result.Decl is { } recordDecl)
         {
-            return result;
+            Add(recordDecl);
         }
 
-        Add(recordDecl);
-        return result;
+        if (result.Enum is not null)
+        {
+            AddEnum(result.Enum);
+        }
+
+        return result.Type;
     }
 
     private MethodModel ToModel(CXXMethodDecl method)
@@ -100,5 +111,15 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
         }
 
         yield return record;
+    }
+
+    private void AddEnum(EnumModel enumModel)
+    {
+        if (_enumNames.Add(enumModel.SourceType) is false)
+        {
+            return;
+        }
+
+        _enumModels.Add(enumModel);
     }
 }
