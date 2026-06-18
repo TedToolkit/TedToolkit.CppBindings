@@ -34,11 +34,17 @@ public sealed class GenerateModule(
     IGeneratorService generatorService) :
     Module<bool>
 {
+    private const string CSharpInteropHeaderFileName = "csharp_interop.h";
+
+    private const string CSharpInteropHeaderResourceName =
+        "TedToolkit.Occt.Generator.Assets.cpp.csharp_interop.h";
+
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var tasks = new List<Task>();
+        var tasks = new List<Task> { CopyCppInteropHeaderAsync(cancellationToken), };
+
         foreach (var recordManagerRecordModel in recordManager.RecordModels)
         {
             tasks.Add(context.SubModule(
@@ -69,5 +75,26 @@ public sealed class GenerateModule(
         var codes = await generatorService.GenerateCSharp(record).GenerateAsync(cancellationToken)
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(csharpFile, codes, cancellationToken).ConfigureAwait(false);
+    }
+
+    private async Task CopyCppInteropHeaderAsync(CancellationToken cancellationToken)
+    {
+        var cppFolder = generationOptions.Value.CppFolder;
+        cppFolder.Create();
+
+        var headerStream = typeof(GenerateModule).Assembly.GetManifestResourceStream(CSharpInteropHeaderResourceName);
+
+        ArgumentNullException.ThrowIfNull(headerStream);
+
+        await using (headerStream.ConfigureAwait(false))
+        {
+            var interopHeaderPath = Path.Combine(cppFolder.FullName, CSharpInteropHeaderFileName);
+            var fileStream = File.Create(interopHeaderPath);
+
+            await using (fileStream.ConfigureAwait(false))
+            {
+                await headerStream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
+            }
+        }
     }
 }

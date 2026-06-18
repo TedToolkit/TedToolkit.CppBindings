@@ -15,11 +15,14 @@ public readonly unsafe struct gp_Pnt2d : IDisposable
     [DllImport("Name", CallingConvention = CallingConvention.Cdecl, EntryPoint = "gp_Pnt2d_SetCoord_int_double")]
     private static extern void SetCoordNative(gp_Pnt2d* self, int theIndex, double theXi);
 
+    [DllImport("Name", CallingConvention = CallingConvention.Cdecl, EntryPoint = "gp_Pnt2d_Delete")]
+    private static extern void DeleteNative(gp_Pnt2d* self);
+
     public void Dispose()
     {
         fixed (gp_Pnt2d* selfPtr = &this)
         {
-            SetCoordNative(selfPtr);
+            DeleteNative(selfPtr);
         }
     }
 }

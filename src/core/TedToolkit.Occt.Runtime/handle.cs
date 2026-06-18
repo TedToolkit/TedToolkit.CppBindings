@@ -60,7 +60,10 @@ public sealed unsafe class handle<TElement> : IDisposable
 
     public bool IsDisposed
     {
-        get { return Volatile.Read(ref _handle) == IntPtr.Zero; }
+        get
+        {
+            return Volatile.Read(ref _handle) == IntPtr.Zero;
+        }
     }
 
     public handle(TElement* handle)

@@ -15,3 +15,6 @@ artifacts
 Build/appsettings.json
 
 .editorconfig
+
+cmake-build*
+.idea/
