@@ -8,6 +8,7 @@ public class MethodModel
     public required IReadOnlyList<IDescriptionItem> ReturnTypeDescriptionItems { get; init; }
 
     public required bool NoExceptions { get; set; }
+    public required bool IsConst { get; set; }
     public required TypeModel ReturnType { get; init; }
     public required string MethodName { get; init; }
     public required IReadOnlyList<ParameterModel> Parameters { get; init; }

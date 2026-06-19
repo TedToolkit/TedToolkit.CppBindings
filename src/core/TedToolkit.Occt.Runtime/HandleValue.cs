@@ -1,7 +1,8 @@
-﻿using System.Diagnostics.CodeAnalysis;
-using System.Runtime.CompilerServices;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 namespace TedToolkit.Occt;
+
 
 /// <summary>
 /// <para>
@@ -32,72 +33,29 @@ namespace TedToolkit.Occt;
 /// </summary>
 /// <typeparam name="TElement">transient</typeparam>
 // ReSharper disable once InconsistentNaming
-public sealed unsafe class handle<TElement> : IDisposable
+[StructLayout(LayoutKind.Sequential)]
+#pragma warning disable IDE1006
+public readonly unsafe ref struct handle<TElement> :
+#pragma warning restore IDE1006
+    IHandle<TElement>
     where TElement : unmanaged, IHandleElement
 {
-    private nint _handle;
+    private readonly nint _handle;
+
+    internal handle(TElement* handle)
+    {
+        _handle = (nint)handle;
+    }
 
     public ref TElement Value
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get
-        {
-            var currentAddress = Volatile.Read(ref _handle);
-            if (currentAddress == IntPtr.Zero)
-            {
-                ThrowObjectDisposedException();
-            }
-
-            return ref *(TElement*)currentAddress;
-        }
+        get { return ref *NativeHandle; }
     }
 
-#if NET6_0_OR_GREATER
-    [DoesNotReturn]
-#endif
-    private static void ThrowObjectDisposedException()
+    public TElement* NativeHandle
     {
-        throw new ObjectDisposedException(typeof(handle<TElement>).FullName);
-    }
-
-    public bool IsDisposed
-    {
-        get { return Volatile.Read(ref _handle) == IntPtr.Zero; }
-    }
-
-    internal handle(TElement* handle)
-    {
-#if NET7_0_OR_GREATER
-        ArgumentNullException.ThrowIfNull(handle);
-#else
-        if (handle is null)
-        {
-            throw new ArgumentNullException(nameof(handle));
-        }
-#endif
-        _handle = (nint)handle;
-    }
-
-    ~handle()
-    {
-        Release();
-    }
-
-    public void Dispose()
-    {
-        Release();
-        GC.SuppressFinalize(this);
-    }
-
-
-    private void Release()
-    {
-        var previousAddress = Interlocked.Exchange(ref _handle, IntPtr.Zero);
-        if (previousAddress == IntPtr.Zero)
-        {
-            return;
-        }
-
-        ((TElement*)previousAddress)->Delete();
+        [MethodImpl(MethodImplOptions.AggressiveInlining)]
+        get { return (TElement*)_handle; }
     }
 }

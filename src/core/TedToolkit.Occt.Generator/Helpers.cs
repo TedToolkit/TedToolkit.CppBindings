@@ -26,18 +26,53 @@ internal sealed class CommentProjection
 
 public static class Helpers
 {
-    public static DataType ToDataType(this ClangSharp.Type type)
+    public static DataType ToPublicDataType(this ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
 
-        return type switch
+        if ((type.DePointer().DeConst() ?? type.DeConst().DePointer()) is { } constPointer)
         {
-            BuiltinType builtinType => builtinType.ToDataType(),
-            PointerType pointerType => pointerType.PointeeType.ToDataType().Pointer,
-            LValueReferenceType lValueReferenceType => lValueReferenceType.PointeeType.ToDataType().Pointer,
-            RValueReferenceType rValueReferenceType => rValueReferenceType.PointeeType.ToDataType().Pointer,
-            _ => new(type.AsString.ToValidCSharpName()),
-        };
+            return constPointer.ToPInvokeDataType().RefReadonly;
+        }
+
+        if (type.DePointer() is { } pointer)
+        {
+            return pointer.ToPInvokeDataType().Ref;
+        }
+
+        return type.ToPInvokeDataType();
+    }
+
+    private static ClangSharp.Type? DePointer(this ClangSharp.Type? type)
+    {
+        return type is PointerType or LValueReferenceType or RValueReferenceType ? type.PointeeType : null;
+    }
+
+    private static ClangSharp.Type? DeConst(this ClangSharp.Type? type)
+    {
+        return type?.IsLocalConstQualified is true ? type.Desugar : null;
+    }
+
+    public static DataType ToPInvokeDataType(this ClangSharp.Type type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+
+        if (type.DeConst() is { } constType)
+        {
+            return constType.ToPInvokeDataType();
+        }
+
+        if (type.DePointer() is { } pointer)
+        {
+            return pointer.ToPInvokeDataType().Pointer;
+        }
+
+        if (type is BuiltinType builtinType)
+        {
+            return builtinType.ToDataType();
+        }
+
+        return new(type.AsString.ToValidCSharpName());
     }
 
     public static DataType ToDataType(this BuiltinType builtinType)
@@ -81,7 +116,8 @@ public static class Helpers
                 or CXTypeKind.CXType_ULongAccum
                 or CXTypeKind.CXType_BFloat16
                 or CXTypeKind.CXType_Ibm128
-                => throw new NotSupportedException($"Unsupported builtin type ({builtinType.AsString}, {builtinType.Kind})"),
+                => throw new NotSupportedException(
+                    $"Unsupported builtin type ({builtinType.AsString}, {builtinType.Kind})"),
             _ => throw new NotSupportedException($"Unknown builtin type ({builtinType.AsString}, {builtinType.Kind})"),
         };
     }
@@ -163,88 +199,89 @@ public static class Helpers
             switch (child.Kind)
             {
                 case CXCommentKind.CXComment_Paragraph:
-                {
-                    var items = child.ToParagraphDescriptionItems();
-                    if (items.Count is 0)
                     {
-                        continue;
-                    }
+                        var items = child.ToParagraphDescriptionItems();
+                        if (items.Count is 0)
+                        {
+                            continue;
+                        }
 
-                    descriptionItems.Add(hasSummary
-                        ? new DescriptionRemarks(items)
-                        : new DescriptionSummary(items));
-                    hasSummary = true;
-                    break;
-                }
+                        descriptionItems.Add(hasSummary
+                            ? new DescriptionRemarks(items)
+                            : new DescriptionSummary(items));
+                        hasSummary = true;
+                        break;
+                    }
                 case CXCommentKind.CXComment_BlockCommand:
-                {
-                    var commandName = child.BlockCommandComment_CommandName.ToSafeString();
-                    var items = child.ToBodyDescriptionItems();
-                    if (items.Count is 0)
                     {
-                        continue;
-                    }
+                        var commandName = child.BlockCommandComment_CommandName.ToSafeString();
+                        var items = child.ToBodyDescriptionItems();
+                        if (items.Count is 0)
+                        {
+                            continue;
+                        }
 
-                    switch (commandName)
-                    {
-                        case "brief":
-                        case "short":
-                            descriptionItems.Add(new DescriptionSummary(items));
-                            hasSummary = true;
-                            break;
-                        case "remark":
-                        case "remarks":
-                        case "details":
-                        case "note":
-                            descriptionItems.Add(new DescriptionRemarks(items));
-                            break;
-                        case "return":
-                        case "returns":
-                        case "result":
-                            returnTypeDescriptionItems.AddRange(items);
-                            break;
-                        default:
-                            descriptionItems.Add(hasSummary
-                                ? new DescriptionRemarks(items)
-                                : new DescriptionSummary(items));
-                            hasSummary = true;
-                            break;
-                    }
+                        switch (commandName)
+                        {
+                            case "brief":
+                            case "short":
+                                descriptionItems.Add(new DescriptionSummary(items));
+                                hasSummary = true;
+                                break;
+                            case "remark":
+                            case "remarks":
+                            case "details":
+                            case "note":
+                                descriptionItems.Add(new DescriptionRemarks(items));
+                                break;
+                            case "return":
+                            case "returns":
+                            case "result":
+                                returnTypeDescriptionItems.AddRange(items);
+                                break;
+                            default:
+                                descriptionItems.Add(hasSummary
+                                    ? new DescriptionRemarks(items)
+                                    : new DescriptionSummary(items));
+                                hasSummary = true;
+                                break;
+                        }
 
-                    break;
-                }
+                        break;
+                    }
                 case CXCommentKind.CXComment_ParamCommand:
-                {
-                    var parameterName = child.ParamCommandComment_ParamName.ToSafeString();
-                    var items = child.ToBodyDescriptionItems();
-                    if (parameterName.Length is not 0 && items.Count is not 0)
                     {
-                        parameterDescriptionItems[parameterName] = items;
-                    }
+                        var parameterName = child.ParamCommandComment_ParamName.ToSafeString();
+                        var items = child.ToBodyDescriptionItems();
+                        if (parameterName.Length is not 0 && items.Count is not 0)
+                        {
+                            parameterDescriptionItems[parameterName] = items;
+                        }
 
-                    break;
-                }
+                        break;
+                    }
                 default:
-                {
-                    var items = child.ToBodyDescriptionItems();
-                    if (items.Count is 0)
                     {
-                        continue;
-                    }
+                        var items = child.ToBodyDescriptionItems();
+                        if (items.Count is 0)
+                        {
+                            continue;
+                        }
 
-                    descriptionItems.Add(hasSummary
-                        ? new DescriptionRemarks(items)
-                        : new DescriptionSummary(items));
-                    hasSummary = true;
-                    break;
-                }
+                        descriptionItems.Add(hasSummary
+                            ? new DescriptionRemarks(items)
+                            : new DescriptionSummary(items));
+                        hasSummary = true;
+                        break;
+                    }
             }
         }
 
         return new CommentProjection
         {
             DescriptionItems = descriptionItems,
-            ParameterDescriptionItems = new ReadOnlyDictionary<string, IReadOnlyList<IDescriptionItem>>(parameterDescriptionItems),
+            ParameterDescriptionItems =
+                new ReadOnlyDictionary<string, IReadOnlyList<IDescriptionItem>>(parameterDescriptionItems),
             ReturnTypeDescriptionItems = returnTypeDescriptionItems,
         };
     }
@@ -333,8 +370,10 @@ public static class Helpers
         return comment.InlineCommandComment_RenderKind switch
         {
             CXCommentInlineCommandRenderKind.CXCommentInlineCommandRenderKind_Bold => new DescriptionBold(items),
-            CXCommentInlineCommandRenderKind.CXCommentInlineCommandRenderKind_Monospaced => new DescriptionCode(false, items),
-            CXCommentInlineCommandRenderKind.CXCommentInlineCommandRenderKind_Emphasized => new DescriptionItalic(items),
+            CXCommentInlineCommandRenderKind.CXCommentInlineCommandRenderKind_Monospaced => new DescriptionCode(false,
+                items),
+            CXCommentInlineCommandRenderKind.CXCommentInlineCommandRenderKind_Emphasized =>
+                new DescriptionItalic(items),
             _ => items.Count is 1 ? items[0] : new DescriptionPara(items),
         };
     }

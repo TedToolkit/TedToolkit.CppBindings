@@ -79,23 +79,96 @@ public sealed class OcctHeaderTypeGenerator : IIncrementalGenerator
 
     private static string GetTriplet()
     {
+#pragma warning disable RS1035
+        var vcpkgRoot = Environment.GetEnvironmentVariable("VCPKG_ROOT");
+#pragma warning restore RS1035
+        if (string.IsNullOrEmpty(vcpkgRoot))
+        {
+            return "";
+        }
+
+        var installedPath = new DirectoryInfo(Path.Combine(vcpkgRoot, "installed"));
+        if (!installedPath.Exists)
+        {
+            return "";
+        }
+
+        var installedTriplets = installedPath.EnumerateDirectories()
+            .Select(static directory => directory.Name)
+            .Where(static folderName => !string.IsNullOrWhiteSpace(folderName))
+            .Where(folderName => new DirectoryInfo(Path.Combine(installedPath.FullName, folderName!, "include", "opencascade")).Exists)
+            .Select(static folderName => folderName!)
+            .Distinct(StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static folderName => folderName, StringComparer.OrdinalIgnoreCase)
+            .ToArray();
+
+        if (installedTriplets.Length == 0)
+        {
+            return "";
+        }
+
+        var architecturePrefix = RuntimeInformation.ProcessArchitecture switch
+        {
+            Architecture.Arm64 => "arm64",
+            Architecture.X86 => "x86",
+            Architecture.Arm => "arm",
+            _ => "x64",
+        };
+
+        string[] preferredTriplets;
+        string platformToken;
+
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            return "x64-windows";
+            preferredTriplets =
+            [
+                $"{architecturePrefix}-windows",
+                $"{architecturePrefix}-windows-static",
+                $"{architecturePrefix}-windows-static-md",
+            ];
+            platformToken = "-windows";
         }
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            return "x64-linux";
+            preferredTriplets =
+            [
+                $"{architecturePrefix}-linux",
+                $"{architecturePrefix}-linux-release",
+            ];
+            platformToken = "-linux";
         }
-
-        if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
+        else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            return RuntimeInformation.ProcessArchitecture == Architecture.Arm64
-                ? "arm64-osx"
-                : "x64-osx";
+            preferredTriplets =
+            [
+                $"{architecturePrefix}-osx",
+                $"{architecturePrefix}-osx-static",
+            ];
+            platformToken = "-osx";
+        }
+        else
+        {
+            return "";
         }
 
-        return "";
+        foreach (var preferredTriplet in preferredTriplets)
+        {
+            var exactMatch = installedTriplets.FirstOrDefault(
+                installedTriplet => string.Equals(installedTriplet, preferredTriplet, StringComparison.OrdinalIgnoreCase));
+
+            if (exactMatch is not null)
+            {
+                return exactMatch;
+            }
+        }
+
+        var compatibleTriplet = installedTriplets
+            .Where(triplet => triplet.Contains(platformToken, StringComparison.OrdinalIgnoreCase))
+            .OrderByDescending(triplet => triplet.StartsWith(architecturePrefix + "-", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(triplet => triplet.Contains("-static", StringComparison.OrdinalIgnoreCase))
+            .ThenBy(triplet => triplet, StringComparer.OrdinalIgnoreCase)
+            .FirstOrDefault();
+
+        return compatibleTriplet ?? installedTriplets[0];
     }
 }

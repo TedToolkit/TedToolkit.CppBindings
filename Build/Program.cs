@@ -1,5 +1,9 @@
 // See https://aka.ms/new-console-template for more information
 
+using Build.Modules;
+
+using ModularPipelines.Extensions;
+
 using Sourcy.DotNet;
 
 using TedToolkit.ModularPipelines;
@@ -21,4 +25,6 @@ var pipeline = new TedPipeline(
     },
     new FileInfo(Path.Combine(Projects.Build.Directory!.FullName, "appsettings.json")));
 
-await pipeline.ExecuteAsync().ConfigureAwait(false);
+await pipeline
+    .ExecuteAsync(b => b.AddModule<GenerateCodeModule>())
+    .ConfigureAwait(false);

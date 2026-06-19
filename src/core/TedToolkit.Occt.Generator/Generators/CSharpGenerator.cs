@@ -84,6 +84,16 @@ public sealed class CSharpGenerator(
         AddRootDescriptions(method, methodModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
 
+        if (methodModel.IsConst)
+        {
+            method = method.Readonly;
+        }
+
+        if (!methodModel.NoExceptions)
+        {
+            method.AddRootDescription(new DescriptionInheritDoc(new DataType("global::TedToolkit.Occt.interop_error.ThrowIfError")));
+        }
+
         foreach (var parameterModel in methodModel.Parameters)
         {
             var parameter = Parameter(parameterModel.Type.CSharpPublicType, parameterModel.Name);

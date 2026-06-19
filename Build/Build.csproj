@@ -8,6 +8,7 @@
       <PrivateAssets>all</PrivateAssets>
       <IncludeAssets>runtime; build; native; contentfiles; analyzers; buildtransitive</IncludeAssets>
     </PackageReference>
+    <PackageReference Include="TedToolkit.RoslynHelper" />
     <ProjectReference Include="..\externals\TedToolkit\TedToolkit.ModularPipelines\TedToolkit.ModularPipelines.csproj"/>
   </ItemGroup>
 </Project>

@@ -34,8 +34,8 @@ public class DefaultTypeRule : ITypeRule
                 {
                     SourceType = type.AsString,
                     CppInteropType = type.AsString,
-                    CSharpPInvokeType = new(type.AsString),
-                    CSharpPublicType = new(type.AsString.ToValidCSharpName()),
+                    CSharpPInvokeType = type.ToPInvokeDataType(),
+                    CSharpPublicType = type.ToPublicDataType(),
                 },
             Enum = enumDecl,
         };

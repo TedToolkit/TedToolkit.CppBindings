@@ -64,11 +64,54 @@ internal readonly unsafe struct interop_error
         }
     }
 
-    /// <summary>
-    /// Throws a mapped managed exception when the native call reported an error.
-    /// </summary>
-    /// <param name="error">The native error payload.</param>
-    public void ThrowIfError()
+#pragma warning disable RCS1139
+    /// <exception cref="ArgumentException">
+    /// Thrown when the native exception type indicates an invalid argument, a domain
+    /// violation, a construction error, or a dimensional mismatch.
+    /// </exception>
+    /// <exception cref="ArgumentOutOfRangeException">
+    /// Thrown when the native exception type indicates that an argument value is outside
+    /// the supported range.
+    /// </exception>
+    /// <exception cref="ArithmeticException">
+    /// Thrown when the native exception type indicates an arithmetic underflow.
+    /// </exception>
+    /// <exception cref="InvalidOperationException">
+    /// Thrown when the native exception type indicates a logic error, an invalid program
+    /// state, or an attempt to access a missing native object.
+    /// </exception>
+    /// <exception cref="NullReferenceException">
+    /// Thrown when the native exception type indicates that a required OCCT object or
+    /// value is null.
+    /// </exception>
+    /// <exception cref="OcctNativeException">
+    /// Thrown when the native layer reports an error type that does not match any of the
+    /// explicitly mapped managed exception categories, or when the native type name is
+    /// unavailable. The original native type name and stack trace, when present, are
+    /// attached to <see cref="Exception.Data"/>.
+    /// </exception>
+    /// <exception cref="OutOfMemoryException">
+    /// Thrown when the native exception type indicates an allocation failure, or when
+    /// the runtime cannot allocate the managed strings or exception objects needed to
+    /// materialize the native error payload.
+    /// </exception>
+    /// <exception cref="OverflowException">
+    /// Thrown when the native exception type indicates an arithmetic overflow.
+    /// </exception>
+    /// <exception cref="BadImageFormatException">
+    /// Thrown when the runtime cannot load the native <c>ted_toolkit_occt</c> library
+    /// because the binary format is invalid for the current process architecture.
+    /// </exception>
+    /// <exception cref="DllNotFoundException">
+    /// Thrown when the runtime cannot locate the native <c>ted_toolkit_occt</c> library
+    /// while releasing the unmanaged error payload.
+    /// </exception>
+    /// <exception cref="EntryPointNotFoundException">
+    /// Thrown when the native <c>ted_toolkit_occt</c> library is loaded successfully
+    /// but does not export the expected <c>free_error</c> entry point.
+    /// </exception>
+#pragma warning restore RCS1139
+    internal void ThrowIfError()
     {
         if (type_name is null)
         {
