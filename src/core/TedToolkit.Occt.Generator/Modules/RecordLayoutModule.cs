@@ -15,6 +15,7 @@ using ModularPipelines.Context.Domains;
 using ModularPipelines.Modules;
 using ModularPipelines.Options;
 
+using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -30,77 +31,32 @@ public sealed class RecordLayoutModule(
     IRecordModelManager recordManager,
     IVcpkgService vcpkgService) : Module<bool>
 {
-    private const string PROBE_FOLDER_NAME = "__layout_probe";
-
-    private const string SOURCE_FOLDER_NAME = "src";
-
-    private const string BUILD_FOLDER_NAME = "build";
-
-    private const string PROBE_TARGET_NAME = "occt_layout_probe";
-
-    private const string CMAKE_FILE_NAME = "CMakeLists.txt";
-
-    private const string PROBE_FILE_NAME = "layout_probe.cpp";
+    private const string PROBE_FOLDER_NAME = "layout_probe";
 
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        var sourceDirectory = Path.Combine(generationOptions.Value.CppFolder.FullName, PROBE_FOLDER_NAME,
-            SOURCE_FOLDER_NAME);
-        var buildDirectory =
-            Path.Combine(generationOptions.Value.CppFolder.FullName, PROBE_FOLDER_NAME, BUILD_FOLDER_NAME);
-        Directory.CreateDirectory(sourceDirectory);
-        Directory.CreateDirectory(buildDirectory);
+        var compile = new CppCompileCoontext(generationOptions.Value.CppFolder, PROBE_FOLDER_NAME,
+            await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false));
 
-        await File.WriteAllTextAsync(
-            Path.Combine(sourceDirectory, CMAKE_FILE_NAME),
-            await GenerateCMakeAsync().ConfigureAwait(false),
-            cancellationToken).ConfigureAwait(false);
+        await compile.AddSourceAsync(PROBE_FOLDER_NAME, GenerateProbe(), cancellationToken).ConfigureAwait(false);
 
-        await File.WriteAllTextAsync(
-            Path.Combine(sourceDirectory, PROBE_FILE_NAME),
-            GenerateProbe(),
-            cancellationToken).ConfigureAwait(false);
+        var folder = await compile.BuildAsync(context.Shell, true, vcpkgService.GetRoot(), vcpkgService.GetTriplet(),
+                cancellationToken)
+            .ConfigureAwait(false);
+        var executableName = OperatingSystem.IsWindows()
+            ? ZString.Concat(PROBE_FOLDER_NAME, ".exe")
+            : PROBE_FOLDER_NAME;
 
-        await RunCommandAsync(
-            context.Shell,
-            "cmake",
-            [
-                "-S",
-                sourceDirectory,
-                "-B",
-                buildDirectory,
-                "-DCMAKE_BUILD_TYPE=Release",
-                ZString.Concat("-DCMAKE_TOOLCHAIN_FILE=",
-                    Path.Combine(vcpkgService.GetRoot(), "scripts", "buildsystems", "vcpkg.cmake")),
-                ZString.Concat("-DVCPKG_TARGET_TRIPLET=", vcpkgService.GetTriplet()),
-            ],
-            sourceDirectory,
-            cancellationToken).ConfigureAwait(false);
+        var probePath = Path.Combine(folder.FullName, executableName);
 
-        var buildArguments = new List<string>()
-        {
-            "--build", buildDirectory, "--config", "Release",
-        };
+        var runningResult = await context.Shell.Command
+            .ExecuteCommandLineTool(new GenericCommandLineToolOptions(probePath), cancellationToken: cancellationToken)
+            .ConfigureAwait(false);
 
-        await RunCommandAsync(
-            context.Shell,
-            "cmake",
-            buildArguments,
-            sourceDirectory,
-            cancellationToken).ConfigureAwait(false);
-
-        var probePath = GetProbePath(buildDirectory);
-        var output = await RunCommandAsync(
-            context.Shell,
-            probePath,
-            [],
-            Path.GetDirectoryName(probePath) ?? buildDirectory,
-            cancellationToken).ConfigureAwait(false);
-
-        ParseProbeOutput(output);
+        ParseProbeOutput(runningResult.StandardOutput);
         return true;
     }
 
@@ -117,51 +73,6 @@ public sealed class RecordLayoutModule(
                 field.Offset = queue.Dequeue();
             }
         }
-    }
-
-    private string GetProbePath(string buildDirectory)
-    {
-        var executableName = OperatingSystem.IsWindows()
-            ? ZString.Concat(PROBE_TARGET_NAME, ".exe")
-            : PROBE_TARGET_NAME;
-
-        var probePath = Path.Combine(buildDirectory, executableName);
-        if (File.Exists(probePath))
-        {
-            return probePath;
-        }
-
-        throw new FileNotFoundException($"Cannot find native layout probe executable under {buildDirectory}.");
-    }
-
-    private async Task<string> RunCommandAsync(
-        IShellContext shell,
-        string fileName,
-        IReadOnlyList<string> arguments,
-        string workingDirectory,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(shell);
-
-        var result = await shell.Command.ExecuteCommandLineTool(
-                new GenericCommandLineToolOptions(fileName) { Arguments = arguments, },
-                new CommandExecutionOptions() { WorkingDirectory = workingDirectory, ThrowOnNonZeroExitCode = false, },
-                cancellationToken)
-            .ConfigureAwait(false);
-
-        if (result.ExitCode == 0)
-        {
-            return result.StandardOutput;
-        }
-
-        throw new InvalidOperationException(
-            $"""
-             Command failed ({result.ExitCode}): {fileName} {string.Join(" ", arguments)}
-             stdout:
-             {result.StandardOutput}
-             stderr:
-             {result.StandardError}
-             """);
     }
 
     private string GenerateProbe()
@@ -193,13 +104,13 @@ public sealed class RecordLayoutModule(
         foreach (var record in recordManager.RecordModels)
         {
             builder.Append("    std::cout << sizeof(");
-            builder.Append(record.Type.SourceType);
+            builder.Append(record.Type.CppTypeName);
             builder.AppendLine(") << '\\n';");
 
             foreach (var field in record.FieldModels)
             {
                 builder.Append("    std::cout << offsetof(");
-                builder.Append(record.Type.SourceType);
+                builder.Append(record.Type.CppTypeName);
                 builder.Append(", ");
                 builder.Append(field.Name);
                 builder.AppendLine(") << '\\n';");
@@ -209,27 +120,5 @@ public sealed class RecordLayoutModule(
         builder.AppendLine("    return 0;");
         builder.AppendLine("}");
         return builder.ToString();
-    }
-
-    private async Task<string> GenerateCMakeAsync()
-    {
-        var cppStandard = await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false);
-        return $$"""
-                 cmake_minimum_required(VERSION 3.28)
-                 project(TedToolkit_Occt_LayoutProbe LANGUAGES CXX)
-
-                 set(CMAKE_CXX_STANDARD {{cppStandard}})
-                 set(CMAKE_CXX_STANDARD_REQUIRED ON)
-                 set(CMAKE_CXX_EXTENSIONS OFF)
-
-                 find_package(OpenCASCADE CONFIG REQUIRED)
-
-                 add_executable({{PROBE_TARGET_NAME}} {{PROBE_FILE_NAME}})
-                 set_target_properties({{PROBE_TARGET_NAME}} PROPERTIES
-                     RUNTIME_OUTPUT_DIRECTORY "${CMAKE_BINARY_DIR}"
-                     RUNTIME_OUTPUT_DIRECTORY_RELEASE "${CMAKE_BINARY_DIR}")
-                 target_include_directories({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_INCLUDE_DIR})
-                 target_link_libraries({{PROBE_TARGET_NAME}} PRIVATE ${OpenCASCADE_LIBRARIES})
-                 """;
     }
 }

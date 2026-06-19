@@ -62,7 +62,7 @@ internal sealed class AddTest
 
         await Assert.That(manager.RecordModels.Count).IsEqualTo(1);
         await Assert.That(manager.EnumModels.Count).IsEqualTo(1);
-        await Assert.That(manager.RecordModels.Single().FieldModels.Single().Type.CppInteropType)
+        await Assert.That(manager.RecordModels.Single().FieldModels.Single().Type.CppTypeName)
             .IsEqualTo("Quantity_TypeOfColor");
         await Assert.That(manager.EnumModels.Single().Name).IsEqualTo("Quantity_TypeOfColor");
         await Assert.That(Render(manager.RecordModels.Single().DescriptionItems.Single()))

@@ -23,7 +23,7 @@ internal sealed class GenerateAsyncTest
         var intType = new TypeModel
         {
             SourceType = "int",
-            CppInteropType = "int",
+            CppTypeName = "int",
             CSharpPInvokeType = DataType.Int,
             CSharpPublicType = DataType.Int,
         };
@@ -36,7 +36,7 @@ internal sealed class GenerateAsyncTest
                 Type = new TypeModel
                 {
                     SourceType = "gp_Pnt2d",
-                    CppInteropType = "gp_Pnt2d",
+                    CppTypeName = "gp_Pnt2d",
                     CSharpPInvokeType = new DataType("gp_Pnt2d"),
                     CSharpPublicType = new DataType("gp_Pnt2d"),
                 },

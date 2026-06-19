@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Diagnostics.CodeAnalysis;
+
 using ClangSharp;
 
 using TedToolkit.Occt.Generator.Models;
@@ -22,6 +24,22 @@ public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
     {
         ArgumentNullException.ThrowIfNull(type);
         var canonicalType = type.CanonicalType;
+
+        if (TryGetEnumDecl(type, out var enumDecl))
+        {
+            return new()
+            {
+                Decl = type.AsCXXRecordDecl,
+                Type = new()
+                {
+                    CppTypeName = enumDecl.Name,
+                    CSharpPInvokeType = new(enumDecl.Name),
+                    CSharpPublicType = new(enumDecl.Name),
+                },
+                Enum = enumDecl,
+            };
+        }
+
         foreach (var typeRule in typeRules)
         {
             if (typeRule.TryResolve(canonicalType, out var result))
@@ -31,5 +49,16 @@ public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
         }
 
         throw new InvalidOperationException($"Could not resolve type ({canonicalType.AsString})");
+    }
+
+    private static bool TryGetEnumDecl(ClangSharp.Type type, [NotNullWhen(true)] out EnumDecl? enumDecl)
+    {
+        enumDecl = type switch
+        {
+            EnumType enumType => enumType.Decl,
+            _ => type.AsTagDecl as EnumDecl,
+        };
+
+        return enumDecl is not null;
     }
 }

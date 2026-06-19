@@ -48,7 +48,7 @@ public sealed class GenerateModule(
         foreach (var recordManagerRecordModel in recordManager.RecordModels)
         {
             tasks.Add(context.SubModule(
-                recordManagerRecordModel.Type.SourceType,
+                recordManagerRecordModel.Type.CppTypeName,
                 () => Task.WhenAll(
                     GenerateCppAsync(recordManagerRecordModel, cancellationToken),
                     GenerateCSharpAsync(recordManagerRecordModel, cancellationToken))));

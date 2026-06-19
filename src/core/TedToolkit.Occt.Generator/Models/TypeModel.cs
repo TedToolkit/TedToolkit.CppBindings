@@ -5,14 +5,9 @@ namespace TedToolkit.Occt.Generator.Models;
 public class TypeModel
 {
     /// <summary>
-    /// Gets or sets the source clang type used to build this model.
-    /// </summary>
-    public required string SourceType { get; init; }
-
-    /// <summary>
     /// Gets or sets the projected C++ type used in generated <c>extern "C"</c> wrappers.
     /// </summary>
-    public required string CppInteropType { get; init; }
+    public required string CppTypeName { get; init; }
 
     /// <summary>
     /// Gets or sets the projected C# type used for PInvoke and field layout generation.
