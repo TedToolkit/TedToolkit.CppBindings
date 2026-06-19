@@ -34,7 +34,7 @@ public static class PipelineBuilderExtension
         ArgumentNullException.ThrowIfNull(builder);
         builder.Services
             .AddSingleton<IVcpkgService, VcpkgService>()
-            .AddSingleton<ITypeRule, DefaultTypeRule>()
+            .AddSingleton<ITypeRule, Utf8StringTypeRule>()
             .AddSingleton<IResolver, Resolver>()
             .AddSingleton<IGenerationOutputCleaner, GenerationOutputCleaner>()
             .AddSingleton<IRecordModelManager, RecordModelManager>()

@@ -1,4 +1,7 @@
-﻿using ClangSharp;
+﻿using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+using ClangSharp;
 using ClangSharp.Interop;
 
 using Microsoft.Extensions.Options;
@@ -14,49 +17,56 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 {
     private readonly List<EnumModel> _enumModels = [];
 
-    private readonly List<RecordModel> _recordModels = [];
 
     private readonly HashSet<CXCursor> _enumNames = [];
 
-    private readonly HashSet<CXCursor> _recordNames = [];
+    private readonly Dictionary<CXCursor, RecordModel> _recordNames = [];
 
     public IReadOnlyList<EnumModel> EnumModels => _enumModels;
 
-    public IReadOnlyList<RecordModel> RecordModels
+    public IReadOnlyCollection<RecordModel> RecordModels
     {
-        get
-        {
-            return _recordModels;
-        }
+        get { return _recordNames.Values; }
     }
 
-    public void Add(CXXRecordDecl record)
+    public RecordModel Add(CXXRecordDecl record)
     {
         record = record.Definition ?? record;
         ArgumentNullException.ThrowIfNull(record);
-        if (!_recordNames.Add(record.CanonicalDecl.Handle))
+        ref var result = ref CollectionsMarshal.GetValueRefOrNullRef(_recordNames, record.CanonicalDecl.Handle);
+        if (!Unsafe.IsNullRef(ref result))
         {
-            return;
+            return result;
         }
 
         var commentProjection = record.ToCommentProjection();
-        _recordModels.Add(new RecordModel
+#pragma warning disable RCS1212
+        result = new()
         {
             DescriptionItems = commentProjection.DescriptionItems,
-            Type = resolver.Resolve(record.TypeForDecl).Type,
+            Type = resolver.Resolve(record.TypeForDecl)
+                .Type,
             FieldModels = GetAllDecls(record)
                 .SelectMany(r => r.Fields)
                 .Where(options.Value.FieldTypeToGenerate)
                 .Select(ToModel)
                 .ToArray(),
-            MethodModels = GetAllDecls(record)
-                .SelectMany(r => r.Methods)
-                .Select(ToModel)
-                .ToArray(),
+            MethodModels =
+                record.Methods.Where(ShouldIncludeMethod)
+                    .Select(ToModel)
+                    .ToArray(),
             BaseTypes = record.Bases
                 .Select(b => ToModel(b.Type))
                 .ToArray(),
-        });
+            Bases = record.Bases
+                .Select(i => i.Type.AsCXXRecordDecl)
+                .OfType<CXXRecordDecl>()
+                .Select(Add)
+                .ToArray(),
+        };
+#pragma warning restore RCS1212
+
+        return result;
     }
 
     private TypeModel ToModel(ClangSharp.Type type)
@@ -117,9 +127,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
         return new()
         {
-            DescriptionItems = descriptionItems ?? [],
-            Type = ToModel(paramDel.Type),
-            Name = paramDel.Name,
+            DescriptionItems = descriptionItems ?? [], Type = ToModel(paramDel.Type), Name = paramDel.Name,
         };
     }
 
@@ -132,6 +140,28 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
             DescriptionItems = commentProjection.DescriptionItems,
             Name = fieldDecl.Name,
             Type = ToModel(fieldDecl.Type),
+        };
+    }
+
+    private static bool ShouldIncludeMethod(CXXMethodDecl method)
+    {
+        return !IsOperatorNewOrDelete(method);
+    }
+
+    private static bool IsOperatorNewOrDelete(CXXMethodDecl method)
+    {
+        if (!method.IsOverloadedOperator)
+        {
+            return false;
+        }
+
+        return method.OverloadedOperator switch
+        {
+            CX_OverloadedOperatorKind.CX_OO_New => true,
+            CX_OverloadedOperatorKind.CX_OO_Delete => true,
+            CX_OverloadedOperatorKind.CX_OO_Array_New => true,
+            CX_OverloadedOperatorKind.CX_OO_Array_Delete => true,
+            _ => false,
         };
     }
 

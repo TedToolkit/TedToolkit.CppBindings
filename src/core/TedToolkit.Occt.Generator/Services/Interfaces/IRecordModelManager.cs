@@ -6,9 +6,9 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 
 public interface IRecordModelManager
 {
-    void Add(CXXRecordDecl record);
+    RecordModel Add(CXXRecordDecl record);
 
     IReadOnlyList<EnumModel> EnumModels { get; }
 
-    IReadOnlyList<RecordModel> RecordModels { get; }
+    IReadOnlyCollection<RecordModel> RecordModels { get; }
 }

@@ -81,6 +81,56 @@ internal sealed class AddTest
             .Contains("RGB space.");
     }
 
+    [Test]
+    public async Task Should_filter_special_methods_while_preserving_operators_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Base
+            {
+                Base();
+                ~Base();
+                void BaseMethod();
+            };
+
+            struct Derived : Base
+            {
+                Derived();
+                ~Derived();
+                void OwnMethod();
+                bool operator==(const Derived&) const;
+                static void* operator new(unsigned long long size);
+                static void operator delete(void* ptr);
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Derived");
+
+        var manager = new RecordModelManager(
+            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
+            {
+                DeclOptions = [],
+                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
+                CppFolder = new DirectoryInfo(Path.GetTempPath()),
+            }),
+            new Resolver([new DefaultTypeRule(),]));
+
+        manager.Add(record);
+
+        var methodNames = manager.RecordModels.Single().MethodModels
+            .Select(static m => m.MethodName)
+            .ToArray();
+
+        await Assert.That(methodNames).IsEquivalentTo([
+            "BaseMethod",
+            "Derived",
+            "~Derived",
+            "OwnMethod",
+            "operator==",
+        ]);
+    }
+
     private static TranslationUnit ParseTranslationUnit(string source)
     {
         using var file = CXUnsavedFile.Create("test.cpp", source);

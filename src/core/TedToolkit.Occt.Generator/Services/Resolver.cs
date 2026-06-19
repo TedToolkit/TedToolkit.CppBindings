@@ -48,7 +48,16 @@ public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
             }
         }
 
-        throw new InvalidOperationException($"Could not resolve type ({canonicalType.AsString})");
+        return new()
+        {
+            Decl = type.AsCXXRecordDecl,
+            Type = new()
+            {
+                CppTypeName = type.AsString,
+                CSharpPInvokeType = type.ToPInvokeDataType(),
+                CSharpPublicType = type.ToPublicDataType(),
+            },
+        };
     }
 
     private static bool TryGetEnumDecl(ClangSharp.Type type, [NotNullWhen(true)] out EnumDecl? enumDecl)

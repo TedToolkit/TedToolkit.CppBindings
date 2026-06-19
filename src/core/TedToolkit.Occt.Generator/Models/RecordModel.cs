@@ -16,6 +16,8 @@ public sealed class RecordModel
 {
     public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }
 
+    public required IReadOnlyList<RecordModel> Bases { get; init; }
+
     public long Size { get; set; }
 
     public required TypeModel Type { get; init; }

@@ -34,6 +34,8 @@ public sealed class CSharpGenerator(
     {
         var structName = recordDecl.Type.CSharpPublicType.ToCode();
         var structDeclaration = Struct(structName).Unsafe
+            .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
+                .AddArgument(Argument(recordDecl.Type.CppTypeName.ToLiteral())))
             .AddAttribute(Attribute<StructLayoutAttribute>()
                 .AddArgument(Argument(LayoutKind.Explicit.ToExpression()))
                 .AddNamedArgument(nameof(StructLayoutAttribute.Size),
@@ -61,9 +63,19 @@ public sealed class CSharpGenerator(
 
     private void GenerateMethods(TypeDeclaration structDeclaration)
     {
-        foreach (var recordDeclMethodModel in recordDecl.MethodModels)
+        GenerateOneStructMethods(structDeclaration, recordDecl);
+    }
+
+    private static void GenerateOneStructMethods(TypeDeclaration structDeclaration, RecordModel recordModel)
+    {
+        foreach (var recordModelBase in recordModel.Bases)
         {
-            AddMethod(structDeclaration, recordDeclMethodModel);
+            GenerateOneStructMethods(structDeclaration, recordModelBase);
+        }
+
+        foreach (var recordDeclMethodModel in recordModel.MethodModels)
+        {
+            AddMethod(structDeclaration, recordDeclMethodModel, recordDeclMethodModel.GetMethodInteropName(recordModel));
         }
     }
 
@@ -72,17 +84,25 @@ public sealed class CSharpGenerator(
         var field = Field(fieldModel.Type.CSharpPInvokeType, fieldModel.Name)
             .AddAttribute(Attribute<FieldOffsetAttribute>()
                 .AddArgument(Argument(fieldModel.Offset.ToLiteral())))
+            .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
+                .AddArgument(Argument(fieldModel.Type.CppTypeName.ToLiteral())))
             .Public;
         AddRootDescriptions(field, fieldModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
         structDeclaration.AddMember(field);
     }
 
-    private static void AddMethod(TypeDeclaration structDeclaration, MethodModel methodModel)
+    private static void AddMethod(TypeDeclaration structDeclaration, MethodModel methodModel, string pinvokeMethodName)
     {
         var method = Method(methodModel.MethodName, CreateReturnType(methodModel)).Public;
         AddRootDescriptions(method, methodModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
+
+        if (!methodModel.IsReturnVoid)
+        {
+            method.AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
+                .AddArgument(Argument(methodModel.ReturnType.CppTypeName.ToLiteral())));
+        }
 
         if (methodModel.IsConst)
         {
@@ -96,7 +116,9 @@ public sealed class CSharpGenerator(
 
         foreach (var parameterModel in methodModel.Parameters)
         {
-            var parameter = Parameter(parameterModel.Type.CSharpPublicType, parameterModel.Name);
+            var parameter = Parameter(parameterModel.Type.CSharpPublicType, parameterModel.Name)
+                .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
+                    .AddArgument(Argument(parameterModel.Type.CppTypeName.ToLiteral())));
             AddDescriptions(parameter, parameterModel.DescriptionItems, static (target, description) =>
                 target.AddDescription(description));
             method.AddParameter(parameter);

@@ -55,9 +55,9 @@ public sealed class GenerateCppModule(
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
-        var folder = await compile.BuildAsync(context.Shell, false, vcpkgService.GetRoot(), vcpkgService.GetTriplet(),
-                cancellationToken)
-            .ConfigureAwait(false);
+        // var folder = await compile.BuildAsync(context.Shell, false, vcpkgService.GetRoot(), vcpkgService.GetTriplet(),
+        //         cancellationToken)
+        //     .ConfigureAwait(false);
         return true;
     }
 

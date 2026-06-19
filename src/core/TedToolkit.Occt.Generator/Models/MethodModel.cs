@@ -6,6 +6,7 @@ namespace TedToolkit.Occt.Generator.Models;
 
 public class MethodModel
 {
+    public bool IsReturnVoid => ReturnType.CppTypeName is "void";
     public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }
     public required IReadOnlyList<IDescriptionItem> ReturnTypeDescriptionItems { get; init; }
 
