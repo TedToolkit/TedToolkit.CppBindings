@@ -1,10 +1,12 @@
 ﻿using ClangSharp;
+using ClangSharp.Interop;
 
 using Microsoft.Extensions.Options;
 
 using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
+using TedToolkit.RoslynHelper.Generators;
 
 namespace TedToolkit.Occt.Generator.Services;
 
@@ -14,9 +16,9 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
     private readonly List<RecordModel> _recordModels = [];
 
-    private readonly HashSet<string> _enumNames = [];
+    private readonly HashSet<CXCursor> _enumNames = [];
 
-    private readonly HashSet<string> _recordNames = [];
+    private readonly HashSet<CXCursor> _recordNames = [];
 
     public IReadOnlyList<EnumModel> EnumModels => _enumModels;
 
@@ -32,16 +34,16 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
     {
         record = record.Definition ?? record;
         ArgumentNullException.ThrowIfNull(record);
-        var type = record.TypeForDecl.CanonicalType;
-        var typeName = type.AsString;
-        if (!_recordNames.Add(typeName))
+        if (!_recordNames.Add(record.CanonicalDecl.Handle))
         {
             return;
         }
 
+        var commentProjection = record.ToCommentProjection();
         _recordModels.Add(new RecordModel
         {
-            Type = resolver.Resolve(type).Type,
+            DescriptionItems = commentProjection.DescriptionItems,
+            Type = resolver.Resolve(record.TypeForDecl).Type,
             FieldModels = GetAllDecls(record)
                 .SelectMany(r => r.Fields)
                 .Where(options.Value.FieldTypeToGenerate)
@@ -59,8 +61,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
     private TypeModel ToModel(ClangSharp.Type type)
     {
-        var canonicalType = type.CanonicalType;
-        var result = resolver.Resolve(canonicalType);
+        var result = resolver.Resolve(type);
 
         if (result.Decl is { } recordDecl)
         {
@@ -69,7 +70,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
         if (result.Enum is not null)
         {
-            AddEnum(result.Enum);
+            Add(result.Enum);
         }
 
         return result.Type;
@@ -77,22 +78,59 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
     private MethodModel ToModel(CXXMethodDecl method)
     {
+        var commentProjection = method.ToCommentProjection();
+
         return new()
         {
+            DescriptionItems = commentProjection.DescriptionItems,
+            ReturnTypeDescriptionItems = commentProjection.ReturnTypeDescriptionItems,
             ReturnType = ToModel(method.ReturnType),
             MethodName = method.Name,
-            Parameters = method.Parameters.Select(ToModel).ToArray(),
+            Parameters = method.Parameters.Select(p => ToModel(p, commentProjection))
+                .ToArray(),
+            NoExceptions = IsNoExcept(method),
         };
     }
 
-    private ParameterModel ToModel(ParmVarDecl paramDel)
+    private static bool IsNoExcept(CXXMethodDecl method)
     {
-        return new() { Type = ToModel(paramDel.Type), Name = paramDel.Name, };
+        if (method.Type is not FunctionProtoType fpt)
+        {
+            return false;
+        }
+
+        return fpt.ExceptionSpecType switch
+        {
+            CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_BasicNoexcept => true,
+            CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_ComputedNoexcept => true,
+            CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_NoThrow => true,
+            CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_DynamicNone => true,
+            _ => false,
+        };
+    }
+
+    private ParameterModel ToModel(ParmVarDecl paramDel, CommentProjection methodCommentProjection)
+    {
+        methodCommentProjection.ParameterDescriptionItems.TryGetValue(paramDel.Name, out var descriptionItems);
+
+        return new()
+        {
+            DescriptionItems = descriptionItems ?? [],
+            Type = ToModel(paramDel.Type),
+            Name = paramDel.Name,
+        };
     }
 
     private FieldModel ToModel(FieldDecl fieldDecl)
     {
-        return new() { Name = fieldDecl.Name, Type = ToModel(fieldDecl.Type), };
+        var commentProjection = fieldDecl.ToCommentProjection();
+
+        return new()
+        {
+            DescriptionItems = commentProjection.DescriptionItems,
+            Name = fieldDecl.Name,
+            Type = ToModel(fieldDecl.Type),
+        };
     }
 
     private static IEnumerable<CXXRecordDecl> GetAllDecls(CXXRecordDecl record)
@@ -113,13 +151,45 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
         yield return record;
     }
 
-    private void AddEnum(EnumModel enumModel)
+    private void Add(EnumDecl enumModel)
     {
-        if (_enumNames.Add(enumModel.SourceType) is false)
+        if (!_enumNames.Add(enumModel.CanonicalDecl.Handle))
         {
             return;
         }
 
-        _enumModels.Add(enumModel);
+        _enumModels.Add(CreateEnumModel(enumModel));
+    }
+
+    private static EnumModel CreateEnumModel(EnumDecl enumDecl)
+    {
+        if (enumDecl.IntegerType is not BuiltinType builtinType)
+        {
+            throw new NotSupportedException($"Unsupported enum underlying type ({enumDecl.IntegerType.AsString})");
+        }
+
+        var underlyingType = builtinType.ToDataType();
+
+        return new EnumModel
+        {
+            DescriptionItems = enumDecl.ToCommentProjection().DescriptionItems,
+            Name = enumDecl.Name.ToValidCSharpName(),
+            SourceType = enumDecl.TypeForDecl.AsString,
+            UnderlyingType = underlyingType,
+            Members = enumDecl.Enumerators.Select(ToEnumMember).ToArray(),
+        };
+    }
+
+
+    private static EnumMemberModel ToEnumMember(EnumConstantDecl enumConstant)
+    {
+        return new EnumMemberModel
+        {
+            DescriptionItems = enumConstant.ToCommentProjection().DescriptionItems,
+            Name = enumConstant.Name,
+            Value = enumConstant.IsUnsigned
+                ? enumConstant.UnsignedInitVal.ToLiteral()
+                : enumConstant.InitVal.ToLiteral(),
+        };
     }
 }

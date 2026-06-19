@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.RoslynHelper.Generators;
+
 namespace TedToolkit.Occt.Generator.Models;
 
 /// <summary>
@@ -12,6 +14,8 @@ namespace TedToolkit.Occt.Generator.Models;
 /// </summary>
 public sealed class RecordModel
 {
+    public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }
+
     public long Size { get; set; }
 
     public required TypeModel Type { get; init; }

@@ -27,7 +27,7 @@ var pipeline = await Pipeline.CreateBuilder()
         {
             DeclOptions =
             [
-                new(OcctHeaderType.Geom2d_BSplineCurve),
+                new(ConsoleDecl.Geom2d_BSplineCurve),
             ],
             CSharpFolder = outputFolder.CreateSubdirectory("csharp"),
             CppFolder = outputFolder.CreateSubdirectory("cpp"),
@@ -46,3 +46,8 @@ var pipeline = await Pipeline.CreateBuilder()
 
 await pipeline
     .RunAsync().ConfigureAwait(false);
+
+internal enum ConsoleDecl
+{
+    Geom2d_BSplineCurve,
+}

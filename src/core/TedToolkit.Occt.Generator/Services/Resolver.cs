@@ -21,14 +21,15 @@ public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
     public TypeResolveResult Resolve(ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
+        var canonicalType = type.CanonicalType;
         foreach (var typeRule in typeRules)
         {
-            if (typeRule.TryResolve(type, out var result))
+            if (typeRule.TryResolve(canonicalType, out var result))
             {
                 return result;
             }
         }
 
-        throw new InvalidOperationException($"Could not resolve type ({type.AsString})");
+        throw new InvalidOperationException($"Could not resolve type ({canonicalType.AsString})");
     }
 }

@@ -26,4 +26,9 @@ public sealed record DeclOptions
         ArgumentNullException.ThrowIfNull(@enum);
         FileName = @enum.ToString();
     }
+
+    public DeclOptions(string fileName)
+    {
+        FileName = fileName;
+    }
 }

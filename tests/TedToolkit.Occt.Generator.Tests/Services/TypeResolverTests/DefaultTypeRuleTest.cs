@@ -48,7 +48,7 @@ internal sealed class DefaultTypeRuleTest
 
         IResolver resolver = new Resolver([new DefaultTypeRule(),]);
 
-        var resolved = resolver.Resolve(fieldType.CanonicalType);
+        var resolved = resolver.Resolve(fieldType);
 
         await Assert.That(Render(resolved.Type.CSharpPInvokeType)).IsEqualTo("byte");
         await Assert.That(Render(resolved.Type.CSharpPublicType)).IsEqualTo("Quantity_TypeOfColor");
@@ -76,8 +76,7 @@ internal sealed class DefaultTypeRuleTest
         var recordType = translationUnit.TranslationUnitDecl.CursorChildren
             .OfType<CXXRecordDecl>()
             .Single(static r => r.Name == "Geom_Surface")
-            .TypeForDecl
-            .CanonicalType;
+            .TypeForDecl;
 
         IResolver resolver = new Resolver([new DefaultTypeRule(),]);
 

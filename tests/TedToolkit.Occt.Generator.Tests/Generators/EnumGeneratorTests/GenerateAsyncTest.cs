@@ -7,6 +7,7 @@
 
 using TedToolkit.Occt.Generator.Generators;
 using TedToolkit.Occt.Generator.Models;
+using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests.Generators.EnumGeneratorTests;
@@ -18,19 +19,33 @@ internal sealed class GenerateAsyncTest
     {
         var generator = new EnumGenerator(new EnumModel
         {
+            DescriptionItems = [new DescriptionSummary(new DescriptionText("Color kind.")),],
             Name = "Quantity_TypeOfColor",
             SourceType = "Quantity_TypeOfColor",
             UnderlyingType = new DataType("byte"),
             Members =
             [
-                new EnumMemberModel { Name = "Quantity_TypeOfColor_RGB", Value = "1", },
-                new EnumMemberModel { Name = "Quantity_TypeOfColor_sRGB", Value = "2", },
+                new EnumMemberModel
+                {
+                    DescriptionItems = [new DescriptionSummary(new DescriptionText("RGB space.")),],
+                    Name = "Quantity_TypeOfColor_RGB",
+                    Value = 1.ToLiteral(),
+                },
+                new EnumMemberModel
+                {
+                    DescriptionItems = [new DescriptionSummary(new DescriptionText("sRGB space.")),],
+                    Name = "Quantity_TypeOfColor_sRGB",
+                    Value = 2.ToLiteral(),
+                },
             ],
         });
 
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
+        await Assert.That(code).Contains("<summary>");
+        await Assert.That(code).Contains("Color kind.");
         await Assert.That(code).Contains("public enum Quantity_TypeOfColor : byte");
+        await Assert.That(code).Contains("RGB space.");
         await Assert.That(code).Contains("Quantity_TypeOfColor_RGB = 1");
         await Assert.That(code).Contains("Quantity_TypeOfColor_sRGB = 2");
     }

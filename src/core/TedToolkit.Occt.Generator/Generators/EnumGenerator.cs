@@ -3,32 +3,37 @@ using System.Text;
 using TedToolkit.Occt.Generator.Models;
 using TedToolkit.RoslynHelper.Generators;
 
+using static TedToolkit.RoslynHelper.Generators.SourceComposer;
+using static TedToolkit.RoslynHelper.Generators.SourceComposer<
+    TedToolkit.Occt.Generator.Generators.EnumGenerator>;
+
 namespace TedToolkit.Occt.Generator.Generators;
 
 public sealed class EnumGenerator(EnumModel enumModel) : IGenerator
 {
     public Task<string> GenerateAsync(CancellationToken cancellationToken)
     {
-        var builder = new StringBuilder();
-        builder.AppendLine("namespace TedToolkit.Occt;");
-        builder.AppendLine();
-        builder.Append("public enum ");
-        builder.Append(enumModel.Name);
-        builder.Append(" : ");
-        builder.Append(enumModel.UnderlyingType.ToCode());
-        builder.AppendLine();
-        builder.AppendLine("{");
+        var enumDeclaration = Enum(enumModel.Name, enumModel.UnderlyingType).Public;
+
+        foreach (var enumModelDescriptionItem in enumModel.DescriptionItems)
+        {
+            enumDeclaration.AddRootDescription(enumModelDescriptionItem);
+        }
 
         foreach (var member in enumModel.Members)
         {
-            builder.Append("    ");
-            builder.Append(member.Name);
-            builder.Append(" = ");
-            builder.Append(member.Value);
-            builder.AppendLine(",");
+            var enumMember = EnumMember(member.Name, member.Value);
+            foreach (var enumModelDescriptionItem in member.DescriptionItems)
+            {
+                enumMember.AddRootDescription(enumModelDescriptionItem);
+            }
+
+            enumDeclaration.AddEnumMember(enumMember);
         }
 
-        builder.AppendLine("}");
-        return Task.FromResult(builder.ToString());
+        return Task.FromResult(File()
+            .AddNameSpace(NameSpace("TedToolkit.Occt")
+                .AddMember(enumDeclaration))
+            .ToCode());
     }
 }

@@ -8,7 +8,7 @@ namespace TedToolkit.Occt;
 /// </summary>
 [StructLayout(LayoutKind.Sequential)]
 #pragma warning disable CA1815, SA1300
-public readonly unsafe struct interop_error
+internal readonly unsafe struct interop_error
 #pragma warning restore SA1300, CA1815
 {
     /// <summary>

@@ -33,7 +33,7 @@ namespace TedToolkit.Occt;
 /// <typeparam name="TElement">transient</typeparam>
 // ReSharper disable once InconsistentNaming
 public sealed unsafe class handle<TElement> : IDisposable
-    where TElement : unmanaged, IDisposable
+    where TElement : unmanaged, IHandleElement
 {
     private nint _handle;
 
@@ -65,7 +65,7 @@ public sealed unsafe class handle<TElement> : IDisposable
         get { return Volatile.Read(ref _handle) == IntPtr.Zero; }
     }
 
-    public handle(TElement* handle)
+    internal handle(TElement* handle)
     {
 #if NET7_0_OR_GREATER
         ArgumentNullException.ThrowIfNull(handle);
@@ -98,6 +98,6 @@ public sealed unsafe class handle<TElement> : IDisposable
             return;
         }
 
-        ((TElement*)previousAddress)->Dispose();
+        ((TElement*)previousAddress)->Delete();
     }
 }

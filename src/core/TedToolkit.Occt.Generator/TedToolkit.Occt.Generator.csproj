@@ -25,7 +25,7 @@
 
   <ItemGroup>
     <EmbeddedResource Include="..\TedToolkit.Occt.Cpp\csharp_interop.h"
-                      LogicalName="TedToolkit.Occt.Generator.Assets.cpp.csharp_interop.h" />
+                      LogicalName="TedToolkit.Occt.Generator.Assets.cpp.csharp_interop.h"/>
   </ItemGroup>
 
 </Project>

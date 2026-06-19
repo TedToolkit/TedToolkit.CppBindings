@@ -13,6 +13,8 @@ using Microsoft.Extensions.Options;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services;
 using TedToolkit.Occt.Generator.Services.Rules;
+using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests.Services.RecordModelManagerTests;
 
@@ -22,15 +24,24 @@ internal sealed class AddTest
     public async Task Should_collect_referenced_enums_when_record_fields_use_them_Async()
     {
         using var translationUnit = ParseTranslationUnit("""
+            //! Supported color kinds.
             enum class Quantity_TypeOfColor : unsigned char
             {
+                //! RGB space.
                 Quantity_TypeOfColor_RGB = 1,
                 Quantity_TypeOfColor_sRGB = 2,
             };
 
+            //! Holder summary.
             struct Holder
             {
+                //! Field summary.
                 Quantity_TypeOfColor Field;
+
+                //! Method summary.
+                //! @param value Value summary.
+                //! @return Return summary.
+                int Method(int value);
             };
             """);
 
@@ -54,6 +65,20 @@ internal sealed class AddTest
         await Assert.That(manager.RecordModels.Single().FieldModels.Single().Type.CppInteropType)
             .IsEqualTo("Quantity_TypeOfColor");
         await Assert.That(manager.EnumModels.Single().Name).IsEqualTo("Quantity_TypeOfColor");
+        await Assert.That(Render(manager.RecordModels.Single().DescriptionItems.Single()))
+            .Contains("Holder summary.");
+        await Assert.That(Render(manager.RecordModels.Single().FieldModels.Single().DescriptionItems.Single()))
+            .Contains("Field summary.");
+        await Assert.That(Render(manager.RecordModels.Single().MethodModels.Single().DescriptionItems.Single()))
+            .Contains("Method summary.");
+        await Assert.That(Render(manager.RecordModels.Single().MethodModels.Single().Parameters.Single().DescriptionItems.Single()))
+            .Contains("Value summary.");
+        await Assert.That(Render(new DescriptionReturns(manager.RecordModels.Single().MethodModels.Single().ReturnTypeDescriptionItems)))
+            .Contains("Return summary.");
+        await Assert.That(Render(manager.EnumModels.Single().DescriptionItems.Single()))
+            .Contains("Supported color kinds.");
+        await Assert.That(Render(manager.EnumModels.Single().Members.Single().DescriptionItems.Single()))
+            .Contains("RGB space.");
     }
 
     private static TranslationUnit ParseTranslationUnit(string source)
@@ -68,5 +93,12 @@ internal sealed class AddTest
             CXTranslationUnit_Flags.CXTranslationUnit_None);
 
         return TranslationUnit.GetOrCreate(translationUnit);
+    }
+
+    private static string Render(IToDescription description)
+    {
+        var builder = new SourceBuilder();
+        description.ToDescription(ref builder);
+        return builder.ToString();
     }
 }
