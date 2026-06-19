@@ -42,7 +42,8 @@ public static class PipelineBuilderExtension
             .AddModule<CleanGenerationOutputModule>()
             .AddModule<ParseModule>()
             .AddModule<RecordLayoutModule>()
-            .AddModule<GenerateModule>()
+            .AddModule<GenerateCSharpModule>()
+            .AddModule<GenerateCppModule>()
             .AddSingleton(
                 Microsoft.Extensions.Options.Options.Create(options));
 

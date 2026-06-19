@@ -1,7 +1,7 @@
 ﻿#include <gp_XY.hxx>
 #include "csharp_interop.h"
 
-CSHARP_WRAPPER(gp_XY_New(gp_XY*& handle), {
+CSHARP_WRAPPER_TRY(gp_XY_New(gp_XY*& handle), {
                     handle = new gp_XY();
                     })
 

@@ -29,9 +29,8 @@ public sealed class CppCompileCoontext
 
     public Task AddSourceAsync(string name, string source, CancellationToken cancellationToken)
     {
-        var nameWithExtension = Path.ChangeExtension(name, ".cpp");
-        _fileNames.Add(nameWithExtension);
-        var path = Path.Combine(_sourceDirectory.FullName, nameWithExtension);
+        _fileNames.Add(name);
+        var path = Path.Combine(_sourceDirectory.FullName, name);
         return File.WriteAllTextAsync(path, source, cancellationToken);
     }
 

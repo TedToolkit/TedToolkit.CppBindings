@@ -28,29 +28,23 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// <param name="generatorService">The generator service.</param>
 [DependsOn<CleanGenerationOutputModule>]
 [DependsOn<RecordLayoutModule>]
-public sealed class GenerateModule(
+public sealed class GenerateCSharpModule(
     IOptions<GenerationOptions> generationOptions,
     IRecordModelManager recordManager,
     IGeneratorService generatorService) :
     Module<bool>
 {
-    private const string CSharpInteropHeaderFileName = "csharp_interop.h";
-
-    private const string CSharpInteropHeaderResourceName =
-        "TedToolkit.Occt.Generator.Assets.cpp.csharp_interop.h";
-
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var tasks = new List<Task> { CopyCppInteropHeaderAsync(cancellationToken), };
+        var tasks = new List<Task>();
 
         foreach (var recordManagerRecordModel in recordManager.RecordModels)
         {
             tasks.Add(context.SubModule(
                 recordManagerRecordModel.Type.CppTypeName,
                 () => Task.WhenAll(
-                    GenerateCppAsync(recordManagerRecordModel, cancellationToken),
                     GenerateCSharpAsync(recordManagerRecordModel, cancellationToken))));
         }
 
@@ -63,15 +57,6 @@ public sealed class GenerateModule(
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
         return true;
-    }
-
-    private async Task GenerateCppAsync(RecordModel record, CancellationToken cancellationToken)
-    {
-        var cppFile = Path.Combine(generationOptions.Value.CppFolder.FullName,
-            ZString.Concat(record.Type.CSharpPublicType.ToCode(), ".cpp"));
-
-        var codes = await generatorService.GenerateCpp(record).GenerateAsync(cancellationToken).ConfigureAwait(false);
-        await File.WriteAllTextAsync(cppFile, codes, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task GenerateCSharpAsync(RecordModel record, CancellationToken cancellationToken)
@@ -92,26 +77,5 @@ public sealed class GenerateModule(
         var codes = await generatorService.GenerateCSharp(enumModel).GenerateAsync(cancellationToken)
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(csharpFile, codes, cancellationToken).ConfigureAwait(false);
-    }
-
-    private async Task CopyCppInteropHeaderAsync(CancellationToken cancellationToken)
-    {
-        var cppFolder = generationOptions.Value.CppFolder;
-        cppFolder.Create();
-
-        var headerStream = typeof(GenerateModule).Assembly.GetManifestResourceStream(CSharpInteropHeaderResourceName);
-
-        ArgumentNullException.ThrowIfNull(headerStream);
-
-        await using (headerStream.ConfigureAwait(false))
-        {
-            var interopHeaderPath = Path.Combine(cppFolder.FullName, CSharpInteropHeaderFileName);
-            var fileStream = File.Create(interopHeaderPath);
-
-            await using (fileStream.ConfigureAwait(false))
-            {
-                await headerStream.CopyToAsync(fileStream, cancellationToken).ConfigureAwait(false);
-            }
-        }
     }
 }

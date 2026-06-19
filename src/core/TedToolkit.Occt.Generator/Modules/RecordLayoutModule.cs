@@ -41,7 +41,7 @@ public sealed class RecordLayoutModule(
         var compile = new CppCompileCoontext(generationOptions.Value.CppFolder, PROBE_FOLDER_NAME,
             await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false));
 
-        await compile.AddSourceAsync(PROBE_FOLDER_NAME, GenerateProbe(), cancellationToken).ConfigureAwait(false);
+        await compile.AddSourceAsync(ZString.Concat(PROBE_FOLDER_NAME, ".cpp"), GenerateProbe(), cancellationToken).ConfigureAwait(false);
 
         var folder = await compile.BuildAsync(context.Shell, true, vcpkgService.GetRoot(), vcpkgService.GetTriplet(),
                 cancellationToken)

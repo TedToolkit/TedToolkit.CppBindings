@@ -19,7 +19,7 @@ using TedToolkit.Occt.Generator.Services.Interfaces;
 namespace TedToolkit.Occt.Generator.Tests.Modules.GenerateModuleTests;
 
 /// <summary>
-/// <see cref="GenerateModule"/> execution.
+/// <see cref="GenerateCSharpModule"/> execution.
 /// </summary>
 internal sealed class ExecuteAsyncTest
 {
@@ -36,7 +36,7 @@ internal sealed class ExecuteAsyncTest
 
         try
         {
-            var module = new GenerateModule(
+            var module = new GenerateCSharpModule(
                 Microsoft.Extensions.Options.Options.Create(new GenerationOptions
                 {
                     DeclOptions = [],
@@ -47,7 +47,7 @@ internal sealed class ExecuteAsyncTest
                 new ThrowingGeneratorService());
 
             var context = Mock.Of<IModuleContext>();
-            var executeAsyncMethod = typeof(GenerateModule).GetMethod(
+            var executeAsyncMethod = typeof(GenerateCSharpModule).GetMethod(
                 "ExecuteAsync",
                 BindingFlags.Instance | BindingFlags.NonPublic);
 

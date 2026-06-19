@@ -85,7 +85,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
             DescriptionItems = commentProjection.DescriptionItems,
             ReturnTypeDescriptionItems = commentProjection.ReturnTypeDescriptionItems,
             ReturnType = ToModel(method.ReturnType),
-            MethodName = method.Name,
+            MethodName = method.Name.ToValidCSharpName(),
             Parameters = method.Parameters.Select(p => ToModel(p,
                     commentProjection))
                 .ToArray(),

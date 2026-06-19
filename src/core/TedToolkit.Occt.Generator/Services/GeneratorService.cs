@@ -31,7 +31,7 @@ public sealed class GeneratorService(
     /// <inheritdoc/>
     public CppGenerator GenerateCpp(RecordModel record)
     {
-        return new();
+        return new(record);
     }
 
     /// <inheritdoc/>
