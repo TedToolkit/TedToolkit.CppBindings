@@ -188,8 +188,6 @@ internal sealed class RecordModelManager(
                 CX_OverloadedOperatorKind.CX_OO_Comma => ",",
                 CX_OverloadedOperatorKind.CX_OO_Arrow => "->",
                 CX_OverloadedOperatorKind.CX_OO_Subscript => "[]",
-                CX_OverloadedOperatorKind.CX_OO_Conditional => "?",
-                CX_OverloadedOperatorKind.CX_OO_Coawait => "co_await",
                 _ => throw new ArgumentOutOfRangeException()
             },
             _ => method.Name.ToValidCSharpName(),
