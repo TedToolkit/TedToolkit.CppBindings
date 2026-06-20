@@ -59,7 +59,7 @@ public sealed class CSharpGenerator(
 
     private void GenerateInterfaces(NameSpace nameSpace, TypeDeclaration structDeclaration)
     {
-        if (recordDecl.Bases.Count is 0)
+        if (recordDecl.Base is null)
         {
             return;
         }
@@ -89,9 +89,9 @@ public sealed class CSharpGenerator(
 
     private static void GenerateOneStructMethods(TypeDeclaration structDeclaration, RecordModel recordModel)
     {
-        foreach (var recordModelBase in recordModel.Bases)
+        if (recordModel.Base is not null)
         {
-            GenerateOneStructMethods(structDeclaration, recordModelBase);
+            GenerateOneStructMethods(structDeclaration, recordModel.Base);
         }
 
         foreach (var recordDeclMethodModel in recordModel.MethodModels)

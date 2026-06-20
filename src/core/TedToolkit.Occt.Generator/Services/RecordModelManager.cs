@@ -24,10 +24,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
     public IEnumerable<RecordModel> RecordModels
     {
-        get
-        {
-            return _recordNames.Values.Where(t => t.Type.CppTypeName is not "Standard_Transient");
-        }
+        get { return _recordNames.Values.Where(t => t.Type.CppTypeName is not "Standard_Transient"); }
     }
 
     public RecordModel Add(CXXRecordDecl record)
@@ -43,7 +40,8 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
         if (!_recordsInProgress.Add(key))
         {
-            throw new InvalidOperationException($"Record '{record.Name}' was requested before model construction completed.");
+            throw new InvalidOperationException(
+                $"Record '{record.Name}' was requested before model construction completed.");
         }
 
         try
@@ -67,12 +65,11 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
                 BaseTypes = record.Bases
                     .Select(b => ToModel(b.Type))
                     .ToArray(),
-                Bases = record.Bases
+                Base = record.Bases
                     .Select(i => i.Type.AsCXXRecordDecl)
                     .OfType<CXXRecordDecl>()
                     .Select(Add)
-                    .OfType<RecordModel>()
-                    .ToArray(),
+                    .SingleOrDefault(),
             };
 #pragma warning restore RCS1212
             _recordNames.Add(key, result);
@@ -140,7 +137,56 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
         {
             MethodModelType.New => "New",
             MethodModelType.Delete => "Delete",
-            MethodModelType.Operator or MethodModelType.Implicit or MethodModelType.Explicit => method.Name,
+            MethodModelType.Operator => method.OverloadedOperator switch
+            {
+                CX_OverloadedOperatorKind.CX_OO_Invalid => "unknown",
+                CX_OverloadedOperatorKind.CX_OO_New => "new",
+                CX_OverloadedOperatorKind.CX_OO_Delete => "delete",
+                CX_OverloadedOperatorKind.CX_OO_Array_New => "new[]",
+                CX_OverloadedOperatorKind.CX_OO_Array_Delete => "delete[]",
+                CX_OverloadedOperatorKind.CX_OO_Plus => "+",
+                CX_OverloadedOperatorKind.CX_OO_Minus => "-",
+                CX_OverloadedOperatorKind.CX_OO_Star => "*",
+                CX_OverloadedOperatorKind.CX_OO_Slash => "/",
+                CX_OverloadedOperatorKind.CX_OO_Percent => "%",
+                CX_OverloadedOperatorKind.CX_OO_Caret => "^",
+                CX_OverloadedOperatorKind.CX_OO_Amp => "&",
+                CX_OverloadedOperatorKind.CX_OO_Pipe => "|",
+                CX_OverloadedOperatorKind.CX_OO_Tilde => "~",
+                CX_OverloadedOperatorKind.CX_OO_Exclaim => "!",
+                CX_OverloadedOperatorKind.CX_OO_Equal => "=",
+                CX_OverloadedOperatorKind.CX_OO_Less => "<",
+                CX_OverloadedOperatorKind.CX_OO_Greater => ">",
+                CX_OverloadedOperatorKind.CX_OO_PlusEqual => "+=",
+                CX_OverloadedOperatorKind.CX_OO_MinusEqual => "-=",
+                CX_OverloadedOperatorKind.CX_OO_StarEqual => "*=",
+                CX_OverloadedOperatorKind.CX_OO_SlashEqual => "/=",
+                CX_OverloadedOperatorKind.CX_OO_PercentEqual => "%=",
+                CX_OverloadedOperatorKind.CX_OO_CaretEqual => "^=",
+                CX_OverloadedOperatorKind.CX_OO_AmpEqual => "&=",
+                CX_OverloadedOperatorKind.CX_OO_PipeEqual => "|=",
+                CX_OverloadedOperatorKind.CX_OO_LessLess => "<<",
+                CX_OverloadedOperatorKind.CX_OO_GreaterGreater => ">>",
+                CX_OverloadedOperatorKind.CX_OO_LessLessEqual => "<<=",
+                CX_OverloadedOperatorKind.CX_OO_GreaterGreaterEqual => ">>=",
+                CX_OverloadedOperatorKind.CX_OO_EqualEqual => "==",
+                CX_OverloadedOperatorKind.CX_OO_ExclaimEqual => "!=",
+                CX_OverloadedOperatorKind.CX_OO_LessEqual => "<=",
+                CX_OverloadedOperatorKind.CX_OO_GreaterEqual => ">=",
+                CX_OverloadedOperatorKind.CX_OO_Spaceship => "<=>",
+                CX_OverloadedOperatorKind.CX_OO_AmpAmp => "&&",
+                CX_OverloadedOperatorKind.CX_OO_PipePipe => "||",
+                CX_OverloadedOperatorKind.CX_OO_PlusPlus => "++",
+                CX_OverloadedOperatorKind.CX_OO_MinusMinus => "--",
+                CX_OverloadedOperatorKind.CX_OO_Comma => ",",
+                CX_OverloadedOperatorKind.CX_OO_ArrowStar => "->*",
+                CX_OverloadedOperatorKind.CX_OO_Arrow => "->",
+                CX_OverloadedOperatorKind.CX_OO_Call => "()",
+                CX_OverloadedOperatorKind.CX_OO_Subscript => "[]",
+                CX_OverloadedOperatorKind.CX_OO_Conditional => "?",
+                CX_OverloadedOperatorKind.CX_OO_Coawait => "co_await",
+                _ => throw new ArgumentOutOfRangeException()
+            },
             _ => method.Name.ToValidCSharpName(),
         };
     }
@@ -191,6 +237,11 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
     private static bool ShouldIncludeMethod(CXXMethodDecl method)
     {
+        if (method.Access is not CX_CXXAccessSpecifier.CX_CXXPublic)
+        {
+            return false;
+        }
+
         return !IsOperatorNewOrDelete(method);
     }
 

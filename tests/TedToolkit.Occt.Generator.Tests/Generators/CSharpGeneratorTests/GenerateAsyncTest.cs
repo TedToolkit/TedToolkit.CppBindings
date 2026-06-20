@@ -31,7 +31,7 @@ internal sealed class GenerateAsyncTest
             new RecordModel
             {
                 DescriptionItems = [new DescriptionSummary(new DescriptionText("Point wrapper.")),],
-                Bases = [],
+                Base = [],
                 Size = 16,
                 Type = new TypeModel
                 {
