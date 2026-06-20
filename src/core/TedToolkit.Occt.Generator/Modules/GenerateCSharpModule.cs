@@ -27,7 +27,6 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// <param name="recordManager">The record queue manager.</param>
 /// <param name="generatorService">The generator service.</param>
 [DependsOn<CleanGenerationOutputModule>]
-[DependsOn<RecordLayoutModule>]
 public sealed class GenerateCSharpModule(
     IOptions<GenerationOptions> generationOptions,
     IRecordModelManager recordManager,

@@ -18,12 +18,11 @@ public sealed class RecordModel
 {
     public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }
 
-    public required RecordModel? Base { get; init; }
-
-    public long Size { get; set; }
-
+    public RecordModel? Base { get; set; }
     public required TypeModel Type { get; init; }
-    public required IReadOnlyList<FieldModel> FieldModels { get; init; }
-    public required IReadOnlyList<MethodModel> MethodModels { get; init; }
-    public required IReadOnlyList<TypeModel> BaseTypes { get; init; }
+
+    public required long Size { get; init; }
+
+    public IReadOnlyList<FieldModel> FieldModels { get; set; }
+    public IReadOnlyList<MethodModel> MethodModels { get; set; }
 }

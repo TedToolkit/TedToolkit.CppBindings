@@ -66,10 +66,7 @@ public sealed class CSharpGenerator(
 
         var interfaceDeclaration = Interface(recordDecl.Type.CSharpInterfaceName).Public.Unsafe;
         structDeclaration.AddBaseType(new DataType(recordDecl.Type.CSharpInterfaceName));
-        foreach (var recordDeclBaseType in recordDecl.BaseTypes)
-        {
-            interfaceDeclaration.AddBaseType(new DataType(recordDeclBaseType.CSharpInterfaceName));
-        }
+        interfaceDeclaration.AddBaseType(new DataType(recordDecl.Base.Type.CSharpInterfaceName));
 
         nameSpace.AddMember(interfaceDeclaration);
     }

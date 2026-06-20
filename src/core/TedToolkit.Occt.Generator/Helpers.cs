@@ -43,6 +43,26 @@ public static class Helpers
         return type.ToPInvokeDataType();
     }
 
+    public static ClangSharp.Type? GetAddingType(this ClangSharp.Type? type)
+    {
+        if (type is null)
+        {
+            return null;
+        }
+
+        if (DePointer(type) is { } pointer)
+        {
+            return GetAddingType(pointer);
+        }
+
+        if (DeConst(type) is { } constPointer)
+        {
+            return GetAddingType(constPointer);
+        }
+
+        return type;
+    }
+
     private static ClangSharp.Type? DePointer(this ClangSharp.Type? type)
     {
         return type is PointerType or LValueReferenceType or RValueReferenceType ? type.PointeeType : null;

@@ -23,7 +23,7 @@ public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
     public TypeResolveResult Resolve(ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-        var canonicalType = type.CanonicalType;
+        type = type.CanonicalType;
 
         if (TryGetEnumDecl(type, out var enumDecl))
         {
@@ -42,7 +42,7 @@ public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
 
         foreach (var typeRule in typeRules)
         {
-            if (typeRule.TryResolve(canonicalType, out var result))
+            if (typeRule.TryResolve(type, out var result))
             {
                 return result;
             }
@@ -50,7 +50,7 @@ public sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
 
         return new()
         {
-            Decl = type.AsCXXRecordDecl,
+            Decl = type.GetAddingType()?.AsCXXRecordDecl,
             Type = new()
             {
                 CppTypeName = type.AsString,

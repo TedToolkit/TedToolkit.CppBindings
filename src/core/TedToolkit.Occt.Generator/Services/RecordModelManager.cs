@@ -13,12 +13,15 @@ using TedToolkit.RoslynHelper.Generators;
 
 namespace TedToolkit.Occt.Generator.Services;
 
-internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IResolver resolver) : IRecordModelManager
+internal sealed class RecordModelManager(
+    IOptions<GenerationOptions> options,
+    IResolver resolver,
+    IVcpkgService vcpkgService) : IRecordModelManager
 {
     private readonly List<EnumModel> _enumModels = [];
     private readonly HashSet<CXCursor> _enumNames = [];
-    private readonly HashSet<CXCursor> _recordsInProgress = [];
     private readonly Dictionary<CXCursor, RecordModel> _recordNames = [];
+
 
     public IReadOnlyList<EnumModel> EnumModels => _enumModels;
 
@@ -29,8 +32,12 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
     public RecordModel Add(CXXRecordDecl record)
     {
-        record = record.Definition ?? record;
-        ArgumentNullException.ThrowIfNull(record);
+        record = record.Definition!;
+
+        if (record is null)
+        {
+            throw new NotSupportedException("Record is not defined");
+        }
 
         var key = record.CanonicalDecl.Handle;
         if (_recordNames.TryGetValue(key, out var existing))
@@ -38,47 +45,54 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
             return existing;
         }
 
-        if (!_recordsInProgress.Add(key))
+        var commentProjection = record.ToCommentProjection();
+        var type = record.TypeForDecl.Handle;
+        type = clang.getCanonicalType(type);
+        var size = clang.Type_getSizeOf(type);
+        if (size < 0)
         {
-            throw new InvalidOperationException(
-                $"Record '{record.Name}' was requested before model construction completed.");
+            throw new NotSupportedException($"Can't get size of type ({record.TypeForDecl.AsString})");
         }
 
-        try
+        var result = new RecordModel
         {
-            var commentProjection = record.ToCommentProjection();
-#pragma warning disable RCS1212
-            var result = new RecordModel
-            {
-                DescriptionItems = commentProjection.DescriptionItems,
-                Type = resolver.Resolve(record.TypeForDecl)
-                    .Type,
-                FieldModels = GetAllDecls(record)
-                    .SelectMany(r => r.Fields)
-                    .Where(options.Value.FieldTypeToGenerate)
-                    .Select(ToModel)
-                    .ToArray(),
-                MethodModels =
-                    record.Methods.Where(ShouldIncludeMethod)
-                        .Select(ToModel)
-                        .ToArray(),
-                BaseTypes = record.Bases
-                    .Select(b => ToModel(b.Type))
-                    .ToArray(),
-                Base = record.Bases
-                    .Select(i => i.Type.AsCXXRecordDecl)
-                    .OfType<CXXRecordDecl>()
-                    .Select(Add)
-                    .SingleOrDefault(),
-            };
-#pragma warning restore RCS1212
-            _recordNames.Add(key, result);
-            return result;
-        }
-        finally
-        {
-            _recordsInProgress.Remove(key);
-        }
+            DescriptionItems = commentProjection.DescriptionItems,
+            Type = resolver.Resolve(record.TypeForDecl)
+                .Type,
+            Size = size,
+        };
+        _recordNames.Add(key, result);
+
+        record.Location.GetFileLocation(out var file, out _, out _, out _);
+        var isOcctType =
+            file.Name.CString.Contains(vcpkgService.GetOcctIncludeFolder(), StringComparison.InvariantCulture);
+
+        result.FieldModels = GetAllDecls(record)
+            .SelectMany(r => r.Fields)
+            .Where(f => isOcctType || f.Access is CX_CXXAccessSpecifier.CX_CXXPublic)
+            .Where(options.Value.FieldTypeToGenerate)
+            .Where(static f => IsDefined(f.Type))
+            .Select(ToModel)
+            .ToArray();
+
+
+        result.MethodModels =
+            (isOcctType
+                ? GetAllDecls(record)
+                    .SelectMany(r => r.Methods)
+                : record.Methods).Where(ShouldIncludeMethod)
+            .Select(ToModel)
+            .ToArray();
+
+        result.Base = isOcctType
+            ? record.Bases
+                .Select(i => i.Type.AsCXXRecordDecl)
+                .OfType<CXXRecordDecl>()
+                .Select(Add)
+                .SingleOrDefault()
+            : null;
+
+        return result;
     }
 
     private TypeModel ToModel(ClangSharp.Type type)
@@ -87,7 +101,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
         if (result.Decl is { } recordDecl)
         {
-            TryAddReferencedRecord(recordDecl);
+            Add(recordDecl);
         }
 
         if (result.Enum is not null)
@@ -227,16 +241,75 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
     {
         var commentProjection = fieldDecl.ToCommentProjection();
 
+        var offset = fieldDecl.Handle.OffsetOfField / 8;
+        if (offset < 0)
+        {
+            throw new NotSupportedException(
+                $"Can't get offset of field ({fieldDecl.Name} in {fieldDecl.Parent?.Name})");
+        }
+
         return new()
         {
             DescriptionItems = commentProjection.DescriptionItems,
             Name = fieldDecl.Name,
             Type = ToModel(fieldDecl.Type),
+            Offset = offset,
         };
+    }
+
+    private static bool IsDefined(ClangSharp.Type type)
+    {
+        var addingType = type.CanonicalType.GetAddingType()?.CanonicalType;
+
+        if (addingType is null)
+        {
+            return false;
+        }
+
+        if (addingType.Kind is CXTypeKind.CXType_LongDouble
+            or CXTypeKind.CXType_Overload
+            or CXTypeKind.CXType_Dependent
+            or CXTypeKind.CXType_ObjCId
+            or CXTypeKind.CXType_ObjCClass
+            or CXTypeKind.CXType_ObjCSel
+            or CXTypeKind.CXType_Float128
+            or CXTypeKind.CXType_ShortAccum
+            or CXTypeKind.CXType_Accum
+            or CXTypeKind.CXType_LongAccum
+            or CXTypeKind.CXType_UShortAccum
+            or CXTypeKind.CXType_UAccum
+            or CXTypeKind.CXType_ULongAccum
+            or CXTypeKind.CXType_BFloat16
+            or CXTypeKind.CXType_Ibm128)
+        {
+            return false;
+        }
+
+        if (addingType is BuiltinType or EnumType)
+        {
+            return true;
+        }
+
+        var result = addingType.AsCXXRecordDecl?.Definition is not null;
+        if (!result)
+        {
+        }
+
+        return result;
     }
 
     private static bool ShouldIncludeMethod(CXXMethodDecl method)
     {
+        if (!IsDefined(method.ReturnType))
+        {
+            return false;
+        }
+
+        if (method.Parameters.Any(p => !IsDefined(p.Type)))
+        {
+            return false;
+        }
+
         if (method.Access is not CX_CXXAccessSpecifier.CX_CXXPublic)
         {
             return false;
@@ -320,17 +393,5 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
                 ? enumConstant.UnsignedInitVal.ToLiteral()
                 : enumConstant.InitVal.ToLiteral(),
         };
-    }
-
-    private void TryAddReferencedRecord(CXXRecordDecl recordDecl)
-    {
-        recordDecl = recordDecl.Definition ?? recordDecl;
-        var key = recordDecl.CanonicalDecl.Handle;
-        if (_recordNames.ContainsKey(key) || _recordsInProgress.Contains(key))
-        {
-            return;
-        }
-
-        Add(recordDecl);
     }
 }
