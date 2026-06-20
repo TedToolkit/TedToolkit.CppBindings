@@ -22,6 +22,7 @@ public class MethodModel
 
     public required bool NoExceptions { get; init; }
     public required bool IsConst { get; init; }
+    public required bool IsStatic { get; init; }
     public required TypeModel ReturnType { get; init; }
     public required string MethodName { get; init; }
     public required MethodModelType Type { get; init; }
@@ -79,7 +80,7 @@ public class MethodModel
     {
         ArgumentNullException.ThrowIfNull(model);
         using var builder = ZString.CreateStringBuilder();
-        builder.Append(model.Type.CppTypeName);
+        builder.Append(model.Type.CppTypeName.ToValidCSharpName());
         builder.Append("_");
         builder.Append(GetInvokeName());
         foreach (var parameterModel in Parameters)

@@ -12,6 +12,7 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 /// </summary>
 public interface IVcpkgService
 {
+    Task<string> IncludingHeaderContent(CancellationToken cancellationToken);
     /// <summary>
     /// Gets the vcpkg root folder.
     /// </summary>

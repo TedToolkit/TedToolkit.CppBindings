@@ -8,6 +8,10 @@
 using System.Runtime.InteropServices;
 using System.Text.RegularExpressions;
 
+using ClangSharp.Interop;
+
+using Cysharp.Text;
+
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
@@ -327,5 +331,46 @@ public sealed partial class VcpkgService : IVcpkgService
     private static bool IsNotStaticTriplet(string triplet)
     {
         return !triplet.Contains("-static", StringComparison.OrdinalIgnoreCase);
+    }
+
+    public async Task<string> IncludingHeaderContent(CancellationToken cancellationToken)
+    {
+        var stringBuilder = ZString.CreateStringBuilder();
+
+        stringBuilder.AppendLine("#pragma once");
+
+        foreach (var file in new DirectoryInfo(GetOcctIncludeFolder())
+                     .EnumerateFiles("*.hxx"))
+        {
+            if (await IsDeprecated(file, cancellationToken).ConfigureAwait(false))
+            {
+                continue;
+            }
+
+            stringBuilder.Append("#include <");
+            stringBuilder.Append(file.Name);
+            stringBuilder.AppendLine(">");
+        }
+
+        return stringBuilder.ToString();
+    }
+
+    private static async Task<bool> IsDeprecated(FileInfo file, CancellationToken cancellationToken)
+    {
+        using var reader = file.OpenText();
+        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        {
+            if (line.Contains(" @deprecated ", StringComparison.InvariantCulture))
+            {
+                return true;
+            }
+
+            if (line.Contains("Standard_HEADER_DEPRECATED", StringComparison.InvariantCulture))
+            {
+                return true;
+            }
+        }
+
+        return false;
     }
 }

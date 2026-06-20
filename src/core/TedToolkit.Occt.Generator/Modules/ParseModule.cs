@@ -36,46 +36,6 @@ public sealed class ParseModule(
 {
     private const string RELAY_FILE_NAME = "main.cpp";
 
-    private static async Task<bool> IsDeprecated(FileInfo file)
-    {
-        using var reader = file.OpenText();
-        while (await reader.ReadLineAsync().ConfigureAwait(false) is { } line)
-        {
-            if (line.Contains(" @deprecated ", StringComparison.InvariantCulture))
-            {
-                return true;
-            }
-
-            if (line.Contains("Standard_HEADER_DEPRECATED", StringComparison.InvariantCulture))
-            {
-                return true;
-            }
-        }
-
-        return false;
-    }
-
-    private async Task<CXUnsavedFile> CreateFile()
-    {
-        var stringBuilder = ZString.CreateStringBuilder();
-
-        stringBuilder.AppendLine("#include <ostream>");
-        foreach (var file in new DirectoryInfo(vcpkgService.GetOcctIncludeFolder())
-                     .EnumerateFiles("*.hxx"))
-        {
-            if (await IsDeprecated(file).ConfigureAwait(false))
-            {
-                continue;
-            }
-
-            stringBuilder.Append("#include <");
-            stringBuilder.Append(file.Name);
-            stringBuilder.AppendLine(">");
-        }
-
-        return CXUnsavedFile.Create(RELAY_FILE_NAME, stringBuilder.ToString());
-    }
-
     private async Task<List<string>> CreateCommandLineArgsAsync()
     {
         var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs);
@@ -127,7 +87,8 @@ public sealed class ParseModule(
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        using var file = await CreateFile().ConfigureAwait(false);
+        using var file = CXUnsavedFile.Create(RELAY_FILE_NAME,
+            await vcpkgService.IncludingHeaderContent(cancellationToken).ConfigureAwait(false));
 
         using var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(

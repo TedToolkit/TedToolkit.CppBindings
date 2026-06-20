@@ -128,6 +128,7 @@ internal sealed class RecordModelManager(
                 .ToArray(),
             NoExceptions = IsNoExcept(method),
             IsConst = method.IsConst,
+            IsStatic = method.IsStatic,
         };
     }
 
@@ -285,10 +286,17 @@ internal sealed class RecordModelManager(
             return false;
         }
 
-        if (addingType is BuiltinType or EnumType)
+        if (addingType is BuiltinType)
         {
             return true;
         }
+
+        var name = addingType.AsString;
+        if (name.Contains("std::basic_ostream<", StringComparison.InvariantCulture))
+        {
+            return false;
+        }
+
 
         var result = addingType.AsCXXRecordDecl?.Definition is not null;
         if (!result)
@@ -305,7 +313,7 @@ internal sealed class RecordModelManager(
             return false;
         }
 
-        if (method.Parameters.Any(p => !IsDefined(p.Type)))
+        if (method.Parameters.Any(p => !IsDefined(p.Type) || string.IsNullOrEmpty(p.Name)))
         {
             return false;
         }

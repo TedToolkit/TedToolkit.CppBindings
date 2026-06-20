@@ -1,5 +1,4 @@
-#ifndef CSHARP_INTEROP_H
-#define CSHARP_INTEROP_H
+#pragma once
 
 #ifndef WRAP_CALL_CUSTOM_CATCH
 #define WRAP_CALL_CUSTOM_CATCH
@@ -89,5 +88,3 @@ API_EXPORT void FUNC_DECL noexcept { \
 API_EXPORT interop_error FUNC_DECL noexcept { \
     return wrap_call([&]() BODY); \
 }
-
-#endif //CSHARP_INTEROP_H

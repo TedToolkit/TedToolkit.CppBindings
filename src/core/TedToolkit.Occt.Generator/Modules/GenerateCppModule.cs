@@ -43,7 +43,11 @@ public sealed class GenerateCppModule(
         var compile = new CppCompileCoontext(generationOptions.Value.CppFolder, "ted_toolkit_occt",
             await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false));
 
-        var tasks = new List<Task> { CopyCppInteropHeaderAsync(compile, cancellationToken), };
+        var tasks = new List<Task>
+        {
+            GenerateHeaders(compile, cancellationToken),
+            CopyCppInteropHeaderAsync(compile, cancellationToken),
+        };
 
         foreach (var recordManagerRecordModel in recordManager.RecordModels)
         {
@@ -55,9 +59,9 @@ public sealed class GenerateCppModule(
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
-        // var folder = await compile.BuildAsync(context.Shell, false, vcpkgService.GetRoot(), vcpkgService.GetTriplet(),
-        //         cancellationToken)
-        //     .ConfigureAwait(false);
+        var folder = await compile.BuildAsync(context.Shell, false, vcpkgService.GetRoot(), vcpkgService.GetTriplet(),
+                cancellationToken)
+            .ConfigureAwait(false);
         return true;
     }
 
@@ -68,6 +72,12 @@ public sealed class GenerateCppModule(
         await compile
             .AddSourceAsync(ZString.Concat(record.Type.CSharpTypeName, ".cpp"), codes, cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private async Task GenerateHeaders(CppCompileCoontext compile, CancellationToken cancellationToken)
+    {
+        var content = await vcpkgService.IncludingHeaderContent(cancellationToken).ConfigureAwait(false);
+        await compile.AddSourceAsync("headers.h", content, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task CopyCppInteropHeaderAsync(CppCompileCoontext compile, CancellationToken cancellationToken)
