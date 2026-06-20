@@ -38,7 +38,7 @@ namespace TedToolkit.Occt;
 public readonly unsafe ref struct handle<TElement> :
 #pragma warning restore IDE1006
     IHandle<TElement>
-    where TElement : unmanaged, IHandleElement
+    where TElement : unmanaged, IStandard_Transient
 {
     private readonly nint _handle;
 

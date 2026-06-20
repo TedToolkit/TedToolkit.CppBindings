@@ -62,7 +62,7 @@ public sealed class GenerateCSharpModule(
     private async Task GenerateCSharpAsync(RecordModel record, CancellationToken cancellationToken)
     {
         var csharpFile = Path.Combine(generationOptions.Value.CSharpFolder.FullName,
-            ZString.Concat(record.Type.CSharpPublicType.ToCode(), ".g.cs"));
+            ZString.Concat(record.Type.CSharpTypeName, ".g.cs"));
 
         var codes = await generatorService.GenerateCSharp(record).GenerateAsync(cancellationToken)
             .ConfigureAwait(false);

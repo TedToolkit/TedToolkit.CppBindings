@@ -1,6 +1,6 @@
 ﻿namespace TedToolkit.Occt;
 
-public interface IHandleElement
+public interface IStandard_Transient
 {
     internal void Delete();
 }

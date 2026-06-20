@@ -66,7 +66,7 @@ public sealed class GenerateCppModule(
     {
         var codes = await generatorService.GenerateCpp(record).GenerateAsync(cancellationToken).ConfigureAwait(false);
         await compile
-            .AddSourceAsync(ZString.Concat(record.Type.CSharpPublicType.ToCode(), ".cpp"), codes, cancellationToken)
+            .AddSourceAsync(ZString.Concat(record.Type.CSharpTypeName, ".cpp"), codes, cancellationToken)
             .ConfigureAwait(false);
     }
 

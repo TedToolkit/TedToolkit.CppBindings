@@ -77,9 +77,9 @@ internal sealed class ExecuteAsyncTest
     {
         public IReadOnlyList<EnumModel> EnumModels { get; } = [];
 
-        public IReadOnlyList<RecordModel> RecordModels { get; } = [];
+        public IEnumerable<RecordModel> RecordModels { get; } = [];
 
-        public void Add(ClangSharp.CXXRecordDecl record)
+        public RecordModel Add(ClangSharp.CXXRecordDecl record)
         {
             throw new NotSupportedException();
         }

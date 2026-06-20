@@ -47,10 +47,31 @@ public sealed class CSharpGenerator(
         GenerateFields(structDeclaration);
         GenerateMethods(structDeclaration);
 
+        var nameSpace = NameSpace("TedToolkit.Occt")
+            .AddMember(structDeclaration);
+
+        GenerateInterfaces(nameSpace, structDeclaration);
+
         return File()
-            .AddNameSpace(NameSpace("TedToolkit.Occt")
-                .AddMember(structDeclaration))
+            .AddNameSpace(nameSpace)
             .ToCode();
+    }
+
+    private void GenerateInterfaces(NameSpace nameSpace, TypeDeclaration structDeclaration)
+    {
+        if (recordDecl.Bases.Count is 0)
+        {
+            return;
+        }
+
+        var interfaceDeclaration = Interface(recordDecl.Type.CSharpInterfaceName).Public.Unsafe;
+        structDeclaration.AddBaseType(new DataType(recordDecl.Type.CSharpInterfaceName));
+        foreach (var recordDeclBaseType in recordDecl.BaseTypes)
+        {
+            interfaceDeclaration.AddBaseType(new DataType(recordDeclBaseType.CSharpInterfaceName));
+        }
+
+        nameSpace.AddMember(interfaceDeclaration);
     }
 
     private void GenerateFields(TypeDeclaration structDeclaration)
@@ -75,7 +96,13 @@ public sealed class CSharpGenerator(
 
         foreach (var recordDeclMethodModel in recordModel.MethodModels)
         {
-            AddMethod(structDeclaration, recordDeclMethodModel, recordDeclMethodModel.GetMethodInteropName(recordModel));
+            if (recordDeclMethodModel.Type is not MethodModelType.Normal)
+            {
+                continue;
+            }
+
+            AddMethod(structDeclaration, recordDeclMethodModel,
+                recordDeclMethodModel.GetMethodInteropName(recordModel));
         }
     }
 
@@ -111,7 +138,8 @@ public sealed class CSharpGenerator(
 
         if (!methodModel.NoExceptions)
         {
-            method.AddRootDescription(new DescriptionInheritDoc(new DataType("global::TedToolkit.Occt.interop_error.ThrowIfError")));
+            method.AddRootDescription(
+                new DescriptionInheritDoc(new DataType("global::TedToolkit.Occt.interop_error.ThrowIfError")));
         }
 
         foreach (var parameterModel in methodModel.Parameters)

@@ -80,6 +80,8 @@ public sealed class RecordLayoutModule(
         var builder = ZString.CreateStringBuilder();
         builder.AppendLine("#include <cstddef>");
         builder.AppendLine("#include <iostream>");
+        builder.AppendLine("#include <sstream>");
+        builder.AppendLine("#include <iomanip>");
         builder.AppendLine();
         builder.AppendLine("#define private public");
         builder.AppendLine("#define protected public");
@@ -98,6 +100,10 @@ public sealed class RecordLayoutModule(
         builder.AppendLine("#undef private");
 
         builder.AppendLine();
+
+        builder.AppendLine("#pragma GCC diagnostic push");
+        builder.AppendLine("#pragma GCC diagnostic ignored \"-Winvalid-offsetof\"");
+
         builder.AppendLine("int main()");
         builder.AppendLine("{");
 
@@ -119,6 +125,7 @@ public sealed class RecordLayoutModule(
 
         builder.AppendLine("    return 0;");
         builder.AppendLine("}");
+        builder.AppendLine("#pragma GCC diagnostic pop");
         return builder.ToString();
     }
 }

@@ -22,7 +22,6 @@ internal sealed class GenerateAsyncTest
     {
         var intType = new TypeModel
         {
-            SourceType = "int",
             CppTypeName = "int",
             CSharpPInvokeType = DataType.Int,
             CSharpPublicType = DataType.Int,
@@ -32,10 +31,10 @@ internal sealed class GenerateAsyncTest
             new RecordModel
             {
                 DescriptionItems = [new DescriptionSummary(new DescriptionText("Point wrapper.")),],
+                Bases = [],
                 Size = 16,
                 Type = new TypeModel
                 {
-                    SourceType = "gp_Pnt2d",
                     CppTypeName = "gp_Pnt2d",
                     CSharpPInvokeType = new DataType("gp_Pnt2d"),
                     CSharpPublicType = new DataType("gp_Pnt2d"),
@@ -53,8 +52,10 @@ internal sealed class GenerateAsyncTest
                         ],
                         ReturnTypeDescriptionItems = [new DescriptionText("Coordinate value."),],
                         NoExceptions = false,
+                        IsConst = false,
                         ReturnType = intType,
                         MethodName = "Coord",
+                        Type = MethodModelType.Normal,
                         Parameters =
                         [
                             new ParameterModel

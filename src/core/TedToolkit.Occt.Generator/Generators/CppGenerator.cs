@@ -29,6 +29,11 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 
         foreach (var recordDeclMethodModel in recordDecl.MethodModels)
         {
+            if (recordDeclMethodModel.Type is MethodModelType.New or MethodModelType.Delete)
+            {
+                continue;
+            }
+
             builder.Append(recordDeclMethodModel.NoExceptions ? "CSHARP_WRAPPER(" : "CSHARP_WRAPPER_TRY(");
             builder.Append(recordDeclMethodModel.GetMethodInteropName(recordDecl));
             builder.Append('(');

@@ -10,6 +10,7 @@ using ClangSharp.Interop;
 
 using Microsoft.Extensions.Options;
 
+using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services;
 using TedToolkit.Occt.Generator.Services.Rules;
@@ -119,16 +120,90 @@ internal sealed class AddTest
         manager.Add(record);
 
         var methodNames = manager.RecordModels.Single().MethodModels
-            .Select(static m => m.MethodName)
+            .Select(static m => (m.Type, m.MethodName))
             .ToArray();
 
         await Assert.That(methodNames).IsEquivalentTo([
-            "BaseMethod",
-            "Derived",
-            "~Derived",
-            "OwnMethod",
-            "operator==",
+            (MethodModelType.Normal, "BaseMethod"),
+            (MethodModelType.New, "New"),
+            (MethodModelType.Delete, "Delete"),
+            (MethodModelType.Normal, "OwnMethod"),
+            (MethodModelType.Operator, "operator=="),
         ]);
+    }
+
+    [Test]
+    public async Task Should_classify_conversion_operators_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Value
+            {
+                operator bool() const;
+                explicit operator int() const;
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Value");
+
+        var manager = new RecordModelManager(
+            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
+            {
+                DeclOptions = [],
+                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
+                CppFolder = new DirectoryInfo(Path.GetTempPath()),
+            }),
+            new Resolver([new DefaultTypeRule(),]));
+
+        manager.Add(record);
+
+        var methods = manager.RecordModels.Single().MethodModels
+            .Select(static m => (m.Type, m.MethodName))
+            .ToArray();
+
+        await Assert.That(methods).IsEquivalentTo([
+            (MethodModelType.Implicit, "operator bool"),
+            (MethodModelType.Explicit, "operator int"),
+        ]);
+    }
+
+    [Test]
+    public async Task Should_collect_referenced_records_when_record_fields_use_them_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Child
+            {
+                int Value;
+            };
+
+            struct Parent
+            {
+                Child Field;
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Parent");
+
+        var manager = new RecordModelManager(
+            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
+            {
+                DeclOptions = [],
+                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
+                CppFolder = new DirectoryInfo(Path.GetTempPath()),
+            }),
+            new Resolver([new DefaultTypeRule(),]));
+
+        manager.Add(record);
+
+        await Assert.That(manager.RecordModels.Count).IsEqualTo(2);
+        await Assert.That(manager.RecordModels.Select(static m => m.Type.CppTypeName))
+            .IsEquivalentTo(["Child", "Parent",]);
+        await Assert.That(manager.RecordModels.Single(static m => m.Type.CppTypeName == "Parent")
+            .FieldModels.Single().Type.CppTypeName)
+            .IsEqualTo("Child");
     }
 
     private static TranslationUnit ParseTranslationUnit(string source)

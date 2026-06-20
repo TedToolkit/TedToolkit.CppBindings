@@ -9,7 +9,7 @@ namespace TedToolkit.Occt;
 public sealed unsafe class Handle<TElement> :
     IHandle<TElement>,
     IDisposable
-    where TElement : unmanaged, IHandleElement
+    where TElement : unmanaged, IStandard_Transient
 {
     private nint _handle;
 

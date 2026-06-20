@@ -10,5 +10,5 @@ public interface IRecordModelManager
 
     IReadOnlyList<EnumModel> EnumModels { get; }
 
-    IReadOnlyCollection<RecordModel> RecordModels { get; }
+    IEnumerable<RecordModel> RecordModels { get; }
 }

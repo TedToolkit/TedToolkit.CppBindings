@@ -1,4 +1,7 @@
-﻿using TedToolkit.RoslynHelper.Generators.Syntaxes;
+﻿using Cysharp.Text;
+
+using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Models;
 
@@ -18,4 +21,8 @@ public class TypeModel
     /// Gets or sets the projected public C# API type.
     /// </summary>
     public required DataType CSharpPublicType { get; init; }
+
+    public string CSharpTypeName => CSharpPublicType.ToCode();
+
+    public string CSharpInterfaceName => ZString.Concat("I", CSharpTypeName);
 }

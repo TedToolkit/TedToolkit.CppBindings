@@ -56,8 +56,8 @@ public sealed class CppCompileCoontext
                 ZString.Concat("-DCMAKE_TOOLCHAIN_FILE=",
                     Path.Combine(vcpkgRoot, "scripts", "buildsystems", "vcpkg.cmake")),
                 ZString.Concat("-DVCPKG_TARGET_TRIPLET=", triplet),
-                ZString.Concat("-DCMAKE_RUNTIME_OUTPUT_DIRECTORY=", _binaryDirectory.FullName),
-                ZString.Concat("-DCMAKE_LIBRARY_OUTPUT_DIRECTORY=", _binaryDirectory.FullName),
+                ZString.Concat("-DCMAKE_RUNTIME_OUTPUT_DIRECTORY_RELEASE=", _binaryDirectory.FullName),
+                ZString.Concat("-DCMAKE_LIBRARY_OUTPUT_DIRECTORY_RELEASE=", _binaryDirectory.FullName),
             ],
             cancellationToken).ConfigureAwait(false);
 
@@ -72,7 +72,7 @@ public sealed class CppCompileCoontext
             buildArguments,
             cancellationToken).ConfigureAwait(false);
 
-        return _binaryDirectory.CreateSubdirectory("Release");
+        return _binaryDirectory;
     }
 
     private string GenerateCMake(bool isExecutable)

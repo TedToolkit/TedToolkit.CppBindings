@@ -16,57 +16,72 @@ namespace TedToolkit.Occt.Generator.Services;
 internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IResolver resolver) : IRecordModelManager
 {
     private readonly List<EnumModel> _enumModels = [];
-
-
     private readonly HashSet<CXCursor> _enumNames = [];
-
+    private readonly HashSet<CXCursor> _recordsInProgress = [];
     private readonly Dictionary<CXCursor, RecordModel> _recordNames = [];
 
     public IReadOnlyList<EnumModel> EnumModels => _enumModels;
 
-    public IReadOnlyCollection<RecordModel> RecordModels
+    public IEnumerable<RecordModel> RecordModels
     {
-        get { return _recordNames.Values; }
+        get
+        {
+            return _recordNames.Values.Where(t => t.Type.CppTypeName is not "Standard_Transient");
+        }
     }
 
     public RecordModel Add(CXXRecordDecl record)
     {
         record = record.Definition ?? record;
         ArgumentNullException.ThrowIfNull(record);
-        ref var result = ref CollectionsMarshal.GetValueRefOrNullRef(_recordNames, record.CanonicalDecl.Handle);
-        if (!Unsafe.IsNullRef(ref result))
+
+        var key = record.CanonicalDecl.Handle;
+        if (_recordNames.TryGetValue(key, out var existing))
         {
-            return result;
+            return existing;
         }
 
-        var commentProjection = record.ToCommentProjection();
-#pragma warning disable RCS1212
-        result = new()
+        if (!_recordsInProgress.Add(key))
         {
-            DescriptionItems = commentProjection.DescriptionItems,
-            Type = resolver.Resolve(record.TypeForDecl)
-                .Type,
-            FieldModels = GetAllDecls(record)
-                .SelectMany(r => r.Fields)
-                .Where(options.Value.FieldTypeToGenerate)
-                .Select(ToModel)
-                .ToArray(),
-            MethodModels =
-                record.Methods.Where(ShouldIncludeMethod)
+            throw new InvalidOperationException($"Record '{record.Name}' was requested before model construction completed.");
+        }
+
+        try
+        {
+            var commentProjection = record.ToCommentProjection();
+#pragma warning disable RCS1212
+            var result = new RecordModel
+            {
+                DescriptionItems = commentProjection.DescriptionItems,
+                Type = resolver.Resolve(record.TypeForDecl)
+                    .Type,
+                FieldModels = GetAllDecls(record)
+                    .SelectMany(r => r.Fields)
+                    .Where(options.Value.FieldTypeToGenerate)
                     .Select(ToModel)
                     .ToArray(),
-            BaseTypes = record.Bases
-                .Select(b => ToModel(b.Type))
-                .ToArray(),
-            Bases = record.Bases
-                .Select(i => i.Type.AsCXXRecordDecl)
-                .OfType<CXXRecordDecl>()
-                .Select(Add)
-                .ToArray(),
-        };
+                MethodModels =
+                    record.Methods.Where(ShouldIncludeMethod)
+                        .Select(ToModel)
+                        .ToArray(),
+                BaseTypes = record.Bases
+                    .Select(b => ToModel(b.Type))
+                    .ToArray(),
+                Bases = record.Bases
+                    .Select(i => i.Type.AsCXXRecordDecl)
+                    .OfType<CXXRecordDecl>()
+                    .Select(Add)
+                    .OfType<RecordModel>()
+                    .ToArray(),
+            };
 #pragma warning restore RCS1212
-
-        return result;
+            _recordNames.Add(key, result);
+            return result;
+        }
+        finally
+        {
+            _recordsInProgress.Remove(key);
+        }
     }
 
     private TypeModel ToModel(ClangSharp.Type type)
@@ -75,7 +90,7 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
 
         if (result.Decl is { } recordDecl)
         {
-            Add(recordDecl);
+            TryAddReferencedRecord(recordDecl);
         }
 
         if (result.Enum is not null)
@@ -95,13 +110,44 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
             DescriptionItems = commentProjection.DescriptionItems,
             ReturnTypeDescriptionItems = commentProjection.ReturnTypeDescriptionItems,
             ReturnType = ToModel(method.ReturnType),
-            MethodName = method.Name.ToValidCSharpName(),
+            MethodName = GetMethodName(method),
+            Type = GetMethodType(method),
             Parameters = method.Parameters.Select(p => ToModel(p,
                     commentProjection))
                 .ToArray(),
             NoExceptions = IsNoExcept(method),
             IsConst = method.IsConst,
         };
+    }
+
+    private static MethodModelType GetMethodType(CXXMethodDecl method)
+    {
+        return method switch
+        {
+            CXXConstructorDecl => MethodModelType.New,
+            CXXDestructorDecl => MethodModelType.Delete,
+            CXXConversionDecl conversionDecl => IsExplicitConversion(conversionDecl)
+                ? MethodModelType.Explicit
+                : MethodModelType.Implicit,
+            _ when method.IsOverloadedOperator => MethodModelType.Operator,
+            _ => MethodModelType.Normal,
+        };
+    }
+
+    private static string GetMethodName(CXXMethodDecl method)
+    {
+        return GetMethodType(method) switch
+        {
+            MethodModelType.New => "New",
+            MethodModelType.Delete => "Delete",
+            MethodModelType.Operator or MethodModelType.Implicit or MethodModelType.Explicit => method.Name,
+            _ => method.Name.ToValidCSharpName(),
+        };
+    }
+
+    private static bool IsExplicitConversion(CXXConversionDecl conversionDecl)
+    {
+        return conversionDecl.IsExplicit;
     }
 
     private static bool IsNoExcept(CXXMethodDecl method)
@@ -223,5 +269,17 @@ internal sealed class RecordModelManager(IOptions<GenerationOptions> options, IR
                 ? enumConstant.UnsignedInitVal.ToLiteral()
                 : enumConstant.InitVal.ToLiteral(),
         };
+    }
+
+    private void TryAddReferencedRecord(CXXRecordDecl recordDecl)
+    {
+        recordDecl = recordDecl.Definition ?? recordDecl;
+        var key = recordDecl.CanonicalDecl.Handle;
+        if (_recordNames.ContainsKey(key) || _recordsInProgress.Contains(key))
+        {
+            return;
+        }
+
+        Add(recordDecl);
     }
 }
