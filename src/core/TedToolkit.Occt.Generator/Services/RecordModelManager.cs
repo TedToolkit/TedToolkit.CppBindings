@@ -60,6 +60,7 @@ internal sealed class RecordModelManager(
             Type = resolver.Resolve(record.TypeForDecl)
                 .Type,
             Size = size,
+            IsAbstract = record.IsAbstract,
         };
         _recordNames.Add(key, result);
 
@@ -75,12 +76,8 @@ internal sealed class RecordModelManager(
             .Select(ToModel)
             .ToArray();
 
-
-        result.MethodModels =
-            (isOcctType
-                ? GetAllDecls(record)
-                    .SelectMany(r => r.Methods)
-                : record.Methods).Where(ShouldIncludeMethod)
+        result.MethodModels = record.Methods
+            .Where(m => ShouldIncludeMethod(m, record.IsAbstract))
             .Select(ToModel)
             .ToArray();
 
@@ -155,10 +152,6 @@ internal sealed class RecordModelManager(
             MethodModelType.Operator => method.OverloadedOperator switch
             {
                 CX_OverloadedOperatorKind.CX_OO_Invalid => "unknown",
-                CX_OverloadedOperatorKind.CX_OO_New => "new",
-                CX_OverloadedOperatorKind.CX_OO_Delete => "delete",
-                CX_OverloadedOperatorKind.CX_OO_Array_New => "new[]",
-                CX_OverloadedOperatorKind.CX_OO_Array_Delete => "delete[]",
                 CX_OverloadedOperatorKind.CX_OO_Plus => "+",
                 CX_OverloadedOperatorKind.CX_OO_Minus => "-",
                 CX_OverloadedOperatorKind.CX_OO_Star => "*",
@@ -169,7 +162,6 @@ internal sealed class RecordModelManager(
                 CX_OverloadedOperatorKind.CX_OO_Pipe => "|",
                 CX_OverloadedOperatorKind.CX_OO_Tilde => "~",
                 CX_OverloadedOperatorKind.CX_OO_Exclaim => "!",
-                CX_OverloadedOperatorKind.CX_OO_Equal => "=",
                 CX_OverloadedOperatorKind.CX_OO_Less => "<",
                 CX_OverloadedOperatorKind.CX_OO_Greater => ">",
                 CX_OverloadedOperatorKind.CX_OO_PlusEqual => "+=",
@@ -194,9 +186,7 @@ internal sealed class RecordModelManager(
                 CX_OverloadedOperatorKind.CX_OO_PlusPlus => "++",
                 CX_OverloadedOperatorKind.CX_OO_MinusMinus => "--",
                 CX_OverloadedOperatorKind.CX_OO_Comma => ",",
-                CX_OverloadedOperatorKind.CX_OO_ArrowStar => "->*",
                 CX_OverloadedOperatorKind.CX_OO_Arrow => "->",
-                CX_OverloadedOperatorKind.CX_OO_Call => "()",
                 CX_OverloadedOperatorKind.CX_OO_Subscript => "[]",
                 CX_OverloadedOperatorKind.CX_OO_Conditional => "?",
                 CX_OverloadedOperatorKind.CX_OO_Coawait => "co_await",
@@ -291,13 +281,6 @@ internal sealed class RecordModelManager(
             return true;
         }
 
-        var name = addingType.AsString;
-        if (name.Contains("std::basic_ostream<", StringComparison.InvariantCulture))
-        {
-            return false;
-        }
-
-
         var result = addingType.AsCXXRecordDecl?.Definition is not null;
         if (!result)
         {
@@ -306,7 +289,7 @@ internal sealed class RecordModelManager(
         return result;
     }
 
-    private static bool ShouldIncludeMethod(CXXMethodDecl method)
+    private static bool ShouldIncludeMethod(CXXMethodDecl method, bool isAbstract)
     {
         if (!IsDefined(method.ReturnType))
         {
@@ -323,7 +306,24 @@ internal sealed class RecordModelManager(
             return false;
         }
 
-        return !IsOperatorNewOrDelete(method);
+        if (method.OverloadedOperator
+            is CX_OverloadedOperatorKind.CX_OO_Call
+            or CX_OverloadedOperatorKind.CX_OO_Equal)
+        {
+            return false;
+        }
+
+        if (IsOperatorNewOrDelete(method))
+        {
+            return false;
+        }
+
+        if (isAbstract && method is CXXConstructorDecl or CXXDestructorDecl)
+        {
+            return false;
+        }
+
+        return true;
     }
 
     private static bool IsOperatorNewOrDelete(CXXMethodDecl method)

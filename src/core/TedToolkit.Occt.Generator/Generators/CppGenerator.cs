@@ -35,7 +35,7 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
                 switch (recordDeclMethodModel.Type)
                 {
                     case MethodModelType.Normal:
-                        GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl);
+                        GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, true);
                         break;
                     case MethodModelType.New:
                         GenerateNew(ref builder, recordDeclMethodModel, recordDecl);
@@ -44,6 +44,7 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
                         GenerateDelete(ref builder, recordDecl);
                         break;
                     case MethodModelType.Operator:
+                        GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, false);
                         break;
                     case MethodModelType.Implicit:
                         break;
@@ -123,16 +124,29 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         }
 
         builder.Append("\tinstance.~");
-        builder.Append(recordModel.Type.CppTypeName);
+        var name = recordModel.Type.CppTypeName.Trim();
+        var index = name.LastIndexOf(':');
+        if (index >= 0)
+        {
+            name = name[(index + 1)..];
+        }
+
+        builder.Append(name);
         builder.AppendLine("();");
     }
 
-    private void GenerateNormalMethod(ref Utf16ValueStringBuilder builder, MethodModel methodModel,  RecordModel recordModel)
+    private void GenerateNormalMethod(ref Utf16ValueStringBuilder builder, MethodModel methodModel,
+        RecordModel recordModel, bool parentheses)
     {
         if (!methodModel.IsStatic)
         {
+            if (methodModel.IsConst)
+            {
+                builder.Append("const ");
+            }
+
             builder.Append(recordDecl.Type.CppTypeName);
-            builder.Append("& self");
+            builder.Append(" & self");
         }
 
         var started = !methodModel.IsStatic;
@@ -149,6 +163,7 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
             builder.Append(parameterModel.Name);
         }
 
+        var hasReference = false;
         if (!methodModel.IsReturnVoid)
         {
             if (started)
@@ -156,8 +171,15 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
                 builder.Append(", ");
             }
 
-            builder.Append(methodModel.ReturnType.CppTypeName);
-            builder.Append("* result");
+            var name = methodModel.ReturnType.CppTypeName.Trim();
+            hasReference = name.EndsWith('&');
+            if (hasReference)
+            {
+                name = name[..^2] + '*';
+            }
+
+            builder.Append(name);
+            builder.Append(" * const result");
         }
 
         builder.AppendLine("), {");
@@ -165,17 +187,43 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         if (methodModel.IsStatic)
         {
             builder.Append(methodModel.IsReturnVoid ? "\t" : "\t*result = ");
+            if (hasReference)
+            {
+                builder.Append("&");
+            }
+
             builder.Append(recordModel.Type.CppTypeName);
             builder.Append("::");
             builder.Append(methodModel.MethodName);
         }
         else
         {
-            builder.Append(methodModel.IsReturnVoid ? "\tself." : "\t*result = self.");
-            builder.Append(methodModel.MethodName);
+            if (hasReference)
+            {
+                builder.Append("\t*result = &");
+            }
+            else
+            {
+                builder.Append(methodModel.IsReturnVoid ? "\t" : "\t*result = ");
+            }
+
+            if (!parentheses && methodModel.Parameters.Count is 0)
+            {
+                builder.Append(methodModel.MethodName);
+                builder.Append("self");
+            }
+            else
+            {
+                builder.Append(parentheses ? "self." : "self");
+                builder.Append(methodModel.MethodName);
+            }
         }
 
-        builder.Append('(');
+        if (parentheses)
+        {
+            builder.Append('(');
+        }
+
         started = false;
         foreach (var parameterModel in methodModel.Parameters)
         {
@@ -188,6 +236,6 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
             builder.Append(parameterModel.Name);
         }
 
-        builder.AppendLine(");");
+        builder.AppendLine(parentheses ? ");" : ";");
     }
 }

@@ -19,6 +19,7 @@ public sealed class RecordModel
     public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }
 
     public RecordModel? Base { get; set; }
+    public required bool IsAbstract { get; init; }
     public required TypeModel Type { get; init; }
 
     public required long Size { get; init; }

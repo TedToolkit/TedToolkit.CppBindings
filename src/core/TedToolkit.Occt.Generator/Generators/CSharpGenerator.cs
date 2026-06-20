@@ -33,31 +33,41 @@ public sealed class CSharpGenerator(
     public async Task<string> GenerateAsync(CancellationToken cancellationToken)
     {
         var structName = recordDecl.Type.CSharpPublicType.ToCode();
-        var structDeclaration = Struct(structName).Unsafe
-            .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
-                .AddArgument(Argument(recordDecl.Type.CppTypeName.ToLiteral())))
-            .AddAttribute(Attribute<StructLayoutAttribute>()
-                .AddArgument(Argument(LayoutKind.Explicit.ToExpression()))
-                .AddNamedArgument(nameof(StructLayoutAttribute.Size),
-                    recordDecl.Size.ToLiteral()));
-        AddRootDescriptions(structDeclaration, recordDecl.DescriptionItems, static (target, description) =>
-            target.AddRootDescription(description));
+        var nameSpace = NameSpace("TedToolkit.Occt");
+        if (recordDecl.IsAbstract)
+        {
+            var structDeclaration = Struct(structName).Unsafe
+                .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
+                    .AddArgument(Argument(recordDecl.Type.CppTypeName.ToLiteral())))
+                .AddAttribute(Attribute<StructLayoutAttribute>()
+                    .AddArgument(Argument(LayoutKind.Explicit.ToExpression()))
+                    .AddNamedArgument(nameof(StructLayoutAttribute.Size),
+                        recordDecl.Size.ToLiteral()));
+            AddRootDescriptions(structDeclaration, recordDecl.DescriptionItems, static (target, description) =>
+                target.AddRootDescription(description));
 
-        structDeclaration = generationOptions.Value.IsInternal ? structDeclaration.Internal : structDeclaration.Public;
-        GenerateFields(structDeclaration);
-        GenerateMethods(structDeclaration);
+            structDeclaration = generationOptions.Value.IsInternal
+                ? structDeclaration.Internal
+                : structDeclaration.Public;
+            GenerateFields(structDeclaration);
+            GenerateMethods(structDeclaration);
 
-        var nameSpace = NameSpace("TedToolkit.Occt")
-            .AddMember(structDeclaration);
 
-        GenerateInterfaces(nameSpace, structDeclaration);
+            nameSpace.AddMember(structDeclaration);
+
+            GenerateInterfaces(nameSpace, structDeclaration);
+        }
+        else
+        {
+            GenerateInterfaces(nameSpace, null);
+        }
 
         return File()
             .AddNameSpace(nameSpace)
             .ToCode();
     }
 
-    private void GenerateInterfaces(NameSpace nameSpace, TypeDeclaration structDeclaration)
+    private void GenerateInterfaces(NameSpace nameSpace, TypeDeclaration? structDeclaration)
     {
         if (recordDecl.Base is null)
         {
@@ -65,7 +75,7 @@ public sealed class CSharpGenerator(
         }
 
         var interfaceDeclaration = Interface(recordDecl.Type.CSharpInterfaceName).Public.Unsafe;
-        structDeclaration.AddBaseType(new DataType(recordDecl.Type.CSharpInterfaceName));
+        structDeclaration?.AddBaseType(new DataType(recordDecl.Type.CSharpInterfaceName));
         interfaceDeclaration.AddBaseType(new DataType(recordDecl.Base.Type.CSharpInterfaceName));
 
         nameSpace.AddMember(interfaceDeclaration);
