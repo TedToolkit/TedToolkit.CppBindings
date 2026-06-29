@@ -78,6 +78,10 @@ internal sealed class RecordModelManager(
 
         result.MethodModels = record.Methods
             .Where(m => ShouldIncludeMethod(m, record.IsAbstract))
+            .GroupBy(GetMethodSignatureKey)
+            .Select(static methods => methods
+                .OrderBy(GetConstQualificationWeight)
+                .First())
             .Select(ToModel)
             .ToArray();
 
@@ -197,6 +201,50 @@ internal sealed class RecordModelManager(
     private static bool IsExplicitConversion(CXXConversionDecl conversionDecl)
     {
         return conversionDecl.IsExplicit;
+    }
+
+    private static string GetMethodSignatureKey(CXXMethodDecl method)
+    {
+        return string.Join("|",
+        [
+            GetMethodType(method).ToString(),
+            GetMethodName(method),
+            .. method.Parameters.Select(static p => p.Type.ToPInvokeDataType().ToCode()),
+        ]);
+    }
+
+    private static int GetConstQualificationWeight(CXXMethodDecl method)
+    {
+        var weight = method.IsConst ? 1 : 0;
+
+        weight += CountConstQualifier(method.ReturnType);
+        weight += method.Parameters.Sum(static p => CountConstQualifier(p.Type));
+
+        return weight;
+    }
+
+    private static int CountConstQualifier(ClangSharp.Type type)
+    {
+        var count = 0;
+        for (var current = type;;)
+        {
+            if (current.IsLocalConstQualified)
+            {
+                count++;
+                current = current.Desugar;
+                continue;
+            }
+
+            if (current is PointerType or LValueReferenceType or RValueReferenceType)
+            {
+                current = current.PointeeType;
+                continue;
+            }
+
+            break;
+        }
+
+        return count;
     }
 
     private static bool IsNoExcept(CXXMethodDecl method)

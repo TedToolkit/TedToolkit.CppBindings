@@ -13,7 +13,6 @@ using Microsoft.Extensions.Options;
 using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services;
-using TedToolkit.Occt.Generator.Services.Rules;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -50,14 +49,7 @@ internal sealed class AddTest
             .OfType<CXXRecordDecl>()
             .Single(static r => r.Name == "Holder");
 
-        var manager = new RecordModelManager(
-            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
-            {
-                DeclOptions = [],
-                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
-                CppFolder = new DirectoryInfo(Path.GetTempPath()),
-            }),
-            new Resolver([new DefaultTypeRule(),]));
+        var manager = CreateManager();
 
         manager.Add(record);
 
@@ -108,14 +100,7 @@ internal sealed class AddTest
             .OfType<CXXRecordDecl>()
             .Single(static r => r.Name == "Derived");
 
-        var manager = new RecordModelManager(
-            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
-            {
-                DeclOptions = [],
-                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
-                CppFolder = new DirectoryInfo(Path.GetTempPath()),
-            }),
-            new Resolver([new DefaultTypeRule(),]));
+        var manager = CreateManager();
 
         manager.Add(record);
 
@@ -147,14 +132,7 @@ internal sealed class AddTest
             .OfType<CXXRecordDecl>()
             .Single(static r => r.Name == "Value");
 
-        var manager = new RecordModelManager(
-            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
-            {
-                DeclOptions = [],
-                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
-                CppFolder = new DirectoryInfo(Path.GetTempPath()),
-            }),
-            new Resolver([new DefaultTypeRule(),]));
+        var manager = CreateManager();
 
         manager.Add(record);
 
@@ -187,14 +165,7 @@ internal sealed class AddTest
             .OfType<CXXRecordDecl>()
             .Single(static r => r.Name == "Parent");
 
-        var manager = new RecordModelManager(
-            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
-            {
-                DeclOptions = [],
-                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
-                CppFolder = new DirectoryInfo(Path.GetTempPath()),
-            }),
-            new Resolver([new DefaultTypeRule(),]));
+        var manager = CreateManager();
 
         manager.Add(record);
 
@@ -204,6 +175,46 @@ internal sealed class AddTest
         await Assert.That(manager.RecordModels.Single(static m => m.Type.CppTypeName == "Parent")
             .FieldModels.Single().Type.CppTypeName)
             .IsEqualTo("Child");
+    }
+
+    [Test]
+    public async Task Should_prefer_non_const_method_when_csharp_signature_matches_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Value
+            {
+                int Coord();
+                int Coord() const;
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Value");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var methods = manager.RecordModels.Single().MethodModels
+            .Where(static m => m.MethodName == "Coord")
+            .ToArray();
+
+        await Assert.That(methods).HasSingleItem();
+        await Assert.That(methods.Single().IsConst).IsFalse();
+    }
+
+    private static RecordModelManager CreateManager()
+    {
+        return new RecordModelManager(
+            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
+            {
+                DeclOptions = [],
+                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
+                CppFolder = new DirectoryInfo(Path.GetTempPath()),
+            }),
+            new Resolver([]),
+            new FakeVcpkgService());
     }
 
     private static TranslationUnit ParseTranslationUnit(string source)
@@ -225,5 +236,38 @@ internal sealed class AddTest
         var builder = new SourceBuilder();
         description.ToDescription(ref builder);
         return builder.ToString();
+    }
+
+    private sealed class FakeVcpkgService : TedToolkit.Occt.Generator.Services.Interfaces.IVcpkgService
+    {
+        public Task<string> IncludingHeaderContent(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(string.Empty);
+        }
+
+        public string GetRoot()
+        {
+            return string.Empty;
+        }
+
+        public string GetIncludeFolder()
+        {
+            return string.Empty;
+        }
+
+        public string GetOcctIncludeFolder()
+        {
+            return "__occt__";
+        }
+
+        public string GetTriplet()
+        {
+            return string.Empty;
+        }
+
+        public Task<int> GetOcctCppVersionAsync()
+        {
+            return Task.FromResult(20);
+        }
     }
 }

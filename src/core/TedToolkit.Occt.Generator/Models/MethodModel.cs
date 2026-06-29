@@ -1,4 +1,6 @@
-﻿using Cysharp.Text;
+using System.Text.RegularExpressions;
+
+using Cysharp.Text;
 
 using TedToolkit.RoslynHelper.Generators;
 
@@ -86,9 +88,17 @@ public class MethodModel
         foreach (var parameterModel in Parameters)
         {
             builder.Append('_');
-            builder.Append(parameterModel.Type.CppTypeName.ToValidCSharpName());
+            builder.Append(NormalizeInteropTypeName(parameterModel.Type.CppTypeName).ToValidCSharpName());
         }
 
         return builder.ToString();
+    }
+
+    private static string NormalizeInteropTypeName(string cppTypeName)
+    {
+        ArgumentNullException.ThrowIfNull(cppTypeName);
+
+        return Regex.Replace(cppTypeName, @"\bconst\b", string.Empty)
+            .Trim();
     }
 }
