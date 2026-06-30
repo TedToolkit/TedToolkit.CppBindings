@@ -25,7 +25,7 @@ namespace TedToolkit.Occt.Generator.Generators;
 /// </summary>
 /// <param name="recordDecl">The record declaration being generated.</param>
 /// <param name="generationOptions">The generator options.</param>
-public sealed class CSharpGenerator(
+internal sealed class CSharpGenerator(
     RecordModel recordDecl,
     IOptions<GenerationOptions> generationOptions) : IGenerator
 {
@@ -51,7 +51,6 @@ public sealed class CSharpGenerator(
                 : structDeclaration.Public;
             GenerateFields(structDeclaration);
             GenerateMethods(structDeclaration);
-
 
             nameSpace.AddMember(structDeclaration);
 
@@ -126,8 +125,12 @@ public sealed class CSharpGenerator(
         structDeclaration.AddMember(field);
     }
 
-    private static void AddMethod(TypeDeclaration structDeclaration, MethodModel methodModel, string pinvokeMethodName)
+    private static void AddMethod(
+        TypeDeclaration structDeclaration,
+        MethodModel methodModel,
+        string unusedPInvokeMethodName)
     {
+        _ = unusedPInvokeMethodName;
         var method = Method(methodModel.MethodName, CreateReturnType(methodModel)).Public;
         AddRootDescriptions(method, methodModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));

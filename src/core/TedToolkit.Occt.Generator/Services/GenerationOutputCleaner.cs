@@ -16,7 +16,7 @@ namespace TedToolkit.Occt.Generator.Services;
 /// Clears generator output folders while preserving the configured root directories.
 /// </summary>
 /// <param name="options">The generation options.</param>
-public sealed class GenerationOutputCleaner(IOptions<GenerationOptions> options) : IGenerationOutputCleaner
+internal sealed class GenerationOutputCleaner(IOptions<GenerationOptions> options) : IGenerationOutputCleaner
 {
     /// <summary>
     /// Empties the configured C# and C++ output folders before generation starts.
@@ -27,7 +27,7 @@ public sealed class GenerationOutputCleaner(IOptions<GenerationOptions> options)
         CleanDirectory(options.Value.CppFolder);
     }
 
-    private void CleanDirectory(DirectoryInfo directory)
+    private static void CleanDirectory(DirectoryInfo directory)
     {
         ArgumentNullException.ThrowIfNull(directory);
 

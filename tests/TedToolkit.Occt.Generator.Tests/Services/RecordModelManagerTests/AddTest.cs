@@ -19,8 +19,15 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests.Services.RecordModelManagerTests;
 
+/// <summary>
+/// Verifies <see cref="RecordModelManager.Add(ClangSharp.CXXRecordDecl)"/>.
+/// </summary>
 internal sealed class AddTest
 {
+    /// <summary>
+    /// Verifies enums referenced by fields are collected and documented.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_collect_referenced_enums_when_record_fields_use_them_Async()
     {
@@ -75,6 +82,10 @@ internal sealed class AddTest
             .Contains("RGB space.");
     }
 
+    /// <summary>
+    /// Verifies constructors, destructors, and operators are classified correctly.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_filter_special_methods_while_preserving_operators_Async()
     {
@@ -118,6 +129,10 @@ internal sealed class AddTest
         ]);
     }
 
+    /// <summary>
+    /// Verifies implicit and explicit conversion operators are classified correctly.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_classify_conversion_operators_Async()
     {
@@ -147,6 +162,10 @@ internal sealed class AddTest
         ]);
     }
 
+    /// <summary>
+    /// Verifies records referenced by fields are collected transitively.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_collect_referenced_records_when_record_fields_use_them_Async()
     {
@@ -178,6 +197,10 @@ internal sealed class AddTest
             .IsEqualTo("Child");
     }
 
+    /// <summary>
+    /// Verifies non-const methods win when const and non-const overloads collapse to the same signature.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_prefer_non_const_method_when_csharp_signature_matches_Async()
     {
@@ -207,12 +230,12 @@ internal sealed class AddTest
 
     private static RecordModelManager CreateManager()
     {
-        return new RecordModelManager(
-            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
+        return new(
+            Microsoft.Extensions.Options.Options.Create(new GenerationOptions()
             {
                 DeclOptions = [],
-                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
-                CppFolder = new DirectoryInfo(Path.GetTempPath()),
+                CSharpFolder = new(Path.GetTempPath()),
+                CppFolder = new(Path.GetTempPath()),
             }),
             new Resolver([]),
             new FakeVcpkgDefaultTripletResolver(),
@@ -242,19 +265,19 @@ internal sealed class AddTest
 
     private sealed class FakeVcpkgEnvironment : IVcpkgEnvironment
     {
-        public Task<string> IncludingHeaderContent(string triplet, CancellationToken cancellationToken)
+        public Task<string> GetIncludingHeaderContentAsync(string triplet, CancellationToken cancellationToken)
         {
-            return Task.FromResult(string.Empty);
+            return Task.FromResult("");
         }
 
         public string GetRoot()
         {
-            return string.Empty;
+            return "";
         }
 
         public string GetIncludeFolder(string triplet)
         {
-            return string.Empty;
+            return "";
         }
 
         public string GetOcctIncludeFolder(string triplet)
@@ -269,6 +292,5 @@ internal sealed class AddTest
         {
             return "x64-windows";
         }
-
     }
 }

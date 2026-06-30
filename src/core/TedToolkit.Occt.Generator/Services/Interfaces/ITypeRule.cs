@@ -14,7 +14,7 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 /// <summary>
 /// Represents one rule that can project a clang type into a custom generator model.
 /// </summary>
-public interface ITypeRule
+internal interface ITypeRule
 {
     /// <summary>
     /// Tries to project a type with this rule.

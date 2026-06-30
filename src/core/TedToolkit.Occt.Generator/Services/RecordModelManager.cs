@@ -1,4 +1,11 @@
-﻿using System.Runtime.CompilerServices;
+﻿// -----------------------------------------------------------------------
+// <copyright file="RecordModelManager.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 using ClangSharp;
@@ -13,6 +20,13 @@ using TedToolkit.RoslynHelper.Generators;
 
 namespace TedToolkit.Occt.Generator.Services;
 
+/// <summary>
+/// Builds and caches projected record and enum models from parsed Clang declarations.
+/// </summary>
+/// <param name="options">The generation options.</param>
+/// <param name="resolver">The type resolver.</param>
+/// <param name="defaultsResolver">The default triplet resolver.</param>
+/// <param name="vcpkgEnvironment">The vcpkg environment service.</param>
 internal sealed class RecordModelManager(
     IOptions<GenerationOptions> options,
     IResolver resolver,
@@ -20,17 +34,30 @@ internal sealed class RecordModelManager(
     IVcpkgEnvironment vcpkgEnvironment) : IRecordModelManager
 {
     private readonly List<EnumModel> _enumModels = [];
+
     private readonly HashSet<CXCursor> _enumNames = [];
+
     private readonly Dictionary<CXCursor, RecordModel> _recordNames = [];
 
-
-    public IReadOnlyList<EnumModel> EnumModels => _enumModels;
-
-    public IEnumerable<RecordModel> RecordModels
+    /// <inheritdoc/>
+    public IReadOnlyList<EnumModel> EnumModels
     {
-        get { return _recordNames.Values.Where(t => t.Type.CppTypeName is not "Standard_Transient"); }
+        get
+        {
+            return _enumModels;
+        }
     }
 
+    /// <inheritdoc/>
+    public IEnumerable<RecordModel> RecordModels
+    {
+        get
+        {
+            return _recordNames.Values.Where(t => t.Type.CppTypeName is not "Standard_Transient");
+        }
+    }
+
+    /// <inheritdoc/>
     public RecordModel Add(CXXRecordDecl record)
     {
         record = record.Definition!;
@@ -55,7 +82,7 @@ internal sealed class RecordModelManager(
             throw new NotSupportedException($"Can't get size of type ({record.TypeForDecl.AsString})");
         }
 
-        var result = new RecordModel
+        var result = new RecordModel()
         {
             DescriptionItems = commentProjection.DescriptionItems,
             Type = resolver.Resolve(record.TypeForDecl)
@@ -194,7 +221,10 @@ internal sealed class RecordModelManager(
                 CX_OverloadedOperatorKind.CX_OO_Comma => ",",
                 CX_OverloadedOperatorKind.CX_OO_Arrow => "->",
                 CX_OverloadedOperatorKind.CX_OO_Subscript => "[]",
-                _ => throw new ArgumentOutOfRangeException()
+                _ => throw new ArgumentOutOfRangeException(
+                    nameof(method),
+                    method.OverloadedOperator,
+                    "Unsupported overloaded operator kind."),
             },
             _ => method.Name.ToValidCSharpName(),
         };
@@ -228,7 +258,7 @@ internal sealed class RecordModelManager(
     private static int CountConstQualifier(ClangSharp.Type type)
     {
         var count = 0;
-        for (var current = type;;)
+        for (var current = type; ;)
         {
             if (current.IsLocalConstQualified)
             {
@@ -272,7 +302,9 @@ internal sealed class RecordModelManager(
 
         return new()
         {
-            DescriptionItems = descriptionItems ?? [], Type = ToModel(paramDel.Type), Name = paramDel.Name,
+            DescriptionItems = descriptionItems ?? [],
+            Type = ToModel(paramDel.Type),
+            Name = paramDel.Name,
         };
     }
 
@@ -428,7 +460,7 @@ internal sealed class RecordModelManager(
 
         var underlyingType = builtinType.ToDataType();
 
-        return new EnumModel
+        return new()
         {
             DescriptionItems = enumDecl.ToCommentProjection().DescriptionItems,
             Name = enumDecl.Name.ToValidCSharpName(),
@@ -438,10 +470,9 @@ internal sealed class RecordModelManager(
         };
     }
 
-
     private static EnumMemberModel ToEnumMember(EnumConstantDecl enumConstant)
     {
-        return new EnumMemberModel
+        return new()
         {
             DescriptionItems = enumConstant.ToCommentProjection().DescriptionItems,
             Name = enumConstant.Name,

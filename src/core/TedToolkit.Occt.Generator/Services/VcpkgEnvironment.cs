@@ -14,7 +14,7 @@ namespace TedToolkit.Occt.Generator.Services;
 /// <summary>
 /// Provides access to the local vcpkg installation and OCCT metadata.
 /// </summary>
-public sealed class VcpkgEnvironment : IVcpkgEnvironment
+internal sealed class VcpkgEnvironment : IVcpkgEnvironment
 {
     private const string VCPKG_ROOT_ENVIRONMENT_VARIABLE_NAME = "VCPKG_ROOT";
 
@@ -50,7 +50,8 @@ public sealed class VcpkgEnvironment : IVcpkgEnvironment
         return Path.Combine(GetIncludeFolder(triplet), OCCT_FOLDER_NAME);
     }
 
-    public async Task<string> IncludingHeaderContent(string triplet, CancellationToken cancellationToken)
+    /// <inheritdoc/>
+    public async Task<string> GetIncludingHeaderContentAsync(string triplet, CancellationToken cancellationToken)
     {
         var stringBuilder = ZString.CreateStringBuilder();
 
@@ -59,7 +60,7 @@ public sealed class VcpkgEnvironment : IVcpkgEnvironment
         foreach (var file in new DirectoryInfo(GetOcctIncludeFolder(triplet))
                      .EnumerateFiles("*.hxx"))
         {
-            if (await IsDeprecated(file, cancellationToken).ConfigureAwait(false))
+            if (await IsDeprecatedAsync(file, cancellationToken).ConfigureAwait(false))
             {
                 continue;
             }
@@ -72,7 +73,7 @@ public sealed class VcpkgEnvironment : IVcpkgEnvironment
         return stringBuilder.ToString();
     }
 
-    private static async Task<bool> IsDeprecated(FileInfo file, CancellationToken cancellationToken)
+    private static async Task<bool> IsDeprecatedAsync(FileInfo file, CancellationToken cancellationToken)
     {
         using var reader = file.OpenText();
         while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)

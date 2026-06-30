@@ -45,10 +45,11 @@ internal sealed class CleanTest
 
         try
         {
-            using var serviceProvider = new ServiceCollection()
+            var serviceProvider = new ServiceCollection()
                 .AddSingleton<IOptions<GenerationOptions>>(Microsoft.Extensions.Options.Options.Create(options))
                 .AddSingleton<IGenerationOutputCleaner, GenerationOutputCleaner>()
                 .BuildServiceProvider();
+            await using var _ = serviceProvider.ConfigureAwait(false);
 
             var cleaner = serviceProvider.GetRequiredService<IGenerationOutputCleaner>();
 

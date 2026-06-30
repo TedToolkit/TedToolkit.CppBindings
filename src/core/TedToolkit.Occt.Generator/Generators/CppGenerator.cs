@@ -14,7 +14,8 @@ namespace TedToolkit.Occt.Generator.Generators;
 /// <summary>
 /// Produces the C++ translation unit payload for a parsed record.
 /// </summary>
-public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
+/// <param name="recordDecl">The record declaration to generate.</param>
+internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 {
     /// <inheritdoc />
     public Task<string> GenerateAsync(CancellationToken cancellationToken)
@@ -37,23 +38,28 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
                     case MethodModelType.Normal:
                         GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, true);
                         break;
+
                     case MethodModelType.New:
                         GenerateNew(ref builder, recordDeclMethodModel, recordDecl);
                         break;
+
                     case MethodModelType.Delete:
                         GenerateDelete(ref builder, recordDecl);
                         break;
+
                     case MethodModelType.Operator:
                         GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, false);
                         break;
+
                     case MethodModelType.Implicit:
-                        break;
+
                     case MethodModelType.Explicit:
                         break;
-                    default:
-                        throw new ArgumentOutOfRangeException();
-                }
 
+                    default:
+                        throw new InvalidOperationException(
+                            $"Unsupported method model type '{recordDeclMethodModel.Type}'.");
+                }
 
                 builder.AppendLine("})");
             }
@@ -66,7 +72,7 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         }
     }
 
-    private void GenerateNew(ref Utf16ValueStringBuilder builder, MethodModel methodModel, RecordModel recordModel)
+    private static void GenerateNew(ref Utf16ValueStringBuilder builder, MethodModel methodModel, RecordModel recordModel)
     {
         var alloc = recordModel.Base is not null;
         builder.Append(recordModel.Type.CppTypeName);
@@ -103,13 +109,15 @@ public sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 
         builder.AppendLine(");");
 
-        if (alloc)
+        if (!alloc)
         {
-            builder.AppendLine("\tinstance->IncrementRefCounter();");
+            return;
         }
+
+        builder.AppendLine("\tinstance->IncrementRefCounter();");
     }
 
-    private void GenerateDelete(ref Utf16ValueStringBuilder builder, RecordModel recordModel)
+    private static void GenerateDelete(ref Utf16ValueStringBuilder builder, RecordModel recordModel)
     {
         var alloc = recordModel.Base is not null;
         builder.Append(recordModel.Type.CppTypeName);

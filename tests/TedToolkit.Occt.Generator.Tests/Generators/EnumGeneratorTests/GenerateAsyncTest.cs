@@ -12,26 +12,33 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests.Generators.EnumGeneratorTests;
 
+/// <summary>
+/// Verifies generated enum output.
+/// </summary>
 internal sealed class GenerateAsyncTest
 {
+    /// <summary>
+    /// Verifies the generator emits a documented public enum with the configured values.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_generate_public_csharp_enum_with_underlying_type_and_values_Async()
     {
-        var generator = new EnumGenerator(new EnumModel
+        var generator = new EnumGenerator(new EnumModel()
         {
             DescriptionItems = [new DescriptionSummary(new DescriptionText("Color kind.")),],
             Name = "Quantity_TypeOfColor",
             SourceType = "Quantity_TypeOfColor",
-            UnderlyingType = new DataType("byte"),
+            UnderlyingType = new("byte"),
             Members =
             [
-                new EnumMemberModel
+                new EnumMemberModel()
                 {
                     DescriptionItems = [new DescriptionSummary(new DescriptionText("RGB space.")),],
                     Name = "Quantity_TypeOfColor_RGB",
                     Value = 1.ToLiteral(),
                 },
-                new EnumMemberModel
+                new EnumMemberModel()
                 {
                     DescriptionItems = [new DescriptionSummary(new DescriptionText("sRGB space.")),],
                     Name = "Quantity_TypeOfColor_sRGB",

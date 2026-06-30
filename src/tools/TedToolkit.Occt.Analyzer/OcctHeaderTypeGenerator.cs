@@ -95,8 +95,8 @@ public sealed class OcctHeaderTypeGenerator : IIncrementalGenerator
 
         var installedTriplets = installedPath.EnumerateDirectories()
             .Select(static directory => directory.Name)
-            .Where(static folderName => !string.IsNullOrWhiteSpace(folderName))
-            .Where(folderName => new DirectoryInfo(Path.Combine(installedPath.FullName, folderName!, "include", "opencascade")).Exists)
+            .Where(folderName => !string.IsNullOrWhiteSpace(folderName)
+                                 && new DirectoryInfo(Path.Combine(installedPath.FullName, folderName!, "include", "opencascade")).Exists)
             .Select(static folderName => folderName!)
             .Distinct(StringComparer.OrdinalIgnoreCase)
             .OrderBy(static folderName => folderName, StringComparer.OrdinalIgnoreCase)
@@ -120,30 +120,30 @@ public sealed class OcctHeaderTypeGenerator : IIncrementalGenerator
 
         if (RuntimeInformation.IsOSPlatform(OSPlatform.Windows))
         {
-            preferredTriplets =
-            [
+            preferredTriplets = new string[]
+            {
                 $"{architecturePrefix}-windows",
                 $"{architecturePrefix}-windows-static",
                 $"{architecturePrefix}-windows-static-md",
-            ];
+            };
             platformToken = "-windows";
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.Linux))
         {
-            preferredTriplets =
-            [
+            preferredTriplets = new string[]
+            {
                 $"{architecturePrefix}-linux",
                 $"{architecturePrefix}-linux-release",
-            ];
+            };
             platformToken = "-linux";
         }
         else if (RuntimeInformation.IsOSPlatform(OSPlatform.OSX))
         {
-            preferredTriplets =
-            [
+            preferredTriplets = new string[]
+            {
                 $"{architecturePrefix}-osx",
                 $"{architecturePrefix}-osx-static",
-            ];
+            };
             platformToken = "-osx";
         }
         else

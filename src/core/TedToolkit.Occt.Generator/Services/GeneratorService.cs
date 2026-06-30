@@ -17,26 +17,25 @@ namespace TedToolkit.Occt.Generator.Services;
 /// <summary>
 /// Creates generator instances for record declarations.
 /// </summary>
-/// <param name="recordLayoutService">The native record layout service.</param>
 /// <param name="generationOptions">The generation options.</param>
-public sealed class GeneratorService(
+internal sealed class GeneratorService(
     IOptions<GenerationOptions> generationOptions) : IGeneratorService
 {
     /// <inheritdoc/>
-    public CSharpGenerator GenerateCSharp(RecordModel record)
+    public IGenerator GenerateCSharp(RecordModel record)
     {
-        return new(record, generationOptions);
+        return new CSharpGenerator(record, generationOptions);
     }
 
     /// <inheritdoc/>
-    public CppGenerator GenerateCpp(RecordModel record)
+    public IGenerator GenerateCpp(RecordModel record)
     {
-        return new(record);
+        return new CppGenerator(record);
     }
 
     /// <inheritdoc/>
-    public EnumGenerator GenerateCSharp(EnumModel enumModel)
+    public IGenerator GenerateCSharp(EnumModel enumModel)
     {
-        return new(enumModel);
+        return new EnumGenerator(enumModel);
     }
 }

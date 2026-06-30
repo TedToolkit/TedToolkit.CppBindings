@@ -1,8 +1,14 @@
-﻿using System.Runtime.CompilerServices;
+// -----------------------------------------------------------------------
+// <copyright file="HandleValue.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
 namespace TedToolkit.Occt;
-
 
 /// <summary>
 /// <para>
@@ -31,31 +37,47 @@ namespace TedToolkit.Occt;
 /// of base type from handle to derived type.
 /// </para>
 /// </summary>
-/// <typeparam name="TElement">transient</typeparam>
+/// <typeparam name="TElement">The unmanaged transient element type.</typeparam>
 // ReSharper disable once InconsistentNaming
 [StructLayout(LayoutKind.Sequential)]
-#pragma warning disable IDE1006
+#pragma warning disable IDE1006, SA1300, SA1649
 public readonly unsafe ref struct handle<TElement> :
-#pragma warning restore IDE1006
+#pragma warning restore IDE1006, SA1300, SA1649
     IHandle<TElement>
     where TElement : unmanaged, IStandard_Transient
 {
     private readonly nint _handle;
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="handle{TElement}"/> struct.
+    /// </summary>
+    /// <param name="handle">The native handle pointer.</param>
     internal handle(TElement* handle)
     {
         _handle = (nint)handle;
     }
 
+    /// <summary>
+    /// Gets a managed reference to the native element.
+    /// </summary>
     public ref TElement Value
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get { return ref *NativeHandle; }
+        get
+        {
+            return ref *NativeHandle;
+        }
     }
 
+    /// <summary>
+    /// Gets the native pointer for the underlying element.
+    /// </summary>
     public TElement* NativeHandle
     {
         [MethodImpl(MethodImplOptions.AggressiveInlining)]
-        get { return (TElement*)_handle; }
+        get
+        {
+            return (TElement*)_handle;
+        }
     }
 }

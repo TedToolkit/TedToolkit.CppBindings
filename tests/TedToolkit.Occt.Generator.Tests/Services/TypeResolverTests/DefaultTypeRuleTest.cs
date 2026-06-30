@@ -17,12 +17,19 @@ using TedToolkit.RoslynHelper.Generators;
 
 namespace TedToolkit.Occt.Generator.Tests.Services.TypeResolverTests;
 
+/// <summary>
+/// Verifies the default branches of <see cref="Resolver"/>.
+/// </summary>
 internal sealed class DefaultTypeRuleTest
 {
     private static readonly FieldInfo SourceBuilderField = typeof(SourceBuilder)
         .GetField("_stringBuilder", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
 
+    /// <summary>
+    /// Verifies enum fields are projected to their underlying P/Invoke type and public enum type.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_project_enum_to_underlying_pinvoke_type_and_public_enum_name_Async()
     {
@@ -46,7 +53,7 @@ internal sealed class DefaultTypeRuleTest
             .Single()
             .Type;
 
-        IResolver resolver = new Resolver([new DefaultTypeRule(),]);
+        var resolver = new Resolver([]);
 
         var resolved = resolver.Resolve(fieldType);
 
@@ -55,8 +62,8 @@ internal sealed class DefaultTypeRuleTest
         await Assert.That(resolved.Decl).IsNull();
         await Assert.That(resolved.Enum).IsNotNull();
         await Assert.That(resolved.Enum!.Name).IsEqualTo("Quantity_TypeOfColor");
-        await Assert.That(Render(resolved.Enum.UnderlyingType)).IsEqualTo("byte");
-        await Assert.That(resolved.Enum.Members.Select(static x => $"{x.Name}={x.Value}").ToArray())
+        await Assert.That(resolved.Enum.IntegerType.AsString).IsEqualTo("unsigned char");
+        await Assert.That(resolved.Enum.Enumerators.Select(static x => $"{x.Name}={x.InitVal}").ToArray())
             .IsEquivalentTo(
                 [
                     "Quantity_TypeOfColor_RGB=1",
@@ -64,6 +71,10 @@ internal sealed class DefaultTypeRuleTest
                 ]);
     }
 
+    /// <summary>
+    /// Verifies record types surface the matching record declaration.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_return_record_decl_for_record_type_Async()
     {
@@ -78,7 +89,7 @@ internal sealed class DefaultTypeRuleTest
             .Single(static r => r.Name == "Geom_Surface")
             .TypeForDecl;
 
-        IResolver resolver = new Resolver([new DefaultTypeRule(),]);
+        var resolver = new Resolver([]);
 
         var resolved = resolver.Resolve(recordType);
 

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="interop_error.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
 
@@ -65,6 +72,9 @@ internal readonly unsafe struct interop_error
     }
 
 #pragma warning disable RCS1139
+    /// <summary>
+    /// Throws a managed exception when the native payload contains an error.
+    /// </summary>
     /// <exception cref="ArgumentException">
     /// Thrown when the native exception type indicates an invalid argument, a domain
     /// violation, a construction error, or a dimensional mismatch.
@@ -175,10 +185,10 @@ internal readonly unsafe struct interop_error
 
     private static bool Contains(string source, string value)
     {
-#if NET6_0_OR_GREATER
-        return source.Contains(value, StringComparison.OrdinalIgnoreCase);
-#else
+#if NETSTANDARD2_0 || NET48 || NET472
         return source.IndexOf(value, StringComparison.OrdinalIgnoreCase) >= 0;
+#else
+        return source.Contains(value, StringComparison.OrdinalIgnoreCase);
 #endif
     }
 
@@ -189,9 +199,11 @@ internal readonly unsafe struct interop_error
             exception.Data[nameof(OcctNativeException.NativeTypeName)] = nativeTypeName;
         }
 
-        if (!string.IsNullOrWhiteSpace(nativeStackTrace))
+        if (string.IsNullOrWhiteSpace(nativeStackTrace))
         {
-            exception.Data[nameof(OcctNativeException.NativeStackTrace)] = nativeStackTrace;
+            return;
         }
+
+        exception.Data[nameof(OcctNativeException.NativeStackTrace)] = nativeStackTrace;
     }
 }

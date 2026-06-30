@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="EnumGenerator.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using System.Text;
 
 using TedToolkit.Occt.Generator.Models;
@@ -9,8 +16,13 @@ using static TedToolkit.RoslynHelper.Generators.SourceComposer<
 
 namespace TedToolkit.Occt.Generator.Generators;
 
-public sealed class EnumGenerator(EnumModel enumModel) : IGenerator
+/// <summary>
+/// Produces the generated C# enum for a parsed native enum declaration.
+/// </summary>
+/// <param name="enumModel">The enum declaration to generate.</param>
+internal sealed class EnumGenerator(EnumModel enumModel) : IGenerator
 {
+    /// <inheritdoc/>
     public Task<string> GenerateAsync(CancellationToken cancellationToken)
     {
         var enumDeclaration = Enum(enumModel.Name, enumModel.UnderlyingType).Public;

@@ -1,3 +1,10 @@
+// -----------------------------------------------------------------------
+// <copyright file="Helpers.cs" company="TedToolkit">
+// Copyright (c) TedToolkit. All rights reserved.
+// Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
+// </copyright>
+// -----------------------------------------------------------------------
+
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
 
@@ -11,21 +18,16 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator;
 
-internal sealed class CommentProjection
+/// <summary>
+/// Provides shared type- and comment-projection helpers for the generator pipeline.
+/// </summary>
+internal static class Helpers
 {
-    public static CommentProjection Empty { get; } = new();
-
-    public IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; } = [];
-
-    public IReadOnlyDictionary<string, IReadOnlyList<IDescriptionItem>> ParameterDescriptionItems { get; init; }
-        = new ReadOnlyDictionary<string, IReadOnlyList<IDescriptionItem>>(
-            new Dictionary<string, IReadOnlyList<IDescriptionItem>>(StringComparer.Ordinal));
-
-    public IReadOnlyList<IDescriptionItem> ReturnTypeDescriptionItems { get; init; } = [];
-}
-
-public static class Helpers
-{
+    /// <summary>
+    /// Converts a Clang type into its projected public C# data type.
+    /// </summary>
+    /// <param name="type">The Clang type to convert.</param>
+    /// <returns>The projected public data type.</returns>
     public static DataType ToPublicDataType(this ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -43,6 +45,11 @@ public static class Helpers
         return type.ToPInvokeDataType();
     }
 
+    /// <summary>
+    /// Walks through pointers and const wrappers until the underlying type is reached.
+    /// </summary>
+    /// <param name="type">The type to unwrap.</param>
+    /// <returns>The innermost type, or <see langword="null"/>.</returns>
     public static ClangSharp.Type? GetAddingType(this ClangSharp.Type? type)
     {
         if (type is null)
@@ -73,6 +80,11 @@ public static class Helpers
         return type?.IsLocalConstQualified is true ? type.Desugar : null;
     }
 
+    /// <summary>
+    /// Converts a Clang type into its projected P/Invoke C# data type.
+    /// </summary>
+    /// <param name="type">The Clang type to convert.</param>
+    /// <returns>The projected P/Invoke data type.</returns>
     public static DataType ToPInvokeDataType(this ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
@@ -95,6 +107,12 @@ public static class Helpers
         return new(type.AsString.ToValidCSharpName());
     }
 
+    /// <summary>
+    /// Converts a Clang builtin type into its projected C# data type.
+    /// </summary>
+    /// <param name="builtinType">The builtin type to convert.</param>
+    /// <returns>The projected data type.</returns>
+    /// <exception cref="NotSupportedException">Thrown when the builtin type cannot be projected.</exception>
     public static DataType ToDataType(this BuiltinType builtinType)
     {
         ArgumentNullException.ThrowIfNull(builtinType);
@@ -142,6 +160,11 @@ public static class Helpers
         };
     }
 
+    /// <summary>
+    /// Converts an arbitrary native identifier into a valid C# identifier.
+    /// </summary>
+    /// <param name="name">The identifier to normalize.</param>
+    /// <returns>The normalized C# identifier.</returns>
     public static string ToValidCSharpName(this string name)
     {
         ArgumentNullException.ThrowIfNull(name);
@@ -189,6 +212,11 @@ public static class Helpers
         }
     }
 
+    /// <summary>
+    /// Projects the parsed comment information for a Clang cursor.
+    /// </summary>
+    /// <param name="cursor">The cursor to inspect.</param>
+    /// <returns>The extracted comment projection.</returns>
     internal static CommentProjection ToCommentProjection(this Cursor cursor)
     {
         ArgumentNullException.ThrowIfNull(cursor);
@@ -196,6 +224,11 @@ public static class Helpers
         return cursor.Handle.ToCommentProjection();
     }
 
+    /// <summary>
+    /// Projects the parsed comment information for a native Clang cursor handle.
+    /// </summary>
+    /// <param name="cursor">The cursor handle to inspect.</param>
+    /// <returns>The extracted comment projection.</returns>
     internal static CommentProjection ToCommentProjection(this CXCursor cursor)
     {
         var comment = cursor.ParsedComment;
@@ -204,9 +237,9 @@ public static class Helpers
             return CommentProjection.Empty;
         }
 
-        List<IRootDescriptionItem> descriptionItems = [];
-        Dictionary<string, IReadOnlyList<IDescriptionItem>> parameterDescriptionItems = new(StringComparer.Ordinal);
-        List<IDescriptionItem> returnTypeDescriptionItems = [];
+        var descriptionItems = new List<IRootDescriptionItem>();
+        var parameterDescriptionItems = new Dictionary<string, IReadOnlyList<IDescriptionItem>>(StringComparer.Ordinal);
+        var returnTypeDescriptionItems = new List<IDescriptionItem>();
         var hasSummary = false;
 
         foreach (var child in comment.GetChildren())
@@ -232,6 +265,7 @@ public static class Helpers
                         hasSummary = true;
                         break;
                     }
+
                 case CXCommentKind.CXComment_BlockCommand:
                     {
                         var commandName = child.BlockCommandComment_CommandName.ToSafeString();
@@ -248,17 +282,20 @@ public static class Helpers
                                 descriptionItems.Add(new DescriptionSummary(items));
                                 hasSummary = true;
                                 break;
+
                             case "remark":
                             case "remarks":
                             case "details":
                             case "note":
                                 descriptionItems.Add(new DescriptionRemarks(items));
                                 break;
+
                             case "return":
                             case "returns":
                             case "result":
                                 returnTypeDescriptionItems.AddRange(items);
                                 break;
+
                             default:
                                 descriptionItems.Add(hasSummary
                                     ? new DescriptionRemarks(items)
@@ -269,6 +306,7 @@ public static class Helpers
 
                         break;
                     }
+
                 case CXCommentKind.CXComment_ParamCommand:
                     {
                         var parameterName = child.ParamCommandComment_ParamName.ToSafeString();
@@ -280,6 +318,7 @@ public static class Helpers
 
                         break;
                     }
+
                 default:
                     {
                         var items = child.ToBodyDescriptionItems();
@@ -297,7 +336,7 @@ public static class Helpers
             }
         }
 
-        return new CommentProjection
+        return new()
         {
             DescriptionItems = descriptionItems,
             ParameterDescriptionItems =
@@ -306,9 +345,14 @@ public static class Helpers
         };
     }
 
-    private static IReadOnlyList<CXComment> GetChildren(this CXComment comment)
+    /// <summary>
+    /// Enumerates the child comments for a Clang comment node.
+    /// </summary>
+    /// <param name="comment">The comment node.</param>
+    /// <returns>The child nodes.</returns>
+    private static List<CXComment> GetChildren(this CXComment comment)
     {
-        List<CXComment> children = [];
+        var children = new List<CXComment>();
         for (uint i = 0; i < comment.NumChildren; i++)
         {
             children.Add(comment.GetChild(i));
@@ -317,7 +361,12 @@ public static class Helpers
         return children;
     }
 
-    private static IReadOnlyList<IDescriptionItem> ToBodyDescriptionItems(this CXComment comment)
+    /// <summary>
+    /// Converts a comment body to a flat list of description items.
+    /// </summary>
+    /// <param name="comment">The comment node.</param>
+    /// <returns>The converted description items.</returns>
+    private static List<IDescriptionItem> ToBodyDescriptionItems(this CXComment comment)
     {
         foreach (var child in comment.GetChildren())
         {
@@ -336,9 +385,14 @@ public static class Helpers
         return comment.ToParagraphDescriptionItems();
     }
 
-    private static IReadOnlyList<IDescriptionItem> ToParagraphDescriptionItems(this CXComment comment)
+    /// <summary>
+    /// Converts a paragraph node to a list of description items.
+    /// </summary>
+    /// <param name="comment">The paragraph node.</param>
+    /// <returns>The converted paragraph items.</returns>
+    private static List<IDescriptionItem> ToParagraphDescriptionItems(this CXComment comment)
     {
-        List<IDescriptionItem> descriptionItems = [];
+        var descriptionItems = new List<IDescriptionItem>();
         foreach (var child in comment.GetChildren())
         {
             var descriptionItem = child.ToDescriptionItem();
@@ -351,6 +405,11 @@ public static class Helpers
         return descriptionItems;
     }
 
+    /// <summary>
+    /// Converts a single comment node into a description item when possible.
+    /// </summary>
+    /// <param name="comment">The comment node.</param>
+    /// <returns>The converted description item, or <see langword="null"/>.</returns>
     private static IDescriptionItem? ToDescriptionItem(this CXComment comment)
     {
         if (comment.IsWhitespace)
@@ -370,9 +429,14 @@ public static class Helpers
         };
     }
 
+    /// <summary>
+    /// Converts an inline command node into a description item.
+    /// </summary>
+    /// <param name="comment">The inline command node.</param>
+    /// <returns>The converted description item, or <see langword="null"/>.</returns>
     private static IDescriptionItem? ToInlineDescriptionItem(this CXComment comment)
     {
-        List<IDescriptionItem> items = [];
+        var items = new List<IDescriptionItem>();
         for (uint i = 0; i < comment.InlineCommandComment_NumArgs; i++)
         {
             var text = comment.InlineCommandComment_GetArgText(i).ToDescriptionText();
@@ -398,15 +462,25 @@ public static class Helpers
         };
     }
 
-    private static IDescriptionItem? ToParagraphOrNull(this CXComment comment)
+    /// <summary>
+    /// Converts a paragraph node into a paragraph description item.
+    /// </summary>
+    /// <param name="comment">The paragraph node.</param>
+    /// <returns>The paragraph description item, or <see langword="null"/>.</returns>
+    private static DescriptionPara? ToParagraphOrNull(this CXComment comment)
     {
         var items = comment.ToParagraphDescriptionItems();
         return items.Count is 0 ? null : new DescriptionPara(items);
     }
 
-    private static IDescriptionItem? ToVerbatimBlockDescriptionItem(this CXComment comment)
+    /// <summary>
+    /// Converts a verbatim block node into a code description item.
+    /// </summary>
+    /// <param name="comment">The verbatim block node.</param>
+    /// <returns>The code description item, or <see langword="null"/>.</returns>
+    private static DescriptionCode? ToVerbatimBlockDescriptionItem(this CXComment comment)
     {
-        List<IDescriptionItem> items = [];
+        var items = new List<IDescriptionItem>();
         foreach (var child in comment.GetChildren())
         {
             var text = child.Kind switch
@@ -425,12 +499,22 @@ public static class Helpers
         return items.Count is 0 ? null : new DescriptionCode(true, items);
     }
 
+    /// <summary>
+    /// Converts a Clang string into a description text item.
+    /// </summary>
+    /// <param name="text">The Clang string.</param>
+    /// <returns>The description text item, or <see langword="null"/>.</returns>
     private static DescriptionText? ToDescriptionText(this CXString text)
     {
         var value = text.ToSafeString();
         return value.Length is 0 ? null : new DescriptionText(value);
     }
 
+    /// <summary>
+    /// Converts a Clang string to trimmed managed text.
+    /// </summary>
+    /// <param name="text">The Clang string.</param>
+    /// <returns>The trimmed managed text.</returns>
     private static string ToSafeString(this CXString text)
     {
         return text.ToString().Trim();

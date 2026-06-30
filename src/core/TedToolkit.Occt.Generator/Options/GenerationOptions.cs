@@ -52,11 +52,22 @@ public sealed record GenerationOptions()
     /// </summary>
     public Func<FieldDecl, bool> FieldTypeToGenerate { get; init; } = _ => true;
 
-    public string Triplet { private get; set; } = "";
+    /// <summary>
+    /// Gets or sets the explicit vcpkg triplet to use. When empty, the default resolver is used.
+    /// </summary>
+    public string Triplet { get; init; } = "";
 
+    /// <summary>
+    /// Gets or sets the C++ language standard version passed to clang and CMake.
+    /// </summary>
     public int CppVersion { get; set; } = 17;
 
-    public string GetTriplet(IVcpkgDefaultTripletResolver defaultsResolver)
+    /// <summary>
+    /// Gets the active vcpkg triplet, falling back to the default resolver when necessary.
+    /// </summary>
+    /// <param name="defaultsResolver">The default triplet resolver.</param>
+    /// <returns>The active triplet.</returns>
+    internal string GetTriplet(IVcpkgDefaultTripletResolver defaultsResolver)
     {
         ArgumentNullException.ThrowIfNull(defaultsResolver);
         return string.IsNullOrWhiteSpace(Triplet) ? defaultsResolver.GetTriplet() : Triplet;

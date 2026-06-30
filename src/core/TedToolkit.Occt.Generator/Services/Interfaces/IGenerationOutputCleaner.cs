@@ -10,7 +10,7 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 /// <summary>
 /// Clears generator output folders while preserving the configured root directories.
 /// </summary>
-public interface IGenerationOutputCleaner
+internal interface IGenerationOutputCleaner
 {
     /// <summary>
     /// Empties the configured C# and C++ output folders before generation starts.

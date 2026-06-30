@@ -6,6 +6,7 @@
 // -----------------------------------------------------------------------
 
 using System.Runtime.InteropServices;
+
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
@@ -13,7 +14,7 @@ namespace TedToolkit.Occt.Generator.Services;
 /// <summary>
 /// Resolves default generation values from the current vcpkg installation.
 /// </summary>
-public sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
+internal sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
 {
     private const string VCPKG_ROOT_ENVIRONMENT_VARIABLE_NAME = "VCPKG_ROOT";
 
@@ -43,6 +44,14 @@ public sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
         return vcpkgRoot;
     }
 
+    /// <summary>
+    /// Selects the best installed triplet for the current platform and architecture.
+    /// </summary>
+    /// <param name="installedTriplets">The installed triplets.</param>
+    /// <param name="osPlatform">The current operating system platform.</param>
+    /// <param name="architecture">The current process architecture.</param>
+    /// <returns>The selected triplet.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when no compatible triplet can be found.</exception>
     internal static string SelectBestTriplet(
         IEnumerable<string> installedTriplets,
         OSPlatform osPlatform,
@@ -97,7 +106,7 @@ public sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
             .Select(static folderName => folderName!);
     }
 
-    private static IEnumerable<string> GetPreferredTriplets(OSPlatform osPlatform, Architecture architecture)
+    private static IEnumerable<string> GetPreferredTriplets(in OSPlatform osPlatform, Architecture architecture)
     {
         var architecturePrefix = GetArchitecturePrefix(architecture);
 
@@ -152,6 +161,12 @@ public sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
         throw new InvalidOperationException("Can't identify which system it is.");
     }
 
+    /// <summary>
+    /// Gets the preferred lowercase architecture token used by vcpkg triplets.
+    /// </summary>
+    /// <param name="architecture">The process architecture.</param>
+    /// <returns>The triplet architecture token.</returns>
+    /// <exception cref="ArgumentOutOfRangeException">Thrown when the architecture is unsupported.</exception>
     private static string GetArchitecturePrefix(Architecture architecture)
     {
         return architecture switch
@@ -160,7 +175,10 @@ public sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
             Architecture.X86 => "x86",
             Architecture.Arm64 => "arm64",
             Architecture.Arm => "arm",
-            _ => architecture.ToString().ToLowerInvariant(),
+            _ => throw new ArgumentOutOfRangeException(
+                nameof(architecture),
+                architecture,
+                "Unsupported architecture."),
         };
     }
 
@@ -169,7 +187,7 @@ public sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
         return triplet.StartsWith(GetArchitecturePrefix(architecture) + "-", StringComparison.OrdinalIgnoreCase);
     }
 
-    private static bool IsCompatibleWithPlatform(string triplet, OSPlatform osPlatform)
+    private static bool IsCompatibleWithPlatform(string triplet, in OSPlatform osPlatform)
     {
         string platformToken;
         if (osPlatform == OSPlatform.Windows)

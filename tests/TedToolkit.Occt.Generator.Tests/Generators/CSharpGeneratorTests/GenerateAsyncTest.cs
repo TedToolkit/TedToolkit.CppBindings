@@ -15,12 +15,19 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests.Generators.CSharpGeneratorTests;
 
+/// <summary>
+/// Verifies <see cref="CSharpGenerator"/> output.
+/// </summary>
 internal sealed class GenerateAsyncTest
 {
+    /// <summary>
+    /// Verifies method comments are projected into generated C# documentation.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_generate_method_summary_parameter_and_return_comments_Async()
     {
-        var intType = new TypeModel
+        var intType = new TypeModel()
         {
             CppTypeName = "int",
             CSharpPInvokeType = DataType.Int,
@@ -28,22 +35,22 @@ internal sealed class GenerateAsyncTest
         };
 
         var generator = new CSharpGenerator(
-            new RecordModel
+            new RecordModel()
             {
                 DescriptionItems = [new DescriptionSummary(new DescriptionText("Point wrapper.")),],
-                Base = [],
+                Base = null,
+                IsAbstract = true,
                 Size = 16,
-                Type = new TypeModel
+                Type = new()
                 {
                     CppTypeName = "gp_Pnt2d",
-                    CSharpPInvokeType = new DataType("gp_Pnt2d"),
-                    CSharpPublicType = new DataType("gp_Pnt2d"),
+                    CSharpPInvokeType = new("gp_Pnt2d"),
+                    CSharpPublicType = new("gp_Pnt2d"),
                 },
                 FieldModels = [],
-                BaseTypes = [],
                 MethodModels =
                 [
-                    new MethodModel
+                    new MethodModel()
                     {
                         DescriptionItems =
                         [
@@ -53,12 +60,13 @@ internal sealed class GenerateAsyncTest
                         ReturnTypeDescriptionItems = [new DescriptionText("Coordinate value."),],
                         NoExceptions = false,
                         IsConst = false,
+                        IsStatic = false,
                         ReturnType = intType,
                         MethodName = "Coord",
                         Type = MethodModelType.Normal,
                         Parameters =
                         [
-                            new ParameterModel
+                            new ParameterModel()
                             {
                                 DescriptionItems = [new DescriptionText("Coordinate index."),],
                                 Type = intType,
@@ -68,11 +76,11 @@ internal sealed class GenerateAsyncTest
                     },
                 ],
             },
-            Microsoft.Extensions.Options.Options.Create(new GenerationOptions
+            Microsoft.Extensions.Options.Options.Create(new GenerationOptions()
             {
                 DeclOptions = [],
-                CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
-                CppFolder = new DirectoryInfo(Path.GetTempPath()),
+                CSharpFolder = new(Path.GetTempPath()),
+                CppFolder = new(Path.GetTempPath()),
             }));
 
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);

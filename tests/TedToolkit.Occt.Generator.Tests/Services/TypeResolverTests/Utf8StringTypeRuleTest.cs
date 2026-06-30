@@ -18,12 +18,19 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests.Services.TypeResolverTests;
 
+/// <summary>
+/// Verifies <see cref="Utf8StringTypeRule"/> projections.
+/// </summary>
 internal sealed class Utf8StringTypeRuleTest
 {
     private static readonly FieldInfo SourceBuilderField = typeof(SourceBuilder)
         .GetField("_stringBuilder", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
 
+    /// <summary>
+    /// Verifies a direct const char pointer becomes a UTF-8 span projection.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_project_const_char_pointer_to_utf8_span_Async()
     {
@@ -38,10 +45,9 @@ internal sealed class Utf8StringTypeRuleTest
             .Single()
             .Type;
 
-        IResolver resolver = new Resolver(
+        var resolver = new Resolver(
         [
             new Utf8StringTypeRule(),
-            new DefaultTypeRule(),
         ]);
 
         var resolved = resolver.Resolve(parameterType);
@@ -51,6 +57,10 @@ internal sealed class Utf8StringTypeRuleTest
         await Assert.That(Render(resolved.Type.CSharpPublicType)).IsEqualTo("global::System.ReadOnlySpan<byte>");
     }
 
+    /// <summary>
+    /// Verifies a typedef alias resolving to const char pointer also becomes a UTF-8 span projection.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_project_standard_cstring_alias_to_utf8_span_Async()
     {
@@ -66,10 +76,9 @@ internal sealed class Utf8StringTypeRuleTest
             .Single()
             .Type;
 
-        IResolver resolver = new Resolver(
+        var resolver = new Resolver(
         [
             new Utf8StringTypeRule(),
-            new DefaultTypeRule(),
         ]);
 
         var resolved = resolver.Resolve(parameterType);

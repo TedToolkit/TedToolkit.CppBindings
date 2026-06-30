@@ -17,6 +17,7 @@ using Microsoft.Extensions.Options;
 
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
+
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -25,29 +26,50 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// <summary>
 /// Parses the OCCT headers into a translation unit.
 /// </summary>
-/// <param name="generationOptions">The generation options.</param>
-/// <param name="vcpkgService">The vcpkg environment service.</param>
-public sealed class ParseModule(
-    IRecordModelManager recordModelManager,
-    IOptions<GenerationOptions> generationOptions,
-    IVcpkgDefaultTripletResolver defaultsResolver,
-    IVcpkgEnvironment vcpkgEnvironment) : Module<bool>
+public sealed class ParseModule : Module<bool>
 {
     private const string RELAY_FILE_NAME = "main.cpp";
 
-    private async Task<List<string>> CreateCommandLineArgsAsync(CancellationToken cancellationToken)
+    private readonly IRecordModelManager _recordModelManager;
+
+    private readonly IOptions<GenerationOptions> _generationOptions;
+
+    private readonly IVcpkgDefaultTripletResolver _defaultsResolver;
+
+    private readonly IVcpkgEnvironment _vcpkgEnvironment;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="ParseModule"/> class.
+    /// </summary>
+    /// <param name="recordModelManager">The record model manager.</param>
+    /// <param name="generationOptions">The generation options.</param>
+    /// <param name="defaultsResolver">The default triplet resolver.</param>
+    /// <param name="vcpkgEnvironment">The vcpkg environment service.</param>
+    internal ParseModule(
+        IRecordModelManager recordModelManager,
+        IOptions<GenerationOptions> generationOptions,
+        IVcpkgDefaultTripletResolver defaultsResolver,
+        IVcpkgEnvironment vcpkgEnvironment)
     {
-        var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs);
-        var triplet = generationOptions.Value.GetTriplet(defaultsResolver);
-        commandLineArgs.Add(ZString.Concat("-std=c++", generationOptions.Value.CppVersion));
-        commandLineArgs.Add("-x");
-        commandLineArgs.Add("c++");
-        commandLineArgs.Add(ZString.Concat("-I", vcpkgEnvironment.GetOcctIncludeFolder(triplet)));
-        commandLineArgs.Add(ZString.Concat("-I", vcpkgEnvironment.GetIncludeFolder(triplet)));
-        return commandLineArgs;
+        _recordModelManager = recordModelManager;
+        _generationOptions = generationOptions;
+        _defaultsResolver = defaultsResolver;
+        _vcpkgEnvironment = vcpkgEnvironment;
     }
 
-    private void LogDiagnostics(IModuleContext context, ref CXTranslationUnit translationUnit)
+    private Task<List<string>> CreateCommandLineArgsAsync()
+    {
+        var commandLineArgs = new List<string>(_generationOptions.Value.CommandLineArgs);
+        var triplet = _generationOptions.Value.GetTriplet(_defaultsResolver);
+        commandLineArgs.Add(ZString.Concat("-std=c++", _generationOptions.Value.CppVersion));
+        commandLineArgs.Add("-x");
+        commandLineArgs.Add("c++");
+        commandLineArgs.Add(ZString.Concat("-I", _vcpkgEnvironment.GetOcctIncludeFolder(triplet)));
+        commandLineArgs.Add(ZString.Concat("-I", _vcpkgEnvironment.GetIncludeFolder(triplet)));
+        return Task.FromResult(commandLineArgs);
+    }
+
+    private static void LogDiagnostics(IModuleContext context, ref CXTranslationUnit translationUnit)
     {
         for (uint i = 0; i < translationUnit.NumDiagnostics; i++)
         {
@@ -85,16 +107,16 @@ public sealed class ParseModule(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var triplet = generationOptions.Value.GetTriplet(defaultsResolver);
+        var triplet = _generationOptions.Value.GetTriplet(_defaultsResolver);
 
         using var file = CXUnsavedFile.Create(RELAY_FILE_NAME,
-            await vcpkgEnvironment.IncludingHeaderContent(triplet, cancellationToken).ConfigureAwait(false));
+            await _vcpkgEnvironment.GetIncludingHeaderContentAsync(triplet, cancellationToken).ConfigureAwait(false));
 
         using var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
             index,
             RELAY_FILE_NAME,
-            CollectionsMarshal.AsSpan(await CreateCommandLineArgsAsync(cancellationToken).ConfigureAwait(false)),
+            CollectionsMarshal.AsSpan(await CreateCommandLineArgsAsync().ConfigureAwait(false)),
             [file,],
             CXTranslationUnit_Flags.CXTranslationUnit_None);
 
@@ -102,12 +124,12 @@ public sealed class ParseModule(
 
         using var unit = TranslationUnit.GetOrCreate(translationUnit);
 
-        var names = generationOptions.Value.DeclOptions.Select(i => i.FileName).ToArray();
+        var names = _generationOptions.Value.DeclOptions.Select(i => i.FileName).ToArray();
         foreach (var cxxRecordDecl in unit.TranslationUnitDecl.CursorChildren
                      .OfType<CXXRecordDecl>()
                      .Where(r => names.Contains(r.Name)))
         {
-            recordModelManager.Add(cxxRecordDecl);
+            _recordModelManager.Add(cxxRecordDecl);
         }
 
         return true;

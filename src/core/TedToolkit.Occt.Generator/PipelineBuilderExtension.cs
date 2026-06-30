@@ -42,6 +42,7 @@ public static class PipelineBuilderExtension
             .AddSingleton<IGeneratorService, GeneratorService>()
             .AddModule<CleanGenerationOutputModule>()
             .AddModule<ParseModule>()
+
             // .AddModule<RecordLayoutModule>()
             .AddModule<GenerateCSharpModule>()
             .AddModule<GenerateCppModule>()

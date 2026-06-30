@@ -27,7 +27,7 @@ var pipeline = await Pipeline.CreateBuilder()
         {
             DeclOptions =
             [
-                new(ConsoleDecl.Geom2d_BSplineCurve),
+                new("Geom2d_BSplineCurve"),
             ],
             CSharpFolder = outputFolder.CreateSubdirectory("csharp"),
             CppFolder = outputFolder.CreateSubdirectory("cpp"),
@@ -35,19 +35,9 @@ var pipeline = await Pipeline.CreateBuilder()
             FieldTypeToGenerate = field =>
             {
                 var type = field.Type.CanonicalType;
-                if (type.AsString.Contains("std::"))
-                {
-                    return false;
-                }
-
-                return true;
+                return !type.AsString.Contains("std::", StringComparison.Ordinal);
             },
         }).BuildAsync().ConfigureAwait(false);
 
 await pipeline
     .RunAsync().ConfigureAwait(false);
-
-internal enum ConsoleDecl
-{
-    Geom2d_BSplineCurve,
-}

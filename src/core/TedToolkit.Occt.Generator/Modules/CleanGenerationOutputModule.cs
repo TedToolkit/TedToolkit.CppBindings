@@ -15,15 +15,25 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// <summary>
 /// Clears stale generator output before any parsing or generation work begins.
 /// </summary>
-/// <param name="generationOutputCleaner">The output cleaner.</param>
-public sealed class CleanGenerationOutputModule(IGenerationOutputCleaner generationOutputCleaner) : Module<bool>
+public sealed class CleanGenerationOutputModule : Module<bool>
 {
+    private readonly IGenerationOutputCleaner _generationOutputCleaner;
+
+    /// <summary>
+    /// Initializes a new instance of the <see cref="CleanGenerationOutputModule"/> class.
+    /// </summary>
+    /// <param name="generationOutputCleaner">The output cleaner.</param>
+    internal CleanGenerationOutputModule(IGenerationOutputCleaner generationOutputCleaner)
+    {
+        _generationOutputCleaner = generationOutputCleaner;
+    }
+
     /// <inheritdoc />
     protected override Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
 
-        generationOutputCleaner.Clean();
+        _generationOutputCleaner.Clean();
         return Task.FromResult(true);
     }
 }

@@ -10,12 +10,11 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 /// <summary>
 /// Resolves the default vcpkg triplet from the local vcpkg/OCCT environment.
 /// </summary>
-public interface IVcpkgDefaultTripletResolver
+internal interface IVcpkgDefaultTripletResolver
 {
     /// <summary>
     /// Gets the active vcpkg triplet when the user did not provide one.
     /// </summary>
     /// <returns>The triplet name.</returns>
     string GetTriplet();
-
 }

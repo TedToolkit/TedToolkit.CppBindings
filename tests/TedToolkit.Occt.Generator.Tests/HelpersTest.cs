@@ -16,12 +16,19 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Tests;
 
+/// <summary>
+/// Verifies helper type-projection utilities.
+/// </summary>
 internal sealed class HelpersTest
 {
     private static readonly FieldInfo SourceBuilderField = typeof(SourceBuilder)
         .GetField("_stringBuilder", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
 
+    /// <summary>
+    /// Verifies builtin native types map to the expected managed data types.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_map_builtin_types_to_expected_data_types_Async()
     {
@@ -41,14 +48,25 @@ internal sealed class HelpersTest
             .OfType<CXXRecordDecl>()
             .Single(static r => r.Name == "Builtins");
 
-        await AssertRenderedAsync(record.Fields.Single(static f => f.Name == "UnsignedLongValue").Type.ToPInvokeDataType(), DataType.FromType<CULong>());
-        await AssertRenderedAsync(record.Fields.Single(static f => f.Name == "LongValue").Type.ToPInvokeDataType(), DataType.FromType<CLong>());
-        await AssertRenderedAsync(record.Fields.Single(static f => f.Name == "WideCharValue").Type.ToPInvokeDataType(), DataType.Char);
-        await AssertRenderedAsync(record.Fields.Single(static f => f.Name == "Char16Value").Type.ToPInvokeDataType(), DataType.Char);
-        await AssertRenderedAsync(record.Fields.Single(static f => f.Name == "Char32Value").Type.ToPInvokeDataType(), DataType.Uint);
-        await AssertRenderedAsync(record.Fields.Single(static f => f.Name == "UnsignedLongLongValue").Type.ToPInvokeDataType(), DataType.Ulong);
+        var unsignedLongValue = record.Fields.Single(static f => f.Name == "UnsignedLongValue").Type.ToPInvokeDataType();
+        var longValue = record.Fields.Single(static f => f.Name == "LongValue").Type.ToPInvokeDataType();
+        var wideCharValue = record.Fields.Single(static f => f.Name == "WideCharValue").Type.ToPInvokeDataType();
+        var char16Value = record.Fields.Single(static f => f.Name == "Char16Value").Type.ToPInvokeDataType();
+        var char32Value = record.Fields.Single(static f => f.Name == "Char32Value").Type.ToPInvokeDataType();
+        var unsignedLongLongValue = record.Fields.Single(static f => f.Name == "UnsignedLongLongValue").Type.ToPInvokeDataType();
+
+        await AssertRenderedAsync(unsignedLongValue, DataType.FromType<CULong>()).ConfigureAwait(false);
+        await AssertRenderedAsync(longValue, DataType.FromType<CLong>()).ConfigureAwait(false);
+        await AssertRenderedAsync(wideCharValue, DataType.Char).ConfigureAwait(false);
+        await AssertRenderedAsync(char16Value, DataType.Char).ConfigureAwait(false);
+        await AssertRenderedAsync(char32Value, DataType.Uint).ConfigureAwait(false);
+        await AssertRenderedAsync(unsignedLongLongValue, DataType.Ulong).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Verifies pointers and references add the expected pointer layers.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_turn_pointer_and_references_into_pointer_layers_recursively_Async()
     {
@@ -69,15 +87,25 @@ internal sealed class HelpersTest
             .OfType<FunctionDecl>()
             .Single(static f => f.Name == "Accept");
 
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "intPointerValue").Type.ToPInvokeDataType(), DataType.Int.Pointer);
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "voidPointerValue").Type.ToPInvokeDataType(), DataType.Void.Pointer);
+        var intPointerValue = method.Parameters.Single(static p => p.Name == "intPointerValue").Type.ToPInvokeDataType();
+        var voidPointerValue = method.Parameters.Single(static p => p.Name == "voidPointerValue").Type.ToPInvokeDataType();
 
         var geomSurface = new DataType("Geom_Surface");
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "lValueReference").Type.ToPInvokeDataType(), geomSurface.Pointer);
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "rValueReference").Type.ToPInvokeDataType(), geomSurface.Pointer);
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "doublePointerValue").Type.ToPInvokeDataType(), geomSurface.Pointer.Pointer);
+        var lValueReference = method.Parameters.Single(static p => p.Name == "lValueReference").Type.ToPInvokeDataType();
+        var rValueReference = method.Parameters.Single(static p => p.Name == "rValueReference").Type.ToPInvokeDataType();
+        var doublePointerValue = method.Parameters.Single(static p => p.Name == "doublePointerValue").Type.ToPInvokeDataType();
+
+        await AssertRenderedAsync(intPointerValue, DataType.Int.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(voidPointerValue, DataType.Void.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(lValueReference, geomSurface.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(rValueReference, geomSurface.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(doublePointerValue, geomSurface.Pointer.Pointer).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Verifies const qualifiers do not survive in projected P/Invoke type names.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_strip_const_qualifiers_from_pinvoke_type_names_Async()
     {
@@ -96,11 +124,15 @@ internal sealed class HelpersTest
             .OfType<FunctionDecl>()
             .Single(static f => f.Name == "Accept");
 
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "constIntValue").Type.ToPInvokeDataType(), DataType.Int);
+        var constIntValue = method.Parameters.Single(static p => p.Name == "constIntValue").Type.ToPInvokeDataType();
 
         var geomSurface = new DataType("Geom_Surface");
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "constReferenceValue").Type.ToPInvokeDataType(), geomSurface.Pointer);
-        await AssertRenderedAsync(method.Parameters.Single(static p => p.Name == "constPointerValue").Type.ToPInvokeDataType(), geomSurface.Pointer);
+        var constReferenceValue = method.Parameters.Single(static p => p.Name == "constReferenceValue").Type.ToPInvokeDataType();
+        var constPointerValue = method.Parameters.Single(static p => p.Name == "constPointerValue").Type.ToPInvokeDataType();
+
+        await AssertRenderedAsync(constIntValue, DataType.Int).ConfigureAwait(false);
+        await AssertRenderedAsync(constReferenceValue, geomSurface.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(constPointerValue, geomSurface.Pointer).ConfigureAwait(false);
     }
 
     private static async Task AssertRenderedAsync(DataType actual, DataType expected)

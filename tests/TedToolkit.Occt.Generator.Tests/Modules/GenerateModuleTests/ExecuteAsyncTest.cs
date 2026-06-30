@@ -11,6 +11,7 @@ using Microsoft.Extensions.Options;
 
 using ModularPipelines.Context;
 
+using TedToolkit.Occt.Generator.Generators;
 using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Modules;
 using TedToolkit.Occt.Generator.Options;
@@ -37,7 +38,7 @@ internal sealed class ExecuteAsyncTest
         try
         {
             var module = new GenerateCSharpModule(
-                Microsoft.Extensions.Options.Options.Create(new GenerationOptions
+                Microsoft.Extensions.Options.Options.Create(new GenerationOptions()
                 {
                     DeclOptions = [],
                     CSharpFolder = csharpDirectory,
@@ -54,7 +55,7 @@ internal sealed class ExecuteAsyncTest
             await Assert.That(executeAsyncMethod).IsNotNull();
 
             var task = (Task<bool>)executeAsyncMethod!
-                .Invoke(module, [context, CancellationToken.None])!;
+                .Invoke(module, [context, CancellationToken.None,])!;
 
             var result = await task.ConfigureAwait(false);
             var interopHeaderPath = Path.Combine(cppDirectory.FullName, "csharp_interop.h");
@@ -87,17 +88,17 @@ internal sealed class ExecuteAsyncTest
 
     private sealed class ThrowingGeneratorService : IGeneratorService
     {
-        public TedToolkit.Occt.Generator.Generators.EnumGenerator GenerateCSharp(EnumModel enumModel)
+        public IGenerator GenerateCSharp(EnumModel enumModel)
         {
             throw new NotSupportedException();
         }
 
-        public TedToolkit.Occt.Generator.Generators.CSharpGenerator GenerateCSharp(RecordModel record)
+        public IGenerator GenerateCSharp(RecordModel record)
         {
             throw new NotSupportedException();
         }
 
-        public TedToolkit.Occt.Generator.Generators.CppGenerator GenerateCpp(RecordModel record)
+        public IGenerator GenerateCpp(RecordModel record)
         {
             throw new NotSupportedException();
         }

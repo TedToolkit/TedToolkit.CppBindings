@@ -29,10 +29,11 @@ internal sealed class ExecuteAsyncTest
     public async Task Should_invoke_cleaner_once_through_the_injected_dependency_Async()
     {
         var cleaner = IGenerationOutputCleaner.Mock();
-        using var serviceProvider = new ServiceCollection()
+        var serviceProvider = new ServiceCollection()
             .AddSingleton<IGenerationOutputCleaner>(cleaner)
             .AddSingleton<CleanGenerationOutputModule>()
             .BuildServiceProvider();
+        await using var _ = serviceProvider.ConfigureAwait(false);
 
         var module = serviceProvider.GetRequiredService<CleanGenerationOutputModule>();
         var context = Mock.Of<IModuleContext>();
@@ -44,7 +45,7 @@ internal sealed class ExecuteAsyncTest
         await Assert.That(executeAsyncMethod).IsNotNull();
 
         var task = (Task<bool>)executeAsyncMethod!
-            .Invoke(module, [context, CancellationToken.None])!;
+            .Invoke(module, [context, CancellationToken.None,])!;
 
         var result = await task.ConfigureAwait(false);
 

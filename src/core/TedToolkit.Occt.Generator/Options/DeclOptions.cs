@@ -27,6 +27,10 @@ public sealed record DeclOptions
         FileName = @enum.ToString();
     }
 
+    /// <summary>
+    /// Initializes a new instance of the <see cref="DeclOptions"/> class.
+    /// </summary>
+    /// <param name="fileName">The declaration file name to include.</param>
     public DeclOptions(string fileName)
     {
         FileName = fileName;

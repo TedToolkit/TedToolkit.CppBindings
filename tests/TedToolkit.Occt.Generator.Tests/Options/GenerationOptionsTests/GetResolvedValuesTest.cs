@@ -10,13 +10,19 @@ using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Tests.Options.GenerationOptionsTests;
 
+/// <summary>
+/// Verifies <see cref="GenerationOptions"/> resolves configured values correctly.
+/// </summary>
 internal sealed class GetResolvedValuesTest
 {
+    /// <summary>
+    /// Verifies an explicitly configured triplet bypasses the default resolver.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_return_user_triplet_without_resolver_when_triplet_is_configured_Async()
     {
-        var options = CreateOptions();
-        options.Triplet = "arm64-osx";
+        var options = CreateOptions() with { Triplet = "arm64-osx", };
         var resolver = new SpyVcpkgDefaultTripletResolver();
 
         var triplet = options.GetTriplet(resolver);
@@ -25,6 +31,10 @@ internal sealed class GetResolvedValuesTest
         await Assert.That(resolver.TripletCallCount).IsEqualTo(0);
     }
 
+    /// <summary>
+    /// Verifies the default resolver is used when no triplet is configured.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_resolve_triplet_when_triplet_is_not_configured_Async()
     {
@@ -37,35 +47,41 @@ internal sealed class GetResolvedValuesTest
         await Assert.That(resolver.TripletCallCount).IsEqualTo(1);
     }
 
+    /// <summary>
+    /// Verifies an explicitly configured C++ version is preserved.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_return_user_cpp_version_when_cpp_version_is_configured_Async()
     {
-        var options = CreateOptions();
-        options.CppVersion = 23;
-        var resolver = new SpyVcpkgDefaultTripletResolver();
+        var options = CreateOptions() with { CppVersion = 23, };
 
-        var version = await options.GetCppVersionAsync(CancellationToken.None).ConfigureAwait(false);
+        var version = options.CppVersion;
 
         await Assert.That(version).IsEqualTo(23);
     }
 
+    /// <summary>
+    /// Verifies the default C++ version remains C++17 when unspecified.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_return_cpp17_when_cpp_version_is_not_configured_Async()
     {
         var options = CreateOptions();
 
-        var version = await options.GetCppVersionAsync(CancellationToken.None).ConfigureAwait(false);
+        var version = options.CppVersion;
 
         await Assert.That(version).IsEqualTo(17);
     }
 
     private static GenerationOptions CreateOptions()
     {
-        return new GenerationOptions
+        return new()
         {
             DeclOptions = [],
-            CSharpFolder = new DirectoryInfo(Path.GetTempPath()),
-            CppFolder = new DirectoryInfo(Path.GetTempPath()),
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         };
     }
 

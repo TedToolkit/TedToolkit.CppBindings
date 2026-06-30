@@ -10,7 +10,7 @@ namespace TedToolkit.Occt.Generator.Generators;
 /// <summary>
 /// Generates source text for a given record declaration.
 /// </summary>
-public interface IGenerator
+internal interface IGenerator
 {
     /// <summary>
     /// Generates the source text asynchronously.

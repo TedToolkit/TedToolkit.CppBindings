@@ -9,5 +9,6 @@
     <Description>The Occt basic runtime.</Description>
     <RootNamespace>TedToolkit.Occt</RootNamespace>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA1708;CS8981</NoWarn>
   </PropertyGroup>
 </Project>

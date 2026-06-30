@@ -11,8 +11,15 @@ using TedToolkit.Occt;
 
 namespace TedToolkit.Occt.Runtime.Tests.AssemblyInfoTests;
 
+/// <summary>
+/// Verifies the runtime assembly exposes the expected friend assemblies.
+/// </summary>
 internal sealed class InternalsVisibleToTest
 {
+    /// <summary>
+    /// Ensures the runtime assembly includes the triplet-specific friend assemblies.
+    /// </summary>
+    /// <returns>A <see cref="Task"/> representing the asynchronous unit test.</returns>
     [Test]
     public async Task Should_expose_triplet_specific_friend_assemblies_Async()
     {

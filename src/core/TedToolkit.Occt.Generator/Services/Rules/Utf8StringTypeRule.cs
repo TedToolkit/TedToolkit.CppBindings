@@ -14,10 +14,14 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Services.Rules;
 
-public sealed class Utf8StringTypeRule : ITypeRule
+/// <summary>
+/// Resolves native UTF-8 string pointer types into managed span projections.
+/// </summary>
+internal sealed class Utf8StringTypeRule : ITypeRule
 {
     private static readonly DataType _readOnlyUtf8SpanType = DataType.FromType(typeof(ReadOnlySpan<byte>));
 
+    /// <inheritdoc/>
     public bool TryResolve(ClangSharp.Type type, out TypeResolveResult result)
     {
         ArgumentNullException.ThrowIfNull(type);

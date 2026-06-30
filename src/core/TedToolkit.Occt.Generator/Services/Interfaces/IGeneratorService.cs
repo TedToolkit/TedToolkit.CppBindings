@@ -13,26 +13,26 @@ namespace TedToolkit.Occt.Generator.Services.Interfaces;
 /// <summary>
 /// Creates generator instances for the supported output formats.
 /// </summary>
-public interface IGeneratorService
+internal interface IGeneratorService
 {
     /// <summary>
     /// Creates a C# generator for the specified record.
     /// </summary>
     /// <param name="record">The record declaration.</param>
     /// <returns>The generator instance.</returns>
-    CSharpGenerator GenerateCSharp(RecordModel record);
+    IGenerator GenerateCSharp(RecordModel record);
 
     /// <summary>
     /// Creates a C++ generator for the specified record.
     /// </summary>
     /// <param name="record">The record declaration.</param>
     /// <returns>The generator instance.</returns>
-    CppGenerator GenerateCpp(RecordModel record);
+    IGenerator GenerateCpp(RecordModel record);
 
     /// <summary>
     /// Creates a C# generator for the specified enum.
     /// </summary>
     /// <param name="enumModel">The enum declaration.</param>
     /// <returns>The generator instance.</returns>
-    EnumGenerator GenerateCSharp(EnumModel enumModel);
+    IGenerator GenerateCSharp(EnumModel enumModel);
 }
