@@ -13,6 +13,7 @@ using Microsoft.Extensions.Options;
 using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services;
+using TedToolkit.Occt.Generator.Services.Interfaces;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -214,7 +215,8 @@ internal sealed class AddTest
                 CppFolder = new DirectoryInfo(Path.GetTempPath()),
             }),
             new Resolver([]),
-            new FakeVcpkgService());
+            new FakeVcpkgDefaultTripletResolver(),
+            new FakeVcpkgEnvironment());
     }
 
     private static TranslationUnit ParseTranslationUnit(string source)
@@ -238,9 +240,9 @@ internal sealed class AddTest
         return builder.ToString();
     }
 
-    private sealed class FakeVcpkgService : TedToolkit.Occt.Generator.Services.Interfaces.IVcpkgService
+    private sealed class FakeVcpkgEnvironment : IVcpkgEnvironment
     {
-        public Task<string> IncludingHeaderContent(CancellationToken cancellationToken)
+        public Task<string> IncludingHeaderContent(string triplet, CancellationToken cancellationToken)
         {
             return Task.FromResult(string.Empty);
         }
@@ -250,24 +252,23 @@ internal sealed class AddTest
             return string.Empty;
         }
 
-        public string GetIncludeFolder()
+        public string GetIncludeFolder(string triplet)
         {
             return string.Empty;
         }
 
-        public string GetOcctIncludeFolder()
+        public string GetOcctIncludeFolder(string triplet)
         {
             return "__occt__";
         }
+    }
 
+    private sealed class FakeVcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
+    {
         public string GetTriplet()
         {
-            return string.Empty;
+            return "x64-windows";
         }
 
-        public Task<int> GetOcctCppVersionAsync()
-        {
-            return Task.FromResult(20);
-        }
     }
 }

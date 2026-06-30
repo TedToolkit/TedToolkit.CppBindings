@@ -32,20 +32,22 @@ public sealed class GenerateCppModule(
     IOptions<GenerationOptions> generationOptions,
     IRecordModelManager recordManager,
     IGeneratorService generatorService,
-    IVcpkgService vcpkgService) :
+    IVcpkgDefaultTripletResolver defaultsResolver,
+    IVcpkgEnvironment vcpkgEnvironment) :
     Module<bool>
 {
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var triplet = generationOptions.Value.GetTriplet(defaultsResolver);
 
         var compile = new CppCompileCoontext(generationOptions.Value.CppFolder, "ted_toolkit_occt",
-            await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false));
+            generationOptions.Value.CppVersion);
 
         var tasks = new List<Task>
         {
-            GenerateHeaders(compile, cancellationToken),
+            GenerateHeaders(compile, triplet, cancellationToken),
             CopyCppInteropHeaderAsync(compile, cancellationToken),
         };
 
@@ -59,7 +61,7 @@ public sealed class GenerateCppModule(
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
-        var folder = await compile.BuildAsync(context.Shell, false, vcpkgService.GetRoot(), vcpkgService.GetTriplet(),
+        var folder = await compile.BuildAsync(context.Shell, false, vcpkgEnvironment.GetRoot(), triplet,
                 cancellationToken)
             .ConfigureAwait(false);
         return true;
@@ -74,9 +76,9 @@ public sealed class GenerateCppModule(
             .ConfigureAwait(false);
     }
 
-    private async Task GenerateHeaders(CppCompileCoontext compile, CancellationToken cancellationToken)
+    private async Task GenerateHeaders(CppCompileCoontext compile, string triplet, CancellationToken cancellationToken)
     {
-        var content = await vcpkgService.IncludingHeaderContent(cancellationToken).ConfigureAwait(false);
+        var content = await vcpkgEnvironment.IncludingHeaderContent(triplet, cancellationToken).ConfigureAwait(false);
         await compile.AddSourceAsync("headers.h", content, cancellationToken).ConfigureAwait(false);
     }
 

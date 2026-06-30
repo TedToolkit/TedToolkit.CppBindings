@@ -1,43 +1,34 @@
 // -----------------------------------------------------------------------
-// <copyright file="VcpkgService.cs" company="TedToolkit">
+// <copyright file="VcpkgDefaultTripletResolver.cs" company="TedToolkit">
 // Copyright (c) TedToolkit. All rights reserved.
 // Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
 // </copyright>
 // -----------------------------------------------------------------------
 
 using System.Runtime.InteropServices;
-using System.Text.RegularExpressions;
-
-using ClangSharp.Interop;
-
-using Cysharp.Text;
-
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
 
 /// <summary>
-/// Resolves the local vcpkg installation and OCCT metadata.
+/// Resolves default generation values from the current vcpkg installation.
 /// </summary>
-public sealed partial class VcpkgService : IVcpkgService
+public sealed class VcpkgDefaultTripletResolver : IVcpkgDefaultTripletResolver
 {
     private const string VCPKG_ROOT_ENVIRONMENT_VARIABLE_NAME = "VCPKG_ROOT";
 
     private const string INSTALLED_FOLDER_NAME = "installed";
 
-    private const string BUILDTREES_FOLDER_NAME = "buildtrees";
-
     private const string OCCT_FOLDER_NAME = "opencascade";
 
-    private readonly Regex[] _standardPatterns =
-    [
-        CxxStandardRegex(),
-        BuildCppStandardRegex(),
-        CmakeStandardRegex(),
-    ];
-
     /// <inheritdoc/>
-    public string GetRoot()
+    public string GetTriplet()
+    {
+        var installedTriplets = GetInstalledOcctTriplets(GetRoot());
+        return SelectBestTriplet(installedTriplets, GetCurrentOsPlatform(), RuntimeInformation.ProcessArchitecture);
+    }
+
+    private static string GetRoot()
     {
 #pragma warning disable RS1035
         var vcpkgRoot = Environment.GetEnvironmentVariable(VCPKG_ROOT_ENVIRONMENT_VARIABLE_NAME);
@@ -51,133 +42,6 @@ public sealed partial class VcpkgService : IVcpkgService
 
         return vcpkgRoot;
     }
-
-    /// <inheritdoc/>
-    public string GetIncludeFolder()
-    {
-        return Path.Combine(GetRoot(), INSTALLED_FOLDER_NAME, GetTriplet(), "include");
-    }
-
-    /// <inheritdoc/>
-    public string GetTriplet()
-    {
-        var installedTriplets = GetInstalledOcctTriplets(GetRoot());
-        return SelectBestTriplet(installedTriplets, GetCurrentOsPlatform(), RuntimeInformation.ProcessArchitecture);
-    }
-
-    /// <inheritdoc/>
-    public string GetOcctIncludeFolder()
-    {
-        return Path.Combine(GetIncludeFolder(), OCCT_FOLDER_NAME);
-    }
-
-    /// <inheritdoc/>
-    public async Task<int> GetOcctCppVersionAsync()
-    {
-        var vcpkgRoot = GetRoot();
-
-        var version = await TryGetOcctCppVersionFromBuildTreesAsync(vcpkgRoot).ConfigureAwait(false)
-                      ?? await TryGetOcctCppVersionFromInstalledExportsAsync(vcpkgRoot, GetTriplet()).ConfigureAwait(false);
-
-        if (version is not null)
-        {
-            return version.Value;
-        }
-
-        throw new InvalidOperationException(
-            $"Could not find OCCT build metadata under {vcpkgRoot}. Expected {BUILDTREES_FOLDER_NAME}/{OCCT_FOLDER_NAME} or {INSTALLED_FOLDER_NAME}/*/share/{OCCT_FOLDER_NAME}.");
-    }
-
-    private async Task<int?> TryGetOcctCppVersionFromBuildTreesAsync(string vcpkgRoot)
-    {
-        var buildtrees = Path.Combine(vcpkgRoot, BUILDTREES_FOLDER_NAME, OCCT_FOLDER_NAME);
-        if (!Directory.Exists(buildtrees))
-        {
-            return null;
-        }
-
-        foreach (var path in Directory.EnumerateFiles(buildtrees, "*.log", SearchOption.TopDirectoryOnly)
-                     .Distinct(StringComparer.OrdinalIgnoreCase))
-        {
-            var version = await TryGetOcctCppVersionFromFileAsync(path).ConfigureAwait(false);
-            if (version is not null)
-            {
-                return version;
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<int?> TryGetOcctCppVersionFromInstalledExportsAsync(string vcpkgRoot, string triplet)
-    {
-        var share = Path.Combine(vcpkgRoot, INSTALLED_FOLDER_NAME, triplet, "share", OCCT_FOLDER_NAME);
-        if (!Directory.Exists(share))
-        {
-            return null;
-        }
-
-        foreach (var fileName in new[]
-        {
-            "OpenCASCADEConfig.cmake",
-            "OpenCASCADECompileDefinitionsAndFlags-release.cmake",
-            "OpenCASCADECompileDefinitionsAndFlags-debug.cmake",
-        })
-        {
-            var version = await TryGetOcctCppVersionFromFileAsync(Path.Combine(share, fileName)).ConfigureAwait(false);
-            if (version is not null)
-            {
-                return version;
-            }
-        }
-
-        return null;
-    }
-
-    private async Task<int?> TryGetOcctCppVersionFromFileAsync(string path)
-    {
-        if (!File.Exists(path))
-        {
-            return null;
-        }
-
-        var text = await File.ReadAllTextAsync(path).ConfigureAwait(false);
-        return TryParseOcctCppVersion(text);
-    }
-
-    private int? TryParseOcctCppVersion(string text)
-    {
-        foreach (var pattern in _standardPatterns)
-        {
-            var match = pattern.Match(text);
-            if (!match.Success)
-            {
-                continue;
-            }
-
-            var token = match.Groups["standard"].Value;
-            return token switch
-            {
-                "2a" => 20,
-                "2b" => 23,
-                _ when int.TryParse(token, out var version) => version,
-                _ => null,
-            };
-        }
-
-        return null;
-    }
-
-    [GeneratedRegex(@"(?:/std:c\+\+|-std=(?:gnu\+\+|c\+\+))(?<standard>\d{2}|2[ab])", RegexOptions.CultureInvariant)]
-    private static partial Regex CxxStandardRegex();
-
-    [GeneratedRegex(@"BUILD_CPP_STANDARD:STRING=C\+\+(?<standard>\d{2}|2[ab])", RegexOptions.CultureInvariant)]
-    private static partial Regex BuildCppStandardRegex();
-
-    [GeneratedRegex(
-        @"(?:BUILD_CPP_STANDARD|(?:[A-Z_]*_)?CXX_STANDARD)[^\r\n0-9]*(?:C\+\+)?(?<standard>\d{2}|2[ab])",
-        RegexOptions.CultureInvariant)]
-    private static partial Regex CmakeStandardRegex();
 
     internal static string SelectBestTriplet(
         IEnumerable<string> installedTriplets,
@@ -331,46 +195,5 @@ public sealed partial class VcpkgService : IVcpkgService
     private static bool IsNotStaticTriplet(string triplet)
     {
         return !triplet.Contains("-static", StringComparison.OrdinalIgnoreCase);
-    }
-
-    public async Task<string> IncludingHeaderContent(CancellationToken cancellationToken)
-    {
-        var stringBuilder = ZString.CreateStringBuilder();
-
-        stringBuilder.AppendLine("#pragma once");
-
-        foreach (var file in new DirectoryInfo(GetOcctIncludeFolder())
-                     .EnumerateFiles("*.hxx"))
-        {
-            if (await IsDeprecated(file, cancellationToken).ConfigureAwait(false))
-            {
-                continue;
-            }
-
-            stringBuilder.Append("#include <");
-            stringBuilder.Append(file.Name);
-            stringBuilder.AppendLine(">");
-        }
-
-        return stringBuilder.ToString();
-    }
-
-    private static async Task<bool> IsDeprecated(FileInfo file, CancellationToken cancellationToken)
-    {
-        using var reader = file.OpenText();
-        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
-        {
-            if (line.Contains(" @deprecated ", StringComparison.InvariantCulture))
-            {
-                return true;
-            }
-
-            if (line.Contains("Standard_HEADER_DEPRECATED", StringComparison.InvariantCulture))
-            {
-                return true;
-            }
-        }
-
-        return false;
     }
 }

@@ -16,7 +16,8 @@ namespace TedToolkit.Occt.Generator.Services;
 internal sealed class RecordModelManager(
     IOptions<GenerationOptions> options,
     IResolver resolver,
-    IVcpkgService vcpkgService) : IRecordModelManager
+    IVcpkgDefaultTripletResolver defaultsResolver,
+    IVcpkgEnvironment vcpkgEnvironment) : IRecordModelManager
 {
     private readonly List<EnumModel> _enumModels = [];
     private readonly HashSet<CXCursor> _enumNames = [];
@@ -65,8 +66,9 @@ internal sealed class RecordModelManager(
         _recordNames.Add(key, result);
 
         record.Location.GetFileLocation(out var file, out _, out _, out _);
+        var triplet = options.Value.GetTriplet(defaultsResolver);
         var isOcctType =
-            file.Name.CString.Contains(vcpkgService.GetOcctIncludeFolder(), StringComparison.InvariantCulture);
+            file.Name.CString.Contains(vcpkgEnvironment.GetOcctIncludeFolder(triplet), StringComparison.InvariantCulture);
 
         result.FieldModels = GetAllDecls(record)
             .SelectMany(r => r.Fields)

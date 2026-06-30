@@ -17,8 +17,6 @@ using Microsoft.Extensions.Options;
 
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
-using ModularPipelines.Options;
-
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
@@ -32,19 +30,20 @@ namespace TedToolkit.Occt.Generator.Modules;
 public sealed class ParseModule(
     IRecordModelManager recordModelManager,
     IOptions<GenerationOptions> generationOptions,
-    IVcpkgService vcpkgService) : Module<bool>
+    IVcpkgDefaultTripletResolver defaultsResolver,
+    IVcpkgEnvironment vcpkgEnvironment) : Module<bool>
 {
     private const string RELAY_FILE_NAME = "main.cpp";
 
-    private async Task<List<string>> CreateCommandLineArgsAsync()
+    private async Task<List<string>> CreateCommandLineArgsAsync(CancellationToken cancellationToken)
     {
         var commandLineArgs = new List<string>(generationOptions.Value.CommandLineArgs);
-        commandLineArgs.Add(ZString.Concat("-std=c++",
-            await vcpkgService.GetOcctCppVersionAsync().ConfigureAwait(false)));
+        var triplet = generationOptions.Value.GetTriplet(defaultsResolver);
+        commandLineArgs.Add(ZString.Concat("-std=c++", generationOptions.Value.CppVersion));
         commandLineArgs.Add("-x");
         commandLineArgs.Add("c++");
-        commandLineArgs.Add(ZString.Concat("-I", vcpkgService.GetOcctIncludeFolder()));
-        commandLineArgs.Add(ZString.Concat("-I", vcpkgService.GetIncludeFolder()));
+        commandLineArgs.Add(ZString.Concat("-I", vcpkgEnvironment.GetOcctIncludeFolder(triplet)));
+        commandLineArgs.Add(ZString.Concat("-I", vcpkgEnvironment.GetIncludeFolder(triplet)));
         return commandLineArgs;
     }
 
@@ -86,15 +85,16 @@ public sealed class ParseModule(
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
+        var triplet = generationOptions.Value.GetTriplet(defaultsResolver);
 
         using var file = CXUnsavedFile.Create(RELAY_FILE_NAME,
-            await vcpkgService.IncludingHeaderContent(cancellationToken).ConfigureAwait(false));
+            await vcpkgEnvironment.IncludingHeaderContent(triplet, cancellationToken).ConfigureAwait(false));
 
         using var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
             index,
             RELAY_FILE_NAME,
-            CollectionsMarshal.AsSpan(await CreateCommandLineArgsAsync().ConfigureAwait(false)),
+            CollectionsMarshal.AsSpan(await CreateCommandLineArgsAsync(cancellationToken).ConfigureAwait(false)),
             [file,],
             CXTranslationUnit_Flags.CXTranslationUnit_None);
 
@@ -111,25 +111,5 @@ public sealed class ParseModule(
         }
 
         return true;
-    }
-
-    private async Task<IEnumerable<string>> GetSystemArguments(IModuleContext context,
-        CancellationToken cancellationToken)
-    {
-        var nullFile = OperatingSystem.IsWindows()
-            ? "NUL"
-            : "/dev/null";
-
-        var result = await context.Shell.Command.ExecuteCommandLineTool(
-            new GenericCommandLineToolOptions("clang++") { Arguments = ["-E", "-x", "c++", nullFile, "-v"], },
-            new CommandExecutionOptions() { ThrowOnNonZeroExitCode = true, },
-            cancellationToken: cancellationToken).ConfigureAwait(false);
-
-        return result.StandardError
-            .Split(Environment.NewLine)
-            .SkipWhile(s => s != "#include <...> search starts here:")
-            .Skip(1)
-            .TakeWhile(s => s != "End of search list.")
-            .Select(s => s.Trim());
     }
 }

@@ -8,6 +8,7 @@
 using ClangSharp;
 
 using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Options;
 
@@ -50,4 +51,14 @@ public sealed record GenerationOptions()
     /// Gets a predicate that skips matching clang types during generation.
     /// </summary>
     public Func<FieldDecl, bool> FieldTypeToGenerate { get; init; } = _ => true;
+
+    public string Triplet { private get; set; } = "";
+
+    public int CppVersion { get; set; } = 17;
+
+    public string GetTriplet(IVcpkgDefaultTripletResolver defaultsResolver)
+    {
+        ArgumentNullException.ThrowIfNull(defaultsResolver);
+        return string.IsNullOrWhiteSpace(Triplet) ? defaultsResolver.GetTriplet() : Triplet;
+    }
 }

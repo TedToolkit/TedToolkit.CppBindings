@@ -33,7 +33,8 @@ public static class PipelineBuilderExtension
     {
         ArgumentNullException.ThrowIfNull(builder);
         builder.Services
-            .AddSingleton<IVcpkgService, VcpkgService>()
+            .AddSingleton<IVcpkgDefaultTripletResolver, VcpkgDefaultTripletResolver>()
+            .AddSingleton<IVcpkgEnvironment, VcpkgEnvironment>()
             .AddSingleton<ITypeRule, Utf8StringTypeRule>()
             .AddSingleton<IResolver, Resolver>()
             .AddSingleton<IGenerationOutputCleaner, GenerationOutputCleaner>()
