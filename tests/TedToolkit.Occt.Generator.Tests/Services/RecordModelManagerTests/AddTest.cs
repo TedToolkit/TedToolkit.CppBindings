@@ -121,11 +121,11 @@ internal sealed class AddTest
             .ToArray();
 
         await Assert.That(methodNames).IsEquivalentTo([
-            (MethodModelType.Normal, "BaseMethod"),
-            (MethodModelType.New, "New"),
-            (MethodModelType.Delete, "Delete"),
-            (MethodModelType.Normal, "OwnMethod"),
-            (MethodModelType.Operator, "operator=="),
+            (Normal: MethodModelType.NORMAL, "BaseMethod"),
+            (MethodModelType.NEW, "New"),
+            (Delete: MethodModelType.DELETE, "Delete"),
+            (Normal: MethodModelType.NORMAL, "OwnMethod"),
+            (Operator: MethodModelType.OPERATOR, "operator=="),
         ]);
     }
 
@@ -157,8 +157,8 @@ internal sealed class AddTest
             .ToArray();
 
         await Assert.That(methods).IsEquivalentTo([
-            (MethodModelType.Implicit, "operator bool"),
-            (MethodModelType.Explicit, "operator int"),
+            (Implicit: MethodModelType.IMPLICIT, "operator bool"),
+            (Explicit: MethodModelType.EXPLICIT, "operator int"),
         ]);
     }
 

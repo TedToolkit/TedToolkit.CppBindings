@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="RecordModelManager.cs" company="TedToolkit">
 // Copyright (c) TedToolkit. All rights reserved.
 // Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
@@ -82,17 +82,17 @@ internal sealed class RecordModelManager(
             throw new NotSupportedException($"Can't get size of type ({record.TypeForDecl.AsString})");
         }
 
+        record.Location.GetFileLocation(out var file, out _, out _, out _);
         var result = new RecordModel()
         {
             DescriptionItems = commentProjection.DescriptionItems,
+            SourceHeader = Path.GetFileName(file.Name.CString),
             Type = resolver.Resolve(record.TypeForDecl)
                 .Type,
             Size = size,
             IsAbstract = record.IsAbstract,
         };
         _recordNames.Add(key, result);
-
-        record.Location.GetFileLocation(out var file, out _, out _, out _);
         var triplet = options.Value.GetTriplet(defaultsResolver);
         var isOcctType =
             file.Name.CString.Contains(vcpkgEnvironment.GetOcctIncludeFolder(triplet), StringComparison.InvariantCulture);
@@ -166,13 +166,13 @@ internal sealed class RecordModelManager(
     {
         return method switch
         {
-            CXXConstructorDecl => MethodModelType.New,
-            CXXDestructorDecl => MethodModelType.Delete,
+            CXXConstructorDecl => MethodModelType.NEW,
+            CXXDestructorDecl => MethodModelType.DELETE,
             CXXConversionDecl conversionDecl => IsExplicitConversion(conversionDecl)
-                ? MethodModelType.Explicit
-                : MethodModelType.Implicit,
-            _ when method.IsOverloadedOperator => MethodModelType.Operator,
-            _ => MethodModelType.Normal,
+                ? MethodModelType.EXPLICIT
+                : MethodModelType.IMPLICIT,
+            _ when method.IsOverloadedOperator => MethodModelType.OPERATOR,
+            _ => MethodModelType.NORMAL,
         };
     }
 
@@ -180,9 +180,9 @@ internal sealed class RecordModelManager(
     {
         return GetMethodType(method) switch
         {
-            MethodModelType.New => "New",
-            MethodModelType.Delete => "Delete",
-            MethodModelType.Operator => method.OverloadedOperator switch
+            MethodModelType.NEW => "New",
+            MethodModelType.DELETE => "Delete",
+            MethodModelType.OPERATOR => method.OverloadedOperator switch
             {
                 CX_OverloadedOperatorKind.CX_OO_Invalid => "unknown",
                 CX_OverloadedOperatorKind.CX_OO_Plus => "+",

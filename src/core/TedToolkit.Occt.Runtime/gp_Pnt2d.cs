@@ -28,6 +28,10 @@ public readonly unsafe struct gp_Pnt2d : IDisposable, IEquatable<gp_Pnt2d>
         {
             SetCoordNative(selfPtr, theIndex, theXi);
         }
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+        [DllImport("Name", CallingConvention = CallingConvention.Cdecl, EntryPoint = "gp_Pnt2d_SetCoord_int_double")]
+        static extern void SetCoordNative(gp_Pnt2d* self, int theIndex, double theXi);
     }
 
     /// <summary>
@@ -39,6 +43,10 @@ public readonly unsafe struct gp_Pnt2d : IDisposable, IEquatable<gp_Pnt2d>
         {
             DeleteNative(selfPtr);
         }
+
+        [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
+        [DllImport("Name", CallingConvention = CallingConvention.Cdecl, EntryPoint = "gp_Pnt2d_Delete")]
+        static extern void DeleteNative(gp_Pnt2d* self);
     }
 
     /// <summary>
@@ -95,12 +103,4 @@ public readonly unsafe struct gp_Pnt2d : IDisposable, IEquatable<gp_Pnt2d>
         return !left.Equals(right);
     }
 #pragma warning restore RCS1231
-
-    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
-    [DllImport("Name", CallingConvention = CallingConvention.Cdecl, EntryPoint = "gp_Pnt2d_SetCoord_int_double")]
-    private static extern void SetCoordNative(gp_Pnt2d* self, int theIndex, double theXi);
-
-    [DefaultDllImportSearchPaths(DllImportSearchPath.SafeDirectories)]
-    [DllImport("Name", CallingConvention = CallingConvention.Cdecl, EntryPoint = "gp_Pnt2d_Delete")]
-    private static extern void DeleteNative(gp_Pnt2d* self);
 }

@@ -32,7 +32,7 @@ internal sealed class GetMethodInteropNameTest
             IsStatic = false,
             ReturnType = CreateType("void"),
             MethodName = "SetCoord",
-            Type = MethodModelType.Normal,
+            Type = MethodModelType.NORMAL,
             Parameters =
             [
                 new ParameterModel()
@@ -55,6 +55,7 @@ internal sealed class GetMethodInteropNameTest
             DescriptionItems = [],
             Base = null,
             IsAbstract = false,
+            SourceHeader = "gp_Pnt.hxx",
             Type = recordType,
             Size = 0,
             FieldModels = [],

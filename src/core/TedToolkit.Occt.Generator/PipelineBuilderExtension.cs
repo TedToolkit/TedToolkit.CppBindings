@@ -40,12 +40,27 @@ public static class PipelineBuilderExtension
             .AddSingleton<IGenerationOutputCleaner, GenerationOutputCleaner>()
             .AddSingleton<IRecordModelManager, RecordModelManager>()
             .AddSingleton<IGeneratorService, GeneratorService>()
-            .AddModule<CleanGenerationOutputModule>()
-            .AddModule<ParseModule>()
-
-            // .AddModule<RecordLayoutModule>()
-            .AddModule<GenerateCSharpModule>()
-            .AddModule<GenerateCppModule>()
+            .AddModule<CleanGenerationOutputModule>(sp =>
+                new CleanGenerationOutputModule(
+                    sp.GetRequiredService<IGenerationOutputCleaner>()))
+            .AddModule<ParseModule>(sp =>
+                new ParseModule(
+                    sp.GetRequiredService<IRecordModelManager>(),
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>(),
+                    sp.GetRequiredService<IVcpkgDefaultTripletResolver>(),
+                    sp.GetRequiredService<IVcpkgEnvironment>()))
+            .AddModule<GenerateCSharpModule>(sp =>
+                new GenerateCSharpModule(
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>(),
+                    sp.GetRequiredService<IRecordModelManager>(),
+                    sp.GetRequiredService<IGeneratorService>()))
+            .AddModule<GenerateCppModule>(sp =>
+                new GenerateCppModule(
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>(),
+                    sp.GetRequiredService<IRecordModelManager>(),
+                    sp.GetRequiredService<IGeneratorService>(),
+                    sp.GetRequiredService<IVcpkgDefaultTripletResolver>(),
+                    sp.GetRequiredService<IVcpkgEnvironment>()))
             .AddSingleton(
                 Microsoft.Extensions.Options.Options.Create(options));
 

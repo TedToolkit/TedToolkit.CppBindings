@@ -40,6 +40,7 @@ internal sealed class GenerateAsyncTest
                 DescriptionItems = [new DescriptionSummary(new DescriptionText("Point wrapper.")),],
                 Base = null,
                 IsAbstract = true,
+                SourceHeader = "gp_Pnt2d.hxx",
                 Size = 16,
                 Type = new()
                 {
@@ -63,7 +64,7 @@ internal sealed class GenerateAsyncTest
                         IsStatic = false,
                         ReturnType = intType,
                         MethodName = "Coord",
-                        Type = MethodModelType.Normal,
+                        Type = MethodModelType.NORMAL,
                         Parameters =
                         [
                             new ParameterModel()

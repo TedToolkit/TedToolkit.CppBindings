@@ -15,30 +15,30 @@ internal enum MethodModelType
     /// <summary>
     /// Represents a regular method call.
     /// </summary>
-    Normal = 0,
+    NORMAL = 0,
 
     /// <summary>
     /// Represents a constructor entry point.
     /// </summary>
-    New = 1,
+    NEW = 1,
 
     /// <summary>
     /// Represents a destructor entry point.
     /// </summary>
-    Delete = 2,
+    DELETE = 2,
 
     /// <summary>
     /// Represents an overloaded operator.
     /// </summary>
-    Operator = 3,
+    OPERATOR = 3,
 
     /// <summary>
     /// Represents an implicit conversion operator.
     /// </summary>
-    Implicit = 4,
+    IMPLICIT = 4,
 
     /// <summary>
     /// Represents an explicit conversion operator.
     /// </summary>
-    Explicit = 5,
+    EXPLICIT = 5,
 }

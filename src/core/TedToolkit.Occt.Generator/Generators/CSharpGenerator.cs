@@ -102,7 +102,7 @@ internal sealed class CSharpGenerator(
 
         foreach (var recordDeclMethodModel in recordModel.MethodModels)
         {
-            if (recordDeclMethodModel.Type is not MethodModelType.Normal)
+            if (recordDeclMethodModel.Type is not MethodModelType.NORMAL)
             {
                 continue;
             }

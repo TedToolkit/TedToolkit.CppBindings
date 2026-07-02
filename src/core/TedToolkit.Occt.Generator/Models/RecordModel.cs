@@ -30,6 +30,11 @@ internal sealed class RecordModel
     public required bool IsAbstract { get; init; }
 
     /// <summary>
+    /// Gets the native header file that declares the record.
+    /// </summary>
+    public required string SourceHeader { get; init; }
+
+    /// <summary>
     /// Gets the projected type metadata.
     /// </summary>
     public required TypeModel Type { get; init; }

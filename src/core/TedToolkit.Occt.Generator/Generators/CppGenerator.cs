@@ -24,7 +24,9 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         try
         {
             builder.AppendLine("#include \"csharp_interop.h\"");
-            builder.AppendLine("#include \"headers.h\"");
+            builder.Append("#include <");
+            builder.Append(recordDecl.SourceHeader);
+            builder.AppendLine(">");
             builder.AppendLine();
 
             foreach (var recordDeclMethodModel in recordDecl.MethodModels)
@@ -35,25 +37,25 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 
                 switch (recordDeclMethodModel.Type)
                 {
-                    case MethodModelType.Normal:
+                    case MethodModelType.NORMAL:
                         GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, true);
                         break;
 
-                    case MethodModelType.New:
+                    case MethodModelType.NEW:
                         GenerateNew(ref builder, recordDeclMethodModel, recordDecl);
                         break;
 
-                    case MethodModelType.Delete:
+                    case MethodModelType.DELETE:
                         GenerateDelete(ref builder, recordDecl);
                         break;
 
-                    case MethodModelType.Operator:
+                    case MethodModelType.OPERATOR:
                         GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, false);
                         break;
 
-                    case MethodModelType.Implicit:
+                    case MethodModelType.IMPLICIT:
 
-                    case MethodModelType.Explicit:
+                    case MethodModelType.EXPLICIT:
                         break;
 
                     default:

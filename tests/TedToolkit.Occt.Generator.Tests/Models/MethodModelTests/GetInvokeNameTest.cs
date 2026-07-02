@@ -22,7 +22,7 @@ internal sealed class GetInvokeNameTest
     [Test]
     public async Task Should_keep_normal_method_name_Async()
     {
-        var model = CreateMethod(MethodModelType.Normal, "Coord");
+        var model = CreateMethod(MethodModelType.NORMAL, "Coord");
 
         await Assert.That(model.GetInvokeName()).IsEqualTo("Coord");
     }
@@ -34,7 +34,7 @@ internal sealed class GetInvokeNameTest
     [Test]
     public async Task Should_normalize_operator_symbols_Async()
     {
-        var model = CreateMethod(MethodModelType.Operator, "operator==");
+        var model = CreateMethod(MethodModelType.OPERATOR, "operator==");
 
         await Assert.That(model.GetInvokeName()).IsEqualTo("operatorEqualEqual");
     }
@@ -46,7 +46,7 @@ internal sealed class GetInvokeNameTest
     [Test]
     public async Task Should_normalize_conversion_operator_spacing_Async()
     {
-        var model = CreateMethod(MethodModelType.Explicit, "operator Standard_Real");
+        var model = CreateMethod(MethodModelType.EXPLICIT, "operator Standard_Real");
 
         await Assert.That(model.GetInvokeName()).IsEqualTo("operatorStandard_Real");
     }

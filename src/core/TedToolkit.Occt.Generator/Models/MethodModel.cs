@@ -78,7 +78,7 @@ internal partial class MethodModel
     /// <returns>The normalized invoke name.</returns>
     public string GetInvokeName()
     {
-        if (Type is not (MethodModelType.Operator or MethodModelType.Implicit or MethodModelType.Explicit))
+        if (Type is not (MethodModelType.OPERATOR or MethodModelType.IMPLICIT or MethodModelType.EXPLICIT))
         {
             return MethodName;
         }

@@ -64,15 +64,23 @@ public sealed class GenerateCppModule : Module<bool>
     {
         ArgumentNullException.ThrowIfNull(context);
         var triplet = _generationOptions.Value.GetTriplet(_defaultsResolver);
+        var duplicateOutputNames = _recordManager.RecordModels
+            .GroupBy(static record => record.Type.CSharpTypeName, StringComparer.Ordinal)
+            .Where(static group => group.Count() > 1)
+            .Select(static group => group.Key)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+
+        if (duplicateOutputNames.Length > 0)
+        {
+            throw new InvalidOperationException(
+                $"Duplicate C++ output names detected: {string.Join(", ", duplicateOutputNames)}"); // run-fix:debug
+        }
 
         var compile = new CppCompileCoontext(_generationOptions.Value.CppFolder, "ted_toolkit_occt",
             _generationOptions.Value.CppVersion);
 
-        var tasks = new List<Task>()
-        {
-            GenerateHeadersAsync(compile, triplet, cancellationToken),
-            CopyCppInteropHeaderAsync(compile, cancellationToken),
-        };
+        var tasks = new List<Task>() { CopyCppInteropHeaderAsync(compile, cancellationToken), };
 
         foreach (var recordManagerRecordModel in _recordManager.RecordModels)
         {
@@ -97,12 +105,6 @@ public sealed class GenerateCppModule : Module<bool>
         await compile
             .AddSourceAsync(ZString.Concat(record.Type.CSharpTypeName, ".cpp"), codes, cancellationToken)
             .ConfigureAwait(false);
-    }
-
-    private async Task GenerateHeadersAsync(CppCompileCoontext compile, string triplet, CancellationToken cancellationToken)
-    {
-        var content = await _vcpkgEnvironment.GetIncludingHeaderContentAsync(triplet, cancellationToken).ConfigureAwait(false);
-        await compile.AddSourceAsync("headers.h", content, cancellationToken).ConfigureAwait(false);
     }
 
     private async Task CopyCppInteropHeaderAsync(CppCompileCoontext compile, CancellationToken cancellationToken)
