@@ -135,6 +135,38 @@ internal sealed class HelpersTest
         await AssertRenderedAsync(constPointerValue, geomSurface.Pointer).ConfigureAwait(false);
     }
 
+    /// <summary>
+    /// Verifies std::basic_string&lt;char&gt; references normalize to the same projected P/Invoke type.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_normalize_basic_string_reference_kinds_to_same_pinvoke_type_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            namespace std
+            {
+                template<typename T>
+                struct basic_string
+                {
+                };
+            }
+
+            void Accept(
+                const std::basic_string<char>& constReferenceValue,
+                std::basic_string<char>&& rValueReferenceValue);
+            """);
+
+        var method = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<FunctionDecl>()
+            .Single(static f => f.Name == "Accept");
+
+        var constReferenceValue = method.Parameters.Single(static p => p.Name == "constReferenceValue").Type.ToPInvokeDataType();
+        var rValueReferenceValue = method.Parameters.Single(static p => p.Name == "rValueReferenceValue").Type.ToPInvokeDataType();
+
+        await AssertRenderedAsync(constReferenceValue, new DataType("std_basic_string_char").Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(rValueReferenceValue, new DataType("std_basic_string_char").Pointer).ConfigureAwait(false);
+    }
+
     private static async Task AssertRenderedAsync(DataType actual, DataType expected)
     {
         await Assert.That(Render(actual)).IsEqualTo(Render(expected));

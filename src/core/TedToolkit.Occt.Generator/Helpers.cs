@@ -88,6 +88,7 @@ internal static class Helpers
     public static DataType ToPInvokeDataType(this ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
+        type = type.CanonicalType;
 
         if (type.DeConst() is { } constType)
         {

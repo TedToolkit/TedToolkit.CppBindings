@@ -427,6 +427,36 @@ internal sealed class AddTest
         await Assert.That(model.RequiresNew).IsTrue();
     }
 
+    /// <summary>
+    /// Verifies non-OCCT records with base classes still require heap allocation.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_require_new_for_non_occt_records_with_base_classes_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct _Container_base
+            {
+            };
+
+            struct _String_val : _Container_base
+            {
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "_String_val");
+
+        var manager = CreateManager();
+
+        var model = manager.Add(record);
+
+        await Assert.That(model.Base).IsNull();
+        await Assert.That(record.Bases.Count).IsEqualTo(1);
+        await Assert.That(model.RequiresNew).IsTrue();
+    }
+
     private static RecordModelManager CreateManager()
     {
         return new(

@@ -127,7 +127,7 @@ internal sealed class RecordModelManager(
                 .Select(Add)
                 .SingleOrDefault()
             : null;
-        result.RequiresNew = result.Base is not null || HasVirtualMethods(record);
+        result.RequiresNew = record.Bases.Count > 0 || HasVirtualMethods(record);
         result.IsStandardTransient = result.Type.CppTypeName is "Standard_Transient"
                                      || result.Base?.IsStandardTransient is true;
 
