@@ -121,11 +121,11 @@ internal sealed class AddTest
             .ToArray();
 
         await Assert.That(methodNames).IsEquivalentTo([
-            (Normal: MethodModelType.NORMAL, "BaseMethod"),
+            (MethodModelType.NORMAL, "BaseMethod"),
             (MethodModelType.NEW, "New"),
-            (Delete: MethodModelType.DELETE, "Delete"),
-            (Normal: MethodModelType.NORMAL, "OwnMethod"),
-            (Operator: MethodModelType.OPERATOR, "operator=="),
+            (MethodModelType.DELETE, "Delete"),
+            (MethodModelType.NORMAL, "OwnMethod"),
+            (MethodModelType.OPERATOR, "operator=="),
         ]);
     }
 
@@ -157,8 +157,8 @@ internal sealed class AddTest
             .ToArray();
 
         await Assert.That(methods).IsEquivalentTo([
-            (Implicit: MethodModelType.IMPLICIT, "Implicit"),
-            (Explicit: MethodModelType.EXPLICIT, "Explicit"),
+            (MethodModelType.IMPLICIT, "Implicit"),
+            (MethodModelType.EXPLICIT, "Explicit"),
         ]);
     }
 
@@ -299,6 +299,51 @@ internal sealed class AddTest
         await Assert.That(methods.All(static m => m.ReturnSelf)).IsTrue();
     }
 
+    /// <summary>
+    /// Verifies allocation and Standard_Transient flags are projected independently.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_project_allocation_and_standard_transient_flags_independently_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Standard_Transient
+            {
+            };
+
+            struct HeapOnlyBase
+            {
+            };
+
+            struct HeapOnlyDerived : HeapOnlyBase
+            {
+                HeapOnlyDerived();
+            };
+
+            struct TransientDerived : Standard_Transient
+            {
+                TransientDerived();
+            };
+            """, "__occt__/test.cpp");
+
+        var heapOnlyRecord = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "HeapOnlyDerived");
+        var transientRecord = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "TransientDerived");
+
+        var manager = CreateManager();
+
+        var heapOnlyModel = manager.Add(heapOnlyRecord);
+        var transientModel = manager.Add(transientRecord);
+
+        await Assert.That(heapOnlyModel.RequiresNew).IsTrue();
+        await Assert.That(heapOnlyModel.IsStandardTransient).IsFalse();
+        await Assert.That(transientModel.RequiresNew).IsTrue();
+        await Assert.That(transientModel.IsStandardTransient).IsTrue();
+    }
+
     private static RecordModelManager CreateManager()
     {
         return new(
@@ -313,13 +358,13 @@ internal sealed class AddTest
             new FakeVcpkgEnvironment());
     }
 
-    private static TranslationUnit ParseTranslationUnit(string source)
+    private static TranslationUnit ParseTranslationUnit(string source, string filePath = "test.cpp")
     {
-        using var file = CXUnsavedFile.Create("test.cpp", source);
+        using var file = CXUnsavedFile.Create(filePath, source);
         var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
             index,
-            "test.cpp",
+            filePath,
             ["-std=c++20", "-x", "c++",],
             [file,],
             CXTranslationUnit_Flags.CXTranslationUnit_None);

@@ -38,7 +38,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
                 switch (recordDeclMethodModel.Type)
                 {
                     case MethodModelType.NORMAL:
-                        GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, true);
+                        GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl);
                         break;
 
                     case MethodModelType.NEW:
@@ -50,7 +50,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
                         break;
 
                     case MethodModelType.OPERATOR:
-                        GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl, false);
+                        GenerateNormalMethod(ref builder, recordDeclMethodModel, recordDecl);
                         break;
 
                     case MethodModelType.IMPLICIT:
@@ -76,7 +76,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 
     private static void GenerateNew(ref Utf16ValueStringBuilder builder, MethodModel methodModel, RecordModel recordModel)
     {
-        var alloc = recordModel.Base is not null;
+        var alloc = recordModel.RequiresNew;
         builder.Append(recordModel.Type.CppTypeName);
         builder.Append(alloc ? "*& " : "& ");
         builder.Append("instance");
@@ -111,7 +111,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 
         builder.AppendLine(");");
 
-        if (!alloc)
+        if (!recordModel.IsStandardTransient)
         {
             return;
         }
@@ -121,7 +121,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 
     private static void GenerateDelete(ref Utf16ValueStringBuilder builder, RecordModel recordModel)
     {
-        var alloc = recordModel.Base is not null;
+        var alloc = recordModel.RequiresNew;
         builder.Append(recordModel.Type.CppTypeName);
         builder.Append(alloc ? "* " : "& ");
         builder.Append("instance");
@@ -175,22 +175,13 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         }
 
         builder.AppendLine("), {");
-        if (!methodModel.IsReturnVoid)
-        {
-            builder.Append(hasReference ? "\t*result = &" : "\t*result = ");
-        }
-        else
-        {
-            builder.Append("\t");
-        }
-
-        builder.Append("self.operator ");
-        builder.Append(methodModel.ReturnType.CppTypeName.Trim());
-        builder.AppendLine("();");
+        AppendInvocationStatement(ref builder, methodModel, recordModel, hasReference);
     }
 
-    private void GenerateNormalMethod(ref Utf16ValueStringBuilder builder, MethodModel methodModel,
-        RecordModel recordModel, bool parentheses)
+    private void GenerateNormalMethod(
+        ref Utf16ValueStringBuilder builder,
+        MethodModel methodModel,
+        RecordModel recordModel)
     {
         if (!methodModel.IsStatic)
         {
@@ -237,48 +228,82 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         }
 
         builder.AppendLine("), {");
+        AppendInvocationStatement(ref builder, methodModel, recordModel, hasReference);
+    }
 
-        if (methodModel.IsStatic)
+    private static void AppendInvocationStatement(
+        ref Utf16ValueStringBuilder builder,
+        MethodModel methodModel,
+        RecordModel recordModel,
+        bool hasReference)
+    {
+        if (hasReference)
         {
-            builder.Append(methodModel.IsReturnVoid || methodModel.ReturnSelf ? "\t" : "\t*result = ");
-            if (hasReference)
-            {
-                builder.Append("&");
-            }
-
-            builder.Append(recordModel.Type.CppTypeName);
-            builder.Append("::");
-            builder.Append(methodModel.MethodName);
+            builder.Append("\t*result = &");
         }
         else
         {
-            if (hasReference)
-            {
-                builder.Append("\t*result = &");
-            }
-            else
-            {
-                builder.Append(methodModel.IsReturnVoid || methodModel.ReturnSelf ? "\t" : "\t*result = ");
-            }
-
-            if (!parentheses && methodModel.Parameters.Count is 0)
-            {
-                builder.Append(methodModel.MethodName);
-                builder.Append("self");
-            }
-            else
-            {
-                builder.Append(parentheses ? "self." : "self");
-                builder.Append(methodModel.MethodName);
-            }
+            builder.Append(methodModel.IsReturnVoid || methodModel.ReturnSelf ? "\t" : "\t*result = ");
         }
 
-        if (parentheses)
+        AppendInvocationExpression(ref builder, methodModel, recordModel);
+        builder.AppendLine(";");
+    }
+
+    private static void AppendInvocationExpression(
+        ref Utf16ValueStringBuilder builder,
+        MethodModel methodModel,
+        RecordModel recordModel)
+    {
+        switch (methodModel.Type)
         {
-            builder.Append('(');
+            case MethodModelType.NORMAL:
+                AppendNamedMethodInvocation(ref builder, methodModel, recordModel);
+                break;
+
+            case MethodModelType.OPERATOR:
+                builder.Append("self.operator");
+                builder.Append(methodModel.MethodName);
+                AppendInvocationArguments(ref builder, methodModel);
+                break;
+
+            case MethodModelType.IMPLICIT:
+            case MethodModelType.EXPLICIT:
+                builder.Append("self.operator ");
+                builder.Append(methodModel.ReturnType.CppTypeName.Trim());
+                builder.Append("()");
+                break;
+
+            default:
+                throw new InvalidOperationException(
+                    $"Unsupported invocation method model type '{methodModel.Type}'.");
+        }
+    }
+
+    private static void AppendNamedMethodInvocation(
+        ref Utf16ValueStringBuilder builder,
+        MethodModel methodModel,
+        RecordModel recordModel)
+    {
+        if (methodModel.IsStatic)
+        {
+            builder.Append(recordModel.Type.CppTypeName);
+            builder.Append("::");
+        }
+        else
+        {
+            builder.Append("self.");
         }
 
-        started = false;
+        builder.Append(methodModel.MethodName);
+        AppendInvocationArguments(ref builder, methodModel);
+    }
+
+    private static void AppendInvocationArguments(ref Utf16ValueStringBuilder builder, MethodModel methodModel)
+    {
+        builder.Append('(');
+
+        var started = false;
         foreach (var parameterModel in methodModel.Parameters)
         {
             if (started)
@@ -290,6 +315,6 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
             builder.Append(parameterModel.Name);
         }
 
-        builder.AppendLine(parentheses ? ");" : ";");
+        builder.Append(')');
     }
 }

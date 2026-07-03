@@ -92,6 +92,8 @@ internal sealed class RecordModelManager(
                 .Type,
             Size = size,
             IsAbstract = record.IsAbstract,
+            RequiresNew = false,
+            IsStandardTransient = false,
         };
         _recordNames.Add(key, result);
         var triplet = options.Value.GetTriplet(defaultsResolver);
@@ -122,6 +124,9 @@ internal sealed class RecordModelManager(
                 .Select(Add)
                 .SingleOrDefault()
             : null;
+        result.RequiresNew = result.Base is not null;
+        result.IsStandardTransient = result.Type.CppTypeName is "Standard_Transient"
+                                     || result.Base?.IsStandardTransient is true;
 
         return result;
     }

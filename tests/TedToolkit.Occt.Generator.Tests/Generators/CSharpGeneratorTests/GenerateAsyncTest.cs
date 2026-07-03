@@ -40,6 +40,8 @@ internal sealed class GenerateAsyncTest
                 DescriptionItems = [new DescriptionSummary(new DescriptionText("Point wrapper.")),],
                 Base = null,
                 IsAbstract = true,
+                IsStandardTransient = false,
+                RequiresNew = false,
                 SourceHeader = "gp_Pnt2d.hxx",
                 Size = 16,
                 Type = new()

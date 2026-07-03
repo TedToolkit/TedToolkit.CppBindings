@@ -29,6 +29,8 @@ internal sealed class GenerateAsyncTest
                 DescriptionItems = [],
                 Base = null,
                 IsAbstract = false,
+                IsStandardTransient = false,
+                RequiresNew = false,
                 SourceHeader = "gp_Pnt.hxx",
                 Size = 0,
                 Type = new()
@@ -48,11 +50,11 @@ internal sealed class GenerateAsyncTest
     }
 
     /// <summary>
-    /// Verifies compound-assignment wrappers skip the synthetic result out parameter when returning self.
+    /// Verifies compound-assignment wrappers skip the synthetic result out parameter and emit direct operator calls.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
-    public async Task Should_omit_result_parameter_for_return_self_operator_Async()
+    public async Task Should_emit_direct_call_for_return_self_operator_Async()
     {
         var valueType = new TypeModel()
         {
@@ -67,6 +69,8 @@ internal sealed class GenerateAsyncTest
                 DescriptionItems = [],
                 Base = null,
                 IsAbstract = false,
+                IsStandardTransient = false,
+                RequiresNew = false,
                 SourceHeader = "Value.hxx",
                 Size = 0,
                 Type = valueType,
@@ -80,7 +84,7 @@ internal sealed class GenerateAsyncTest
                         NoExceptions = true,
                         IsConst = false,
                         IsStatic = false,
-                        ReturnType = new TypeModel()
+                        ReturnType = new()
                         {
                             CppTypeName = "Value &",
                             CSharpPInvokeType = new DataType("Value").Pointer,
@@ -106,7 +110,135 @@ internal sealed class GenerateAsyncTest
 
         await Assert.That(code).Contains("Value & self, Value other), {");
         await Assert.That(code).DoesNotContain("result");
-        await Assert.That(code).Contains("self+=other;");
+        await Assert.That(code).Contains("self.operator+=(other);");
+        await Assert.That(code).DoesNotContain("(self.operator+=(other));");
+    }
+
+    /// <summary>
+    /// Verifies value-returning operator wrappers emit direct operator calls without redundant outer parentheses.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_emit_direct_call_for_value_returning_operator_Async()
+    {
+        var valueType = new TypeModel()
+        {
+            CppTypeName = "Value",
+            CSharpPInvokeType = new("Value"),
+            CSharpPublicType = new("Value"),
+        };
+
+        var generator = new CppGenerator(
+            new RecordModel()
+            {
+                DescriptionItems = [],
+                Base = null,
+                IsAbstract = false,
+                IsStandardTransient = false,
+                RequiresNew = false,
+                SourceHeader = "Value.hxx",
+                Size = 0,
+                Type = valueType,
+                FieldModels = [],
+                MethodModels =
+                [
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = true,
+                        IsStatic = false,
+                        ReturnType = new()
+                        {
+                            CppTypeName = "Value",
+                            CSharpPInvokeType = new("Value"),
+                            CSharpPublicType = new("Value"),
+                        },
+                        ReturnSelf = false,
+                        MethodName = "+",
+                        Type = MethodModelType.OPERATOR,
+                        Parameters =
+                        [
+                            new ParameterModel()
+                            {
+                                DescriptionItems = [],
+                                Type = valueType,
+                                Name = "other",
+                            },
+                        ],
+                    },
+                ],
+            });
+
+        var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("*result = self.operator+(other);");
+        await Assert.That(code).DoesNotContain("*result = (self.operator+(other));");
+    }
+
+    /// <summary>
+    /// Verifies reference-returning operator wrappers take the address of the direct operator call without redundant parentheses.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_emit_direct_address_of_reference_returning_operator_Async()
+    {
+        var valueType = new TypeModel()
+        {
+            CppTypeName = "Value",
+            CSharpPInvokeType = new("Value"),
+            CSharpPublicType = new("Value"),
+        };
+
+        var generator = new CppGenerator(
+            new RecordModel()
+            {
+                DescriptionItems = [],
+                Base = null,
+                IsAbstract = false,
+                IsStandardTransient = false,
+                RequiresNew = false,
+                SourceHeader = "Value.hxx",
+                Size = 0,
+                Type = valueType,
+                FieldModels = [],
+                MethodModels =
+                [
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = true,
+                        IsStatic = false,
+                        ReturnType = new()
+                        {
+                            CppTypeName = "const Value &",
+                            CSharpPInvokeType = new DataType("Value").Pointer,
+                            CSharpPublicType = new("Value"),
+                        },
+                        ReturnSelf = false,
+                        MethodName = "*",
+                        Type = MethodModelType.OPERATOR,
+                        Parameters =
+                        [
+                            new ParameterModel()
+                            {
+                                DescriptionItems = [],
+                                Type = valueType,
+                                Name = "other",
+                            },
+                        ],
+                    },
+                ],
+            });
+
+        var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("*result = &self.operator*(other);");
+        await Assert.That(code).DoesNotContain("*result = &(self.operator*(other));");
+        await Assert.That(code).DoesNotContain("*result = &self*other;");
     }
 
     /// <summary>
@@ -129,6 +261,8 @@ internal sealed class GenerateAsyncTest
                 DescriptionItems = [],
                 Base = null,
                 IsAbstract = false,
+                IsStandardTransient = false,
+                RequiresNew = false,
                 SourceHeader = "Value.hxx",
                 Size = 0,
                 Type = recordType,
@@ -142,7 +276,7 @@ internal sealed class GenerateAsyncTest
                         NoExceptions = true,
                         IsConst = true,
                         IsStatic = false,
-                        ReturnType = new TypeModel()
+                        ReturnType = new()
                         {
                             CppTypeName = "bool",
                             CSharpPInvokeType = DataType.Bool,
@@ -159,7 +293,7 @@ internal sealed class GenerateAsyncTest
                         NoExceptions = true,
                         IsConst = true,
                         IsStatic = false,
-                        ReturnType = new TypeModel()
+                        ReturnType = new()
                         {
                             CppTypeName = "int",
                             CSharpPInvokeType = DataType.Int,
@@ -178,5 +312,77 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("*result = self.operator bool();");
         await Assert.That(code).Contains("CSHARP_WRAPPER(Value_Explicit_int(const Value & self, int * const result), {");
         await Assert.That(code).Contains("*result = self.operator int();");
+    }
+
+    /// <summary>
+    /// Verifies heap allocation and transient ref-counting are controlled by dedicated record flags.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_use_record_flags_for_allocation_and_transient_ref_counting_Async()
+    {
+        var generator = new CppGenerator(
+            new RecordModel()
+            {
+                DescriptionItems = [],
+                Base = null,
+                IsAbstract = false,
+                IsStandardTransient = true,
+                RequiresNew = true,
+                SourceHeader = "Transient.hxx",
+                Size = 0,
+                Type = new()
+                {
+                    CppTypeName = "Transient",
+                    CSharpPInvokeType = new("Transient"),
+                    CSharpPublicType = new("Transient"),
+                },
+                FieldModels = [],
+                MethodModels =
+                [
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = false,
+                        IsStatic = false,
+                        ReturnType = new()
+                        {
+                            CppTypeName = "void",
+                            CSharpPInvokeType = DataType.Void,
+                            CSharpPublicType = DataType.Void,
+                        },
+                        MethodName = "New",
+                        Type = MethodModelType.NEW,
+                        Parameters = [],
+                    },
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = false,
+                        IsStatic = false,
+                        ReturnType = new()
+                        {
+                            CppTypeName = "void",
+                            CSharpPInvokeType = DataType.Void,
+                            CSharpPublicType = DataType.Void,
+                        },
+                        MethodName = "Delete",
+                        Type = MethodModelType.DELETE,
+                        Parameters = [],
+                    },
+                ],
+            });
+
+        var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("Transient*& instance");
+        await Assert.That(code).Contains("instance = new Transient();");
+        await Assert.That(code).Contains("instance->IncrementRefCounter();");
+        await Assert.That(code).Contains("Transient* instance");
+        await Assert.That(code).Contains("delete instance;");
     }
 }

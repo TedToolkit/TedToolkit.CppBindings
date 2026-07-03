@@ -30,6 +30,16 @@ internal sealed class RecordModel
     public required bool IsAbstract { get; init; }
 
     /// <summary>
+    /// Gets or sets a value indicating whether native construction and destruction should use heap allocation.
+    /// </summary>
+    public required bool RequiresNew { get; set; }
+
+    /// <summary>
+    /// Gets or sets a value indicating whether the record derives from <c>Standard_Transient</c>.
+    /// </summary>
+    public required bool IsStandardTransient { get; set; }
+
+    /// <summary>
     /// Gets the native header file that declares the record.
     /// </summary>
     public required string SourceHeader { get; init; }
