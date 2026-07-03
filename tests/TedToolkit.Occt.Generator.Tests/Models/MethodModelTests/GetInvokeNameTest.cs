@@ -46,9 +46,9 @@ internal sealed class GetInvokeNameTest
     [Test]
     public async Task Should_normalize_conversion_operator_spacing_Async()
     {
-        var model = CreateMethod(MethodModelType.EXPLICIT, "operator Standard_Real");
+        var model = CreateMethod(MethodModelType.EXPLICIT, "Explicit");
 
-        await Assert.That(model.GetInvokeName()).IsEqualTo("operatorStandard_Real");
+        await Assert.That(model.GetInvokeName()).IsEqualTo("Explicit");
     }
 
     private static MethodModel CreateMethod(MethodModelType type, string methodName)

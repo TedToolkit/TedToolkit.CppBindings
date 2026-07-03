@@ -46,4 +46,137 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("#include <gp_Pnt.hxx>");
         await Assert.That(code).DoesNotContain("#include \"headers.h\"");
     }
+
+    /// <summary>
+    /// Verifies compound-assignment wrappers skip the synthetic result out parameter when returning self.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_omit_result_parameter_for_return_self_operator_Async()
+    {
+        var valueType = new TypeModel()
+        {
+            CppTypeName = "Value",
+            CSharpPInvokeType = new("Value"),
+            CSharpPublicType = new("Value"),
+        };
+
+        var generator = new CppGenerator(
+            new RecordModel()
+            {
+                DescriptionItems = [],
+                Base = null,
+                IsAbstract = false,
+                SourceHeader = "Value.hxx",
+                Size = 0,
+                Type = valueType,
+                FieldModels = [],
+                MethodModels =
+                [
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = false,
+                        IsStatic = false,
+                        ReturnType = new TypeModel()
+                        {
+                            CppTypeName = "Value &",
+                            CSharpPInvokeType = new DataType("Value").Pointer,
+                            CSharpPublicType = new("Value"),
+                        },
+                        ReturnSelf = true,
+                        MethodName = "+=",
+                        Type = MethodModelType.OPERATOR,
+                        Parameters =
+                        [
+                            new ParameterModel()
+                            {
+                                DescriptionItems = [],
+                                Type = valueType,
+                                Name = "other",
+                            },
+                        ],
+                    },
+                ],
+            });
+
+        var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("Value & self, Value other), {");
+        await Assert.That(code).DoesNotContain("result");
+        await Assert.That(code).Contains("self+=other;");
+    }
+
+    /// <summary>
+    /// Verifies conversion operators generate callable wrapper bodies and stable method names.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_generate_conversion_operator_wrappers_Async()
+    {
+        var recordType = new TypeModel()
+        {
+            CppTypeName = "Value",
+            CSharpPInvokeType = new("Value"),
+            CSharpPublicType = new("Value"),
+        };
+
+        var generator = new CppGenerator(
+            new RecordModel()
+            {
+                DescriptionItems = [],
+                Base = null,
+                IsAbstract = false,
+                SourceHeader = "Value.hxx",
+                Size = 0,
+                Type = recordType,
+                FieldModels = [],
+                MethodModels =
+                [
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = true,
+                        IsStatic = false,
+                        ReturnType = new TypeModel()
+                        {
+                            CppTypeName = "bool",
+                            CSharpPInvokeType = DataType.Bool,
+                            CSharpPublicType = DataType.Bool,
+                        },
+                        MethodName = "Implicit",
+                        Type = MethodModelType.IMPLICIT,
+                        Parameters = [],
+                    },
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = true,
+                        IsStatic = false,
+                        ReturnType = new TypeModel()
+                        {
+                            CppTypeName = "int",
+                            CSharpPInvokeType = DataType.Int,
+                            CSharpPublicType = DataType.Int,
+                        },
+                        MethodName = "Explicit",
+                        Type = MethodModelType.EXPLICIT,
+                        Parameters = [],
+                    },
+                ],
+            });
+
+        var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("CSHARP_WRAPPER(Value_Implicit_bool(const Value & self, bool * const result), {");
+        await Assert.That(code).Contains("*result = self.operator bool();");
+        await Assert.That(code).Contains("CSHARP_WRAPPER(Value_Explicit_int(const Value & self, int * const result), {");
+        await Assert.That(code).Contains("*result = self.operator int();");
+    }
 }

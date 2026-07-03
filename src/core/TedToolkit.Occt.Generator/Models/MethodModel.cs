@@ -8,13 +8,14 @@
 using Cysharp.Text;
 
 using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Models;
 
 /// <summary>
 /// Stores the normalized metadata for one generated method surface.
 /// </summary>
-internal partial class MethodModel
+internal class MethodModel
 {
     /// <summary>
     /// Gets a value indicating whether the method returns <c>void</c>.
@@ -56,6 +57,11 @@ internal partial class MethodModel
     /// Gets the projected return type.
     /// </summary>
     public required TypeModel ReturnType { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the wrapper should treat the method as returning <c>self</c>.
+    /// </summary>
+    public bool ReturnSelf { get; init; }
 
     /// <summary>
     /// Gets the normalized method name.
@@ -136,24 +142,18 @@ internal partial class MethodModel
         builder.Append(model.Type.CppTypeName.ToValidCSharpName());
         builder.Append("_");
         builder.Append(GetInvokeName());
+        if (Type is MethodModelType.IMPLICIT or MethodModelType.EXPLICIT)
+        {
+            builder.Append('_');
+            builder.Append(ReturnType.CSharpPInvokeType.ToCode().ToValidCSharpName());
+        }
+
         foreach (var parameterModel in Parameters)
         {
             builder.Append('_');
-            builder.Append(NormalizeInteropTypeName(parameterModel.Type.CppTypeName).ToValidCSharpName());
+            builder.Append(parameterModel.Type.CSharpPInvokeType.ToCode().ToValidCSharpName());
         }
 
         return builder.ToString();
     }
-
-    private static string NormalizeInteropTypeName(string cppTypeName)
-    {
-        ArgumentNullException.ThrowIfNull(cppTypeName);
-
-        return ConstKeywordRegex()
-            .Replace(cppTypeName, "")
-            .Trim();
-    }
-
-    [System.Text.RegularExpressions.GeneratedRegex(@"\bconst\b")]
-    private static partial System.Text.RegularExpressions.Regex ConstKeywordRegex();
 }

@@ -157,8 +157,8 @@ internal sealed class AddTest
             .ToArray();
 
         await Assert.That(methods).IsEquivalentTo([
-            (Implicit: MethodModelType.IMPLICIT, "operator bool"),
-            (Explicit: MethodModelType.EXPLICIT, "operator int"),
+            (Implicit: MethodModelType.IMPLICIT, "Implicit"),
+            (Explicit: MethodModelType.EXPLICIT, "Explicit"),
         ]);
     }
 
@@ -226,6 +226,77 @@ internal sealed class AddTest
 
         await Assert.That(methods).HasSingleItem();
         await Assert.That(methods.Single().IsConst).IsFalse();
+    }
+
+    /// <summary>
+    /// 验证左值引用、右值引用和指针参数在 PInvoke 签名一致时会折叠为一个方法。
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_collapse_pointer_and_reference_overloads_when_pinvoke_signature_matches_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Geom_Surface
+            {
+            };
+
+            struct Value
+            {
+                void Attach(Geom_Surface* value);
+                void Attach(Geom_Surface& value);
+                void Attach(Geom_Surface&& value);
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Value");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var methods = manager.RecordModels.Single(static m => m.Type.CppTypeName == "Value").MethodModels
+            .Where(static m => m.MethodName == "Attach")
+            .ToArray();
+
+        await Assert.That(methods).HasSingleItem();
+        await Assert.That(methods.Single().Parameters.Single().Type.CSharpPInvokeType.ToCode())
+            .IsEqualTo("Geom_Surface*");
+    }
+
+    /// <summary>
+    /// 验证赋值类操作符会标记为返回自身以匹配 pinvoke 包装。
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_mark_assignment_operator_as_return_self_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Value
+            {
+                Value& operator+=(const Value& other);
+                Value& operator-=(const Value& other);
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Value");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var methods = manager.RecordModels.Single().MethodModels
+            .Where(static m => m.Type == MethodModelType.OPERATOR)
+            .OrderBy(static m => m.MethodName)
+            .ToArray();
+
+        await Assert.That(methods.Select(static m => m.MethodName))
+            .IsEquivalentTo(["+=", "-=",]);
+        await Assert.That(methods.All(static m => m.ReturnType.CppTypeName == "Value &")).IsTrue();
+        await Assert.That(methods.All(static m => m.ReturnSelf)).IsTrue();
     }
 
     private static RecordModelManager CreateManager()

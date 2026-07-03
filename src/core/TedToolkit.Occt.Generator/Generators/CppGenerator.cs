@@ -54,8 +54,8 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
                         break;
 
                     case MethodModelType.IMPLICIT:
-
                     case MethodModelType.EXPLICIT:
+                        GenerateConversionMethod(ref builder, recordDeclMethodModel, recordDecl);
                         break;
 
                     default:
@@ -145,6 +145,50 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         builder.AppendLine("();");
     }
 
+    private static void GenerateConversionMethod(
+        ref Utf16ValueStringBuilder builder,
+        MethodModel methodModel,
+        RecordModel recordModel)
+    {
+        if (methodModel.IsConst)
+        {
+            builder.Append("const ");
+        }
+
+        builder.Append(recordModel.Type.CppTypeName);
+        builder.Append(" & self");
+
+        var hasReference = false;
+        if (!methodModel.IsReturnVoid)
+        {
+            builder.Append(", ");
+
+            var name = methodModel.ReturnType.CppTypeName.Trim();
+            hasReference = name.EndsWith('&');
+            if (hasReference)
+            {
+                name = name[..^2] + '*';
+            }
+
+            builder.Append(name);
+            builder.Append(" * const result");
+        }
+
+        builder.AppendLine("), {");
+        if (!methodModel.IsReturnVoid)
+        {
+            builder.Append(hasReference ? "\t*result = &" : "\t*result = ");
+        }
+        else
+        {
+            builder.Append("\t");
+        }
+
+        builder.Append("self.operator ");
+        builder.Append(methodModel.ReturnType.CppTypeName.Trim());
+        builder.AppendLine("();");
+    }
+
     private void GenerateNormalMethod(ref Utf16ValueStringBuilder builder, MethodModel methodModel,
         RecordModel recordModel, bool parentheses)
     {
@@ -174,7 +218,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         }
 
         var hasReference = false;
-        if (!methodModel.IsReturnVoid)
+        if (!methodModel.IsReturnVoid && !methodModel.ReturnSelf)
         {
             if (started)
             {
@@ -196,7 +240,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
 
         if (methodModel.IsStatic)
         {
-            builder.Append(methodModel.IsReturnVoid ? "\t" : "\t*result = ");
+            builder.Append(methodModel.IsReturnVoid || methodModel.ReturnSelf ? "\t" : "\t*result = ");
             if (hasReference)
             {
                 builder.Append("&");
@@ -214,7 +258,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
             }
             else
             {
-                builder.Append(methodModel.IsReturnVoid ? "\t" : "\t*result = ");
+                builder.Append(methodModel.IsReturnVoid || methodModel.ReturnSelf ? "\t" : "\t*result = ");
             }
 
             if (!parentheses && methodModel.Parameters.Count is 0)

@@ -17,6 +17,7 @@ using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Services;
 
@@ -151,6 +152,7 @@ internal sealed class RecordModelManager(
             DescriptionItems = commentProjection.DescriptionItems,
             ReturnTypeDescriptionItems = commentProjection.ReturnTypeDescriptionItems,
             ReturnType = ToModel(method.ReturnType),
+            ReturnSelf = IsCompoundAssignmentOperator(method),
             MethodName = GetMethodName(method),
             Type = GetMethodType(method),
             Parameters = method.Parameters.Select(p => ToModel(p,
@@ -182,6 +184,8 @@ internal sealed class RecordModelManager(
         {
             MethodModelType.NEW => "New",
             MethodModelType.DELETE => "Delete",
+            MethodModelType.IMPLICIT => "Implicit",
+            MethodModelType.EXPLICIT => "Explicit",
             MethodModelType.OPERATOR => method.OverloadedOperator switch
             {
                 CX_OverloadedOperatorKind.CX_OO_Invalid => "unknown",
@@ -237,12 +241,32 @@ internal sealed class RecordModelManager(
 
     private static string GetMethodSignatureKey(CXXMethodDecl method)
     {
+        var methodType = GetMethodType(method);
+
         return string.Join("|",
         [
-            GetMethodType(method).ToString(),
+            methodType.ToString(),
             GetMethodName(method),
-            .. method.Parameters.Select(static p => p.Type.ToPInvokeDataType().ToCode()),
+            .. GetConversionReturnTypeSignatureParts(method, methodType),
+            .. method.Parameters.Select(static p => GetMethodSignatureTypeCode(p.Type)),
         ]);
+    }
+
+    private static string GetMethodSignatureTypeCode(ClangSharp.Type type)
+    {
+        return type.ToPInvokeDataType().ToCode();
+    }
+
+    private static IEnumerable<string> GetConversionReturnTypeSignatureParts(
+        CXXMethodDecl method,
+        MethodModelType methodType)
+    {
+        if (methodType is not (MethodModelType.IMPLICIT or MethodModelType.EXPLICIT))
+        {
+            yield break;
+        }
+
+        yield return GetMethodSignatureTypeCode(method.ReturnType);
     }
 
     private static int GetConstQualificationWeight(CXXMethodDecl method)
@@ -419,6 +443,29 @@ internal sealed class RecordModelManager(
             CX_OverloadedOperatorKind.CX_OO_Delete => true,
             CX_OverloadedOperatorKind.CX_OO_Array_New => true,
             CX_OverloadedOperatorKind.CX_OO_Array_Delete => true,
+            _ => false,
+        };
+    }
+
+    private static bool IsCompoundAssignmentOperator(CXXMethodDecl method)
+    {
+        if (!method.IsOverloadedOperator)
+        {
+            return false;
+        }
+
+        return method.OverloadedOperator switch
+        {
+            CX_OverloadedOperatorKind.CX_OO_PlusEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_MinusEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_StarEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_SlashEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_PercentEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_CaretEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_AmpEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_PipeEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_LessLessEqual => true,
+            CX_OverloadedOperatorKind.CX_OO_GreaterGreaterEqual => true,
             _ => false,
         };
     }

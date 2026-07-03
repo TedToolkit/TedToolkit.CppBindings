@@ -16,11 +16,11 @@ namespace TedToolkit.Occt.Generator.Tests.Models.MethodModelTests;
 internal sealed class GetMethodInteropNameTest
 {
     /// <summary>
-    /// Verifies interop names drop const qualifiers from parameter type segments.
+    /// Verifies interop names are derived from PInvoke data types.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
-    public async Task Should_strip_const_qualifiers_from_parameter_type_names_Async()
+    public async Task Should_use_pinvoke_type_code_for_parameter_type_names_Async()
     {
         var recordType = CreateType("gp_Pnt");
         var method = new MethodModel()
@@ -39,13 +39,13 @@ internal sealed class GetMethodInteropNameTest
                 {
                     DescriptionItems = [],
                     Name = "surface",
-                    Type = CreateType("const Geom_Surface&"),
+                    Type = CreateType("const Geom_Surface&", new DataType("Geom_Surface").Pointer),
                 },
                 new ParameterModel()
                 {
                     DescriptionItems = [],
                     Name = "text",
-                    Type = CreateType("char const *"),
+                    Type = CreateType("char const *", DataType.Sbyte.Pointer),
                 },
             ],
         };
@@ -63,15 +63,64 @@ internal sealed class GetMethodInteropNameTest
         };
 
         await Assert.That(method.GetMethodInteropName(record))
-            .IsEqualTo("gp_Pnt_SetCoord_Geom_Surface_char");
+            .IsEqualTo("gp_Pnt_SetCoord_Geom_Surface_sbyte");
     }
 
-    private static TypeModel CreateType(string cppTypeName)
+    /// <summary>
+    /// Verifies conversion wrappers include the return type in their interop name.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_use_return_type_code_for_conversion_interop_names_Async()
+    {
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            Base = null,
+            IsAbstract = false,
+            SourceHeader = "Value.hxx",
+            Type = CreateType("Value", new DataType("Value")),
+            Size = 0,
+            FieldModels = [],
+            MethodModels = [],
+        };
+
+        var implicitMethod = new MethodModel()
+        {
+            DescriptionItems = [],
+            ReturnTypeDescriptionItems = [],
+            NoExceptions = true,
+            IsConst = true,
+            IsStatic = false,
+            ReturnType = CreateType("bool", DataType.Bool),
+            MethodName = "Implicit",
+            Type = MethodModelType.IMPLICIT,
+            Parameters = [],
+        };
+
+        var explicitMethod = new MethodModel()
+        {
+            DescriptionItems = [],
+            ReturnTypeDescriptionItems = [],
+            NoExceptions = true,
+            IsConst = true,
+            IsStatic = false,
+            ReturnType = CreateType("int", DataType.Int),
+            MethodName = "Explicit",
+            Type = MethodModelType.EXPLICIT,
+            Parameters = [],
+        };
+
+        await Assert.That(implicitMethod.GetMethodInteropName(record)).IsEqualTo("Value_Implicit_bool");
+        await Assert.That(explicitMethod.GetMethodInteropName(record)).IsEqualTo("Value_Explicit_int");
+    }
+
+    private static TypeModel CreateType(string cppTypeName, DataType? csharpPInvokeType = null)
     {
         return new()
         {
             CppTypeName = cppTypeName,
-            CSharpPInvokeType = DataType.Void,
+            CSharpPInvokeType = csharpPInvokeType ?? DataType.Void,
             CSharpPublicType = DataType.Void,
         };
     }
