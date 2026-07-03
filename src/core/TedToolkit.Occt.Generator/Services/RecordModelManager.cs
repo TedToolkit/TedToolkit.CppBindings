@@ -124,7 +124,7 @@ internal sealed class RecordModelManager(
                 .Select(Add)
                 .SingleOrDefault()
             : null;
-        result.RequiresNew = result.Base is not null;
+        result.RequiresNew = result.Base is not null || HasVirtualMethods(record);
         result.IsStandardTransient = result.Type.CppTypeName is "Standard_Transient"
                                      || result.Base?.IsStandardTransient is true;
 
@@ -473,6 +473,11 @@ internal sealed class RecordModelManager(
             CX_OverloadedOperatorKind.CX_OO_GreaterGreaterEqual => true,
             _ => false,
         };
+    }
+
+    private static bool HasVirtualMethods(CXXRecordDecl record)
+    {
+        return record.Methods.Any(static method => method.IsVirtual);
     }
 
     private static IEnumerable<CXXRecordDecl> GetAllDecls(CXXRecordDecl record)
