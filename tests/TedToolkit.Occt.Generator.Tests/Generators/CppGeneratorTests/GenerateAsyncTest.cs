@@ -50,6 +50,65 @@ internal sealed class GenerateAsyncTest
     }
 
     /// <summary>
+    /// Verifies the generated translation unit includes headers required by referenced types, including template arguments.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_include_referenced_type_headers_Async()
+    {
+        var elementType = new TypeModel()
+        {
+            CppTypeName = "gp_Pnt2d",
+            CSharpPInvokeType = new("gp_Pnt2d"),
+            CSharpPublicType = new("gp_Pnt2d"),
+            RequiredHeaders = ["gp_Pnt2d.hxx",],
+        };
+
+        var generator = new CppGenerator(
+            new RecordModel()
+            {
+                DescriptionItems = [],
+                Base = null,
+                IsAbstract = false,
+                IsStandardTransient = false,
+                RequiresNew = false,
+                SourceHeader = "NCollection_Array1.hxx",
+                Size = 0,
+                Type = new()
+                {
+                    CppTypeName = "NCollection_Array1<gp_Pnt2d>",
+                    CSharpPInvokeType = new("NCollection_Array1_gp_Pnt2d"),
+                    CSharpPublicType = new("NCollection_Array1_gp_Pnt2d"),
+                    RequiredHeaders = ["gp_Pnt2d.hxx",],
+                },
+                FieldModels = [],
+                MethodModels =
+                [
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = true,
+                        IsConst = true,
+                        IsStatic = false,
+                        ReturnType = elementType,
+                        ReturnSelf = false,
+                        MethodName = "Value",
+                        Type = MethodModelType.NORMAL,
+                        Parameters = [],
+                    },
+                ],
+            });
+
+        var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("#include <NCollection_Array1.hxx>");
+        await Assert.That(code).Contains("#include <gp_Pnt2d.hxx>");
+        await Assert.That(code.IndexOf("#include <NCollection_Array1.hxx>", StringComparison.Ordinal))
+            .IsLessThan(code.IndexOf("#include <gp_Pnt2d.hxx>", StringComparison.Ordinal));
+    }
+
+    /// <summary>
     /// Verifies compound-assignment wrappers skip the synthetic result out parameter and emit direct operator calls.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>

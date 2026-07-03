@@ -24,9 +24,13 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         try
         {
             builder.AppendLine("#include \"csharp_interop.h\"");
-            builder.Append("#include <");
-            builder.Append(recordDecl.SourceHeader);
-            builder.AppendLine(">");
+            foreach (var header in GetRequiredHeaders(recordDecl))
+            {
+                builder.Append("#include <");
+                builder.Append(header);
+                builder.AppendLine(">");
+            }
+
             builder.AppendLine();
 
             foreach (var recordDeclMethodModel in recordDecl.MethodModels)
@@ -71,6 +75,65 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         finally
         {
             builder.Dispose();
+        }
+    }
+
+    private static IEnumerable<string> GetRequiredHeaders(RecordModel recordModel)
+    {
+        var seen = new HashSet<string>(StringComparer.Ordinal);
+
+        if (seen.Add(recordModel.SourceHeader))
+        {
+            yield return recordModel.SourceHeader;
+        }
+
+        foreach (var header in EnumerateRequiredHeaders(recordModel.Type))
+        {
+            if (seen.Add(header))
+            {
+                yield return header;
+            }
+        }
+
+        foreach (var fieldModel in recordModel.FieldModels)
+        {
+            foreach (var header in EnumerateRequiredHeaders(fieldModel.Type))
+            {
+                if (seen.Add(header))
+                {
+                    yield return header;
+                }
+            }
+        }
+
+        foreach (var methodModel in recordModel.MethodModels)
+        {
+            foreach (var header in EnumerateRequiredHeaders(methodModel.ReturnType))
+            {
+                if (seen.Add(header))
+                {
+                    yield return header;
+                }
+            }
+
+            foreach (var parameterModel in methodModel.Parameters)
+            {
+                foreach (var header in EnumerateRequiredHeaders(parameterModel.Type))
+                {
+                    if (seen.Add(header))
+                    {
+                        yield return header;
+                    }
+                }
+            }
+        }
+    }
+
+    private static IEnumerable<string> EnumerateRequiredHeaders(TypeModel typeModel)
+    {
+        foreach (var header in typeModel.RequiredHeaders)
+        {
+            yield return header;
         }
     }
 

@@ -198,6 +198,63 @@ internal sealed class AddTest
     }
 
     /// <summary>
+    /// Verifies template specialization field types collect both the template and template-argument headers.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_collect_template_argument_headers_for_field_types_Async()
+    {
+        var folder = Directory.CreateTempSubdirectory();
+        try
+        {
+            var pointHeaderPath = Path.Combine(folder.FullName, "gp_Pnt2d.hxx");
+            var arrayHeaderPath = Path.Combine(folder.FullName, "NCollection_Array1.hxx");
+            var sourcePath = Path.Combine(folder.FullName, "test.cpp");
+
+            await File.WriteAllTextAsync(pointHeaderPath, """
+                struct gp_Pnt2d
+                {
+                };
+                """).ConfigureAwait(false);
+            await File.WriteAllTextAsync(arrayHeaderPath, """
+                template <typename T>
+                struct NCollection_Array1
+                {
+                    T Value() const;
+                };
+                """).ConfigureAwait(false);
+            await File.WriteAllTextAsync(sourcePath, """
+                #include "gp_Pnt2d.hxx"
+                #include "NCollection_Array1.hxx"
+
+                struct Holder
+                {
+                    NCollection_Array1<gp_Pnt2d> Field;
+                };
+                """).ConfigureAwait(false);
+
+            using var translationUnit =
+                ParseTranslationUnit(await File.ReadAllTextAsync(sourcePath).ConfigureAwait(false), sourcePath);
+            var record = translationUnit.TranslationUnitDecl.CursorChildren
+                .OfType<CXXRecordDecl>()
+                .Single(static r => r.Name == "Holder");
+
+            var manager = CreateManager();
+
+            manager.Add(record);
+
+            var requiredHeaders = manager.RecordModels.Single(static m => m.Type.CppTypeName == "Holder")
+                .FieldModels.Single()
+                .Type.RequiredHeaders;
+            await Assert.That(requiredHeaders).IsEquivalentTo(["NCollection_Array1.hxx", "gp_Pnt2d.hxx",]);
+        }
+        finally
+        {
+            folder.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Verifies non-const methods win when const and non-const overloads collapse to the same signature.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>

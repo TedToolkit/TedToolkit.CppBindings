@@ -5,6 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 
@@ -88,8 +89,10 @@ internal sealed class RecordModelManager(
         {
             DescriptionItems = commentProjection.DescriptionItems,
             SourceHeader = Path.GetFileName(file.Name.CString),
-            Type = resolver.Resolve(record.TypeForDecl)
-                .Type,
+            Type = ApplyRequiredHeaders(
+                resolver.Resolve(record.TypeForDecl)
+                    .Type,
+                record.TypeForDecl),
             Size = size,
             IsAbstract = record.IsAbstract,
             RequiresNew = false,
@@ -145,7 +148,136 @@ internal sealed class RecordModelManager(
             Add(result.Enum);
         }
 
-        return result.Type;
+        return ApplyRequiredHeaders(result.Type, type);
+    }
+
+    private static TypeModel ApplyRequiredHeaders(TypeModel typeModel, ClangSharp.Type type)
+    {
+        typeModel.RequiredHeaders = GetRequiredHeaders(type);
+        return typeModel;
+    }
+
+    private static IReadOnlyList<string> GetRequiredHeaders(ClangSharp.Type type)
+    {
+        var headers = new HashSet<string>(StringComparer.Ordinal);
+        var visitedTypes = new HashSet<CXType>();
+        var visitedDecls = new HashSet<CXCursor>();
+
+        CollectRequiredHeaders(type, headers, visitedTypes, visitedDecls);
+
+        return [.. headers];
+    }
+
+    private static void CollectRequiredHeaders(
+        ClangSharp.Type? type,
+        HashSet<string> headers,
+        HashSet<CXType> visitedTypes,
+        HashSet<CXCursor> visitedDecls)
+    {
+        if (type is null)
+        {
+            return;
+        }
+
+        type = type.CanonicalType;
+        if (!visitedTypes.Add(type.Handle))
+        {
+            return;
+        }
+
+        switch (type)
+        {
+            case PointerType pointerType:
+                CollectRequiredHeaders(pointerType.PointeeType, headers, visitedTypes, visitedDecls);
+                return;
+
+            case LValueReferenceType lValueReferenceType:
+                CollectRequiredHeaders(lValueReferenceType.PointeeType, headers, visitedTypes, visitedDecls);
+                return;
+
+            case RValueReferenceType rValueReferenceType:
+                CollectRequiredHeaders(rValueReferenceType.PointeeType, headers, visitedTypes, visitedDecls);
+                return;
+
+            case TemplateSpecializationType templateSpecializationType:
+                foreach (var templateArgument in templateSpecializationType.Args)
+                {
+                    CollectRequiredHeaders(templateArgument, headers, visitedTypes, visitedDecls);
+                }
+
+                break;
+        }
+
+        if (TryGetEnumDecl(type, out var enumDecl))
+        {
+            AddHeader(enumDecl, headers, visitedDecls);
+            return;
+        }
+
+        if (type.AsCXXRecordDecl?.Definition is { } recordDecl)
+        {
+            AddHeader(recordDecl, headers, visitedDecls);
+
+            if (recordDecl is ClassTemplateSpecializationDecl classTemplateSpecializationDecl)
+            {
+                foreach (var templateArgument in classTemplateSpecializationDecl.TemplateArgs)
+                {
+                    CollectRequiredHeaders(templateArgument, headers, visitedTypes, visitedDecls);
+                }
+            }
+        }
+    }
+
+    private static void CollectRequiredHeaders(
+        TemplateArgument templateArgument,
+        HashSet<string> headers,
+        HashSet<CXType> visitedTypes,
+        HashSet<CXCursor> visitedDecls)
+    {
+        switch (templateArgument.Kind)
+        {
+            case CXTemplateArgumentKind.CXTemplateArgumentKind_Type:
+                CollectRequiredHeaders(templateArgument.AsType, headers, visitedTypes, visitedDecls);
+                break;
+
+            case CXTemplateArgumentKind.CXTemplateArgumentKind_Declaration:
+                AddHeader(templateArgument.AsDecl, headers, visitedDecls);
+                break;
+
+            case CXTemplateArgumentKind.CXTemplateArgumentKind_NullPtr:
+                CollectRequiredHeaders(templateArgument.NullPtrType, headers, visitedTypes, visitedDecls);
+                break;
+
+            default:
+                break;
+        }
+    }
+
+    private static void AddHeader(Decl decl, HashSet<string> headers, HashSet<CXCursor> visitedDecls)
+    {
+        if (!visitedDecls.Add(decl.Handle))
+        {
+            return;
+        }
+
+        decl.Location.GetFileLocation(out var file, out _, out _, out _);
+        if (string.IsNullOrEmpty(file.Name.CString))
+        {
+            return;
+        }
+
+        headers.Add(Path.GetFileName(file.Name.CString));
+    }
+
+    private static bool TryGetEnumDecl(ClangSharp.Type type, [NotNullWhen(true)] out EnumDecl? enumDecl)
+    {
+        enumDecl = type switch
+        {
+            EnumType enumType => enumType.Decl,
+            _ => type.AsTagDecl as EnumDecl,
+        };
+
+        return enumDecl is not null;
     }
 
     private MethodModel ToModel(CXXMethodDecl method)

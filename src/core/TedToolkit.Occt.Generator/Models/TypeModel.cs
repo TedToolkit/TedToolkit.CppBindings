@@ -33,6 +33,11 @@ internal class TypeModel
     public required DataType CSharpPublicType { get; init; }
 
     /// <summary>
+    /// Gets the additional native headers required to use the projected C++ type.
+    /// </summary>
+    public IReadOnlyList<string> RequiredHeaders { get; set; } = [];
+
+    /// <summary>
     /// Gets the generated public C# type name.
     /// </summary>
     public string CSharpTypeName
