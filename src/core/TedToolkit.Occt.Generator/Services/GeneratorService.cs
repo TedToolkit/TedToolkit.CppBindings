@@ -28,12 +28,6 @@ internal sealed class GeneratorService(
     }
 
     /// <inheritdoc/>
-    public IGenerator GenerateCpp(RecordModel record)
-    {
-        return new CppGenerator(record);
-    }
-
-    /// <inheritdoc/>
     public IGenerator GenerateCSharp(EnumModel enumModel)
     {
         return new EnumGenerator(enumModel);

@@ -28,6 +28,12 @@
                       LogicalName="TedToolkit.Occt.Generator.Assets.cpp.csharp_interop.h"/>
     <EmbeddedResource Include="..\TedToolkit.Occt.Cpp\csharp_interop.cpp"
                       LogicalName="TedToolkit.Occt.Generator.Assets.cpp.csharp_interop.cpp"/>
+    <EmbeddedResource Include="..\TedToolkit.Occt.Cpp\abi-v1\CMakeLists.txt"
+                      LogicalName="TedToolkit.Occt.Generator.Assets.cpp.abi-v1.CMakeLists.txt"/>
+    <EmbeddedResource Include="..\TedToolkit.Occt.Cpp\abi-v1\ted_toolkit_occt_v1.cpp"
+                      LogicalName="TedToolkit.Occt.Generator.Assets.cpp.abi-v1.ted_toolkit_occt_v1.cpp"/>
+    <EmbeddedResource Include="..\TedToolkit.Occt.Cpp\abi-v1\ted_toolkit_occt_v1_test.h"
+                      LogicalName="TedToolkit.Occt.Generator.Assets.cpp.abi-v1.ted_toolkit_occt_v1_test.h"/>
   </ItemGroup>
 
 </Project>

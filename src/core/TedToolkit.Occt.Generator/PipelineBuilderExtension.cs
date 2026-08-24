@@ -56,11 +56,7 @@ public static class PipelineBuilderExtension
                     sp.GetRequiredService<IGeneratorService>()))
             .AddModule<GenerateCppModule>(sp =>
                 new GenerateCppModule(
-                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>(),
-                    sp.GetRequiredService<IRecordModelManager>(),
-                    sp.GetRequiredService<IGeneratorService>(),
-                    sp.GetRequiredService<IVcpkgDefaultTripletResolver>(),
-                    sp.GetRequiredService<IVcpkgEnvironment>()))
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>()))
             .AddSingleton(
                 Microsoft.Extensions.Options.Options.Create(options));
 

@@ -2,7 +2,8 @@
 
 `TedToolkit.Occt.Runtime` 提供生成后的 OCCT C# 类型所依赖的基础运行时契约，包括原生句柄访问、所有权管理、原生类型标记和 C++ 异常转换。
 
-> ⚠️ Runtime 不是 OCCT 的独立托管实现。它必须与生成的 C# 代码以及名称匹配的原生 `ted_toolkit_occt` 库一起使用；当前仓库尚未形成经过端到端验证的发布包。
+> ⚠️ Runtime 不是 OCCT 的独立托管实现。ABI-major-1 已有独立边界证明，但当前 Runtime
+> 尚未接入最终生成的 imports、公共调用体和生产生命周期抽象，因此仍不是可发布绑定。
 
 ## 能力
 
@@ -123,11 +124,28 @@ Runtime 只负责共享机制。具体 OCCT 类型、导出函数名称、P/Invo
 
 ## 当前实现边界
 
-- Generator 尚未生成完整 P/Invoke 调用层，因此 Runtime 与生成原生库还没有端到端接通。
+- Generator 尚未生成完整 P/Invoke 调用层，因此 Runtime 与版本化原生库还没有生产级端到端接通。
 - 手写 `gp_Pnt2d` 是验证原型，其 DllImport 库名仍为占位值 `Name`，不应视为可用绑定。
 - `Handle<T>` 依赖生成类型实现 `IStandard_Transient.Delete()`；没有对应生成代码时不能独立使用。
 - Runtime 不负责定位或下载 OCCT，也不负责生成原生库。
 - 当前没有证据表明该包已经发布到可消费的 NuGet 源。
+
+## ABI-major-1 managed boundary proof
+
+`AbiV1ManagedBoundaryTests` is a deliberately minimal fixture rather than Runtime production code.
+It loads the exact `ted_toolkit_occt_abi_v1` artifact built by the C consumer preset and:
+
+- resolves only `ted_occt_v1_abi_version` until the required major is accepted;
+- compares sequential blittable managed carriers with sizes and offsets queried from native code;
+- treats every nonzero error kind, including unknown reserved values, as failure;
+- invokes representative point and UTF-8 exports using cdecl; and
+- clears native-owned diagnostics and byte buffers through the allocating library, twice on the
+  same authoritative slot to prove the documented idempotence boundary.
+
+The fixture's layout and fault-query exports exist only when `TED_OCCT_V1_BUILD_TESTING` is enabled.
+They are not production imports or an alternative ABI authority. See
+[C interoperability ABI major 1](../../../docs/interop-abi-v1.md) for commands and the supported
+Windows x64 / OCCT 8.0.1 matrix.
 
 ## 开发与验证
 
@@ -149,3 +167,4 @@ Runtime 测试依赖 `Build/Modules/01_Perpare/GenerateCodeModule.cs` 预先生�
 
 - [仓库概览](../../../README.md)
 - [Generator 原理](../TedToolkit.Occt.Generator/README.md)
+- [C interoperability ABI major 1](../../../docs/interop-abi-v1.md)

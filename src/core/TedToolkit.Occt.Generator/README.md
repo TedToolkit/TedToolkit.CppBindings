@@ -1,6 +1,7 @@
 # TedToolkit.Occt.Generator
 
-`TedToolkit.Occt.Generator` 将 vcpkg 安装的 OCCT C++ 声明解析成内部模型，并为用户选择的类型生成 C++ ABI 包装代码与 C# 类型代码。
+`TedToolkit.Occt.Generator` parses selected OCCT C++ declarations from vcpkg into managed projection
+models and generates C# type shapes plus the canonical ABI-major-1 C header.
 
 > ⚠️ 当前项目面向生成器开发和验证，尚不是已经验证发布的 NuGet 消费入口。
 
@@ -70,7 +71,7 @@ ParseModule ───────────────────┤        
 | `CleanGenerationOutputModule` | Removes previous C#, C++, CMake build, and binary output. |
 | `ParseModule` | Parses only selected public headers, validates diagnostics and every requested definition, then commits the complete target set to the shared model. |
 | `GenerateCSharpModule` | Writes `.g.cs` files for records and enums. |
-| `GenerateCppModule` | Generates C++ wrappers, copies the exception bridge declaration and implementation, creates the CMake project, and compiles the native library. |
+| `GenerateCppModule` | Materializes the canonical `ted_toolkit_occt_v1.h` plus the versioned `ted_toolkit_occt_abi_v1` CMake adapter project. |
 
 If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnostics fail Parse; Warning diagnostics remain non-fatal and are logged literally. Parse resolves every requested record definition before adding any target to the shared model, so an unresolved mixed target set cannot expose a partial model.
 
@@ -125,33 +126,22 @@ Clang C++ 类型
 
 字段优先使用 `CSharpPInvokeType` 保持布局；方法参数和返回值面向调用方时使用 `CSharpPublicType`。
 
-## 4. 生成 C++ ABI 包装
+## 4. Generate the canonical C ABI contract
 
-每个记录生成一个 `.cpp`。生成代码：
+The production pipeline no longer invokes the legacy record-by-record `CppGenerator`. Instead,
+`GenerateCppModule` materializes `ted_toolkit_occt_v1.h` from the approved versioned semantic model
+and copies the matching C++ adapter and CMake project.
+Every operation must have explicit source, C transport, C++ adapter, managed transport, and public
+managed projections. Incomplete operations fail closed before naming or emission.
 
-- 包含记录本身及签名依赖的头文件；
-- 把构造函数、成员函数、转换和部分运算符变成 `extern "C"` 导出函数；
-- 把重载签名编码进导出名称；
-- 使用显式 `self` 参数表示 C++ 实例；
-- 使用输出指针承载非 void 返回值；
-- 对右值引用调用参数使用 `std::move`；
-- 根据类型语义生成构造和释放操作。
+The header is order-independent, uses stable semantic SHA-256 operation identities, contains only
+the approved C11 transport vocabulary, and compiles as C11 and C++ without OCCT headers. See
+[C interoperability ABI major 1](../../../docs/interop-abi-v1.md) for the current delivery state,
+supported matrix, ownership rules, and boundaries.
 
-可能抛异常的方法使用 `CSHARP_WRAPPER_TRY`。嵌入的 `csharp_interop.h` 捕获 `Standard_Failure`、`std::exception` 和未知异常，并返回只包含堆分配 UTF-8 字符串的 `interop_error`。`noexcept` 方法使用不返回错误结构的 `CSHARP_WRAPPER`。
-
-The header declares `free_error`, while `csharp_interop.cpp` provides its only exported definition. This keeps the bridge linkable when multiple generated wrappers include the common header and ensures error payloads are released by the library that allocated them.
-
-所有生成源文件被写入临时 CMake 工程：
-
-```cmake
-find_package(OpenCASCADE CONFIG REQUIRED)
-target_include_directories(... ${OpenCASCADE_INCLUDE_DIR})
-target_link_libraries(... ${OpenCASCADE_LIBRARIES})
-```
-
-CMake 使用 vcpkg toolchain 和选定 triplet，最终目标库名为 `ted_toolkit_occt`。
-
-The transient project discovers `.cpp`, `.cxx`, and `.cc` files only after source generation completes, removes duplicates, and writes them to `CMakeLists.txt` in ordinal order. MSVC and MSVC-compatible frontends receive `/EHsc`. Configure and build exit codes are checked separately; cancellation remains cancellation, and a successful command sequence is rejected unless it produces a new expected native artifact.
+The old `CppGenerator` and `csharp_interop` fixtures remain only as legacy characterization. They
+are not reachable from the active generation pipeline and do not define ABI major 1. The root
+`ted-occt-abi-v1-consumer` presets build the versioned project and run its real C11 boundary proof.
 
 ## 5. 生成 C# 类型
 
@@ -177,19 +167,19 @@ output/generated/
 ├── csharp/
 │   ├── <Type>.g.cs
 │   └── <Enum>.g.cs
-└── cpp/ted_toolkit_occt/
-    ├── src/
-    │   ├── csharp_interop.h
-    │   ├── csharp_interop.cpp
-    │   ├── CMakeLists.txt
-    │   └── <Type>.cpp
-    ├── build/
-    └── bin/
+└── cpp/
+    ├── CMakeLists.txt
+    ├── ted_toolkit_occt_v1.h
+    ├── ted_toolkit_occt_v1.cpp
+    └── ted_toolkit_occt_v1_test.h
 ```
 
 ## Known limitations
 
-- Recursive type discovery may still enter STL and compiler implementation types that are not yet modeled as boundary adapters.
+- Recursive managed-model discovery may still encounter STL and compiler implementation types, but
+  those types cannot enter the canonical C ABI without a complete approved mapping.
+- The minimal ABI-major-1 P/Invoke fixture is boundary proof only; final generated imports and
+  public invocation bodies remain incomplete.
 - The C# record-generation condition still needs correction; non-abstract records currently do not generate structs.
 - The P/Invoke invocation layer is incomplete.
 - The repository has no vcpkg manifest, so builds depend on a machine-level OCCT installation.

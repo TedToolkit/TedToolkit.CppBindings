@@ -13,15 +13,14 @@ using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
 
+using TedToolkit.Occt.Generator.Generators;
 using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Options;
-using TedToolkit.Occt.Generator.Services.Interfaces;
-using TedToolkit.RoslynHelper.Generators;
 
 namespace TedToolkit.Occt.Generator.Modules;
 
 /// <summary>
-/// Generates the C++ and C# source files for each parsed record.
+/// Generates the canonical C interoperability declaration for ABI major 1.
 /// </summary>
 [DependsOn<CleanGenerationOutputModule>]
 [DependsOn<ParseModule>]
@@ -29,82 +28,88 @@ public sealed class GenerateCppModule : Module<bool>
 {
     private readonly IOptions<GenerationOptions> _generationOptions;
 
-    private readonly IRecordModelManager _recordManager;
-
-    private readonly IGeneratorService _generatorService;
-
-    private readonly IVcpkgDefaultTripletResolver _defaultsResolver;
-
-    private readonly IVcpkgEnvironment _vcpkgEnvironment;
-
     /// <summary>
     /// Initializes a new instance of the <see cref="GenerateCppModule"/> class.
     /// </summary>
     /// <param name="generationOptions">The generation options.</param>
-    /// <param name="recordManager">The record queue manager.</param>
-    /// <param name="generatorService">The generator service.</param>
-    /// <param name="defaultsResolver">The default triplet resolver.</param>
-    /// <param name="vcpkgEnvironment">The vcpkg environment.</param>
-    internal GenerateCppModule(
-        IOptions<GenerationOptions> generationOptions,
-        IRecordModelManager recordManager,
-        IGeneratorService generatorService,
-        IVcpkgDefaultTripletResolver defaultsResolver,
-        IVcpkgEnvironment vcpkgEnvironment)
+    internal GenerateCppModule(IOptions<GenerationOptions> generationOptions)
     {
         _generationOptions = generationOptions;
-        _recordManager = recordManager;
-        _generatorService = generatorService;
-        _defaultsResolver = defaultsResolver;
-        _vcpkgEnvironment = vcpkgEnvironment;
     }
 
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var triplet = _generationOptions.Value.GetTriplet(_defaultsResolver);
-        var duplicateOutputNames = _recordManager.RecordModels
-            .GroupBy(static record => record.Type.CSharpTypeName, StringComparer.Ordinal)
-            .Where(static group => group.Count() > 1)
-            .Select(static group => group.Key)
-            .OrderBy(static name => name, StringComparer.Ordinal)
-            .ToArray();
-
-        if (duplicateOutputNames.Length > 0)
-        {
-            throw new InvalidOperationException(
-                $"Duplicate C++ output names detected: {string.Join(", ", duplicateOutputNames)}");
-        }
-
-        var compile = new CppCompileCoontext(_generationOptions.Value.CppFolder, "ted_toolkit_occt",
-            _generationOptions.Value.CppVersion);
-
-        var tasks = new List<Task>() { CopyCppInteropSourcesAsync(compile, cancellationToken), };
-
-        foreach (var recordManagerRecordModel in _recordManager.RecordModels)
-        {
-            tasks.Add(context.SubModule(
-                recordManagerRecordModel.Type.CppTypeName,
-                () => Task.WhenAll(
-                    GenerateCppAsync(compile, recordManagerRecordModel, cancellationToken))));
-        }
-
-        await Task.WhenAll(tasks).ConfigureAwait(false);
-
-        _ = await compile.BuildAsync(context.Shell, false, _vcpkgEnvironment.GetRoot(), triplet,
-                cancellationToken)
+        _ = await GenerateAbiProjectAsync(_generationOptions.Value.CppFolder, cancellationToken)
             .ConfigureAwait(false);
         return true;
     }
 
-    private async Task GenerateCppAsync(CppCompileCoontext compile, RecordModel record,
+    /// <summary>
+    /// Materializes the canonical ABI-major-1 header and its versioned native adapter project.
+    /// </summary>
+    /// <param name="outputDirectory">The native generation output directory.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The materialized native project directory.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="outputDirectory"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The approved conformance model or embedded project is incomplete.</exception>
+    public static async Task<DirectoryInfo> GenerateAbiProjectAsync(
+        DirectoryInfo outputDirectory,
+        CancellationToken cancellationToken = default)
+    {
+        ArgumentNullException.ThrowIfNull(outputDirectory);
+        _ = await GenerateAbiHeaderAsync(outputDirectory, cancellationToken).ConfigureAwait(false);
+        await Task.WhenAll(
+                CopyAbiProjectResourceAsync(outputDirectory, "CMakeLists.txt", cancellationToken),
+                CopyAbiProjectResourceAsync(outputDirectory, "ted_toolkit_occt_v1.cpp", cancellationToken),
+                CopyAbiProjectResourceAsync(outputDirectory, "ted_toolkit_occt_v1_test.h", cancellationToken))
+            .ConfigureAwait(false);
+        return outputDirectory;
+    }
+
+    /// <summary>
+    /// Materializes the canonical ABI-major-1 header without emitting legacy C++ wrapper sources.
+    /// </summary>
+    /// <param name="outputDirectory">The native generation output directory.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The generated canonical header file.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="outputDirectory"/> is null.</exception>
+    /// <exception cref="InvalidOperationException">The approved conformance model is incomplete.</exception>
+    internal static async Task<FileInfo> GenerateAbiHeaderAsync(
+        DirectoryInfo outputDirectory,
         CancellationToken cancellationToken)
     {
-        var codes = await _generatorService.GenerateCpp(record).GenerateAsync(cancellationToken).ConfigureAwait(false);
-        await compile
-            .AddSourceAsync(ZString.Concat(record.Type.CSharpTypeName, ".cpp"), codes, cancellationToken)
-            .ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(outputDirectory);
+        var generated = CAbiHeaderGenerator.Generate(AbiV1ConformanceModel.CreateOperations());
+        if (generated.Diagnostics.Count > 0)
+        {
+            throw new InvalidOperationException(string.Join(Environment.NewLine, generated.Diagnostics));
+        }
+
+        outputDirectory.Create();
+        var header = new FileInfo(Path.Combine(outputDirectory.FullName, "ted_toolkit_occt_v1.h"));
+        await File.WriteAllTextAsync(header.FullName, generated.Header, cancellationToken).ConfigureAwait(false);
+        return header;
+    }
+
+    private static async Task CopyAbiProjectResourceAsync(
+        DirectoryInfo outputDirectory,
+        string fileName,
+        CancellationToken cancellationToken)
+    {
+        var resourceName = ZString.Concat("TedToolkit.Occt.Generator.Assets.cpp.abi-v1.", fileName);
+        var sourceStream = typeof(GenerateCppModule).Assembly.GetManifestResourceStream(resourceName);
+        if (sourceStream is null)
+        {
+            throw new InvalidOperationException($"Embedded ABI-major-1 project resource '{resourceName}' is missing.");
+        }
+
+        await using var _ = sourceStream.ConfigureAwait(false);
+        using var reader = new StreamReader(sourceStream);
+        var source = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
+        var outputPath = Path.Combine(outputDirectory.FullName, fileName);
+        await File.WriteAllTextAsync(outputPath, source, cancellationToken).ConfigureAwait(false);
     }
 
     /// <summary>

@@ -23,13 +23,6 @@ internal interface IGeneratorService
     IGenerator GenerateCSharp(RecordModel record);
 
     /// <summary>
-    /// Creates a C++ generator for the specified record.
-    /// </summary>
-    /// <param name="record">The record declaration.</param>
-    /// <returns>The generator instance.</returns>
-    IGenerator GenerateCpp(RecordModel record);
-
-    /// <summary>
     /// Creates a C# generator for the specified enum.
     /// </summary>
     /// <param name="enumModel">The enum declaration.</param>

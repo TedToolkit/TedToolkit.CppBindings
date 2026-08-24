@@ -30,11 +30,11 @@ GenerationOptions / DeclOptions
               │
               ├───────────────┐
               ▼               ▼
-生成 C++ extern "C"       生成 C# 类型、字段、
-包装与异常边界             接口和公共 API 形状
+生成 ABI-major-1 C11       生成 C# 类型、字段、
+canonical header           接口和公共 API 形状
               │               │
               ▼               │
-CMake + vcpkg 编译原生 DLL    │
+versioned native adapters      │
               └───────┬───────┘
                       ▼
            Runtime 管理指针、生命周期与异常
@@ -65,10 +65,12 @@ Each `DeclOptions.FileName` selects the exact public header `<FileName>.hxx`; un
 
 | 输出 | 责任 |
 | --- | --- |
-| C++ 代码 | 把构造函数、成员函数、运算符和析构操作转换为 `extern "C"` 导出函数；处理重载命名、返回值输出参数、右值转发和异常捕获。 |
+| C ABI header | Generates the canonical `ted_toolkit_occt_v1.h` from explicit semantic mappings; incomplete operations are omitted before naming or emission. |
 | C# 代码 | 根据原生大小和字段偏移生成托管类型形状，区分 P/Invoke 类型与公共 API 类型，并投影继承接口、枚举和 XML 文档。 |
 
-C++ 代码通过 CMake 查找 vcpkg 的 `OpenCASCADE` 配置并链接 OCCT。异常包装层捕获 `Standard_Failure`、`std::exception` 和未知异常，以 `interop_error` 返回给托管侧。
+The production pipeline materializes the canonical header and versioned native adapter project.
+The root CMake presets build it and run a real C11 consumer; see
+[C interoperability ABI major 1](docs/interop-abi-v1.md).
 
 更详细的生成流程见 [TedToolkit.Occt.Generator](src/core/TedToolkit.Occt.Generator/README.md)，生命周期和异常模型见 [TedToolkit.Occt.Runtime](src/core/TedToolkit.Occt.Runtime/README.md)。
 
@@ -100,10 +102,11 @@ dotnet run --project tests/TedToolkit.Occt.Console/TedToolkit.Occt.Console.cspro
 ```text
 output/generated/
 ├── csharp/                         # 生成的 C# 文件
-└── cpp/ted_toolkit_occt/
-    ├── src/                        # C++ wrapper 与 CMakeLists.txt
-    ├── build/                      # CMake 构建目录
-    └── bin/                        # 原生库输出目录
+└── cpp/
+    ├── CMakeLists.txt               # versioned native adapter project
+    ├── ted_toolkit_occt_v1.h       # canonical ABI-major-1 C header
+    ├── ted_toolkit_occt_v1.cpp     # OCCT adapters
+    └── ted_toolkit_occt_v1_test.h  # compiled only by the boundary proof
 ```
 
 > ⚠️ This command remains a development entry point rather than a verified release example. Target-scoped parsing and generator ordering are enforced, but downstream model projection or native compilation can still reject unsupported OCCT surface.
@@ -121,7 +124,10 @@ output/generated/
 ## 当前实现边界
 
 - `DeclOptions.FileName` must identify both a top-level OCCT record and its exact public header stem; direct enum targets, namespaced targets, and declaration/header name mismatches are unsupported.
-- 递归类型发现尚未完整隔离 STL 和编译器内部类型，可能生成不应暴露的 `std::*` 包装。
+- Recursive managed-model discovery can still encounter STL and compiler implementation types,
+  but the canonical C ABI rejects them unless every projection layer has an approved mapping.
+- A minimal managed fixture proves P/Invoke layouts and version gating; generated public invocation
+  bodies and production lifetime abstractions remain incomplete.
 - C# 生成器已经生成类型、字段、接口和方法形状，但实际 P/Invoke 声明与公共方法调用体尚未接通。
 - 当前记录类型的结构生成分支只在 `recordDecl.IsAbstract` 为 true 时执行；非抽象记录目前只生成继承接口，类型生成条件仍需调整。
 - 仓库没有 vcpkg manifest/baseline，OCCT 版本仍由本机全局安装决定。
