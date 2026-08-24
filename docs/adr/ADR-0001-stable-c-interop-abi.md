@@ -1,8 +1,9 @@
 # ADR-0001: Establish a stable C interoperability ABI
 
-- Status: Proposed
+- Status: Accepted
 - Date: 2026-08-24
 - Decision owner: TedToolkit.Occt maintainers
+- Approval: User approval in the current Codex task on 2026-08-24.
 - Decision scope: The native boundary between generated OCCT C++ adapters and non-C++ consumers, beginning with ABI version 1 and governing all later compatible evolution.
 - Applicable product intent: None
 - Applicable principles: None
@@ -37,9 +38,9 @@ The decision question is: **what native protocol can represent the OCCT cases al
 | Hard constraint | Unsupported types must be rejected before an export is emitted; recursive discovery must not turn STL, compiler internals, or arbitrary templates into wrapper targets. | [`RecordModelManager`](../../src/core/TedToolkit.Occt.Generator/Services/RecordModelManager.cs) recursively adds record declarations and unwraps `opencascade::handle<T>`. | Must |
 | Hard constraint | The native ABI is the authority. Managed P/Invoke and public C# projections consume it but cannot define or infer it. | Current `CSharpPInvokeType` and `CSharpPublicType` already represent different consumer concerns. | Must |
 | Decision driver | The first boundary must cover common OCCT geometry values, `Standard_Transient` hierarchies, enums, strings, arrays, in/out references, and errors without promising all OCCT types. | Current target generation reaches `gp_*`, `Geom2d_*`, `NCollection_Array1<T>`, handles, strings, and stream methods. | High |
-| Decision driver | ABI evolution must be detectable and additive within one major version. | There is no released ABI baseline yet, so version 1 can establish the rule without migration. | High |
+| Decision driver | ABI evolution must be detectable and additive within one major version, while incompatible majors can coexist in one process. | There is no released ABI baseline yet, so version 1 can establish versioned library, header, identifier, and symbol boundaries without migration. | High |
 | Decision driver | The design should remain usable from .NET P/Invoke and a plain C consumer on each supported target triplet. | The runtime uses P/Invoke; the generated native library already uses portable visibility branches for Windows and non-Windows. | High |
-| Assumption | Initial delivery and proof will target the repository's currently exercised Windows x64 vcpkg environment, while the protocol avoids Windows-only types. | The installed local baseline is `opencascade:x64-windows` 8.0.1. | Medium |
+| Assumption | Initial delivery and proof will target the repository's currently exercised Windows x64 vcpkg environment, while the protocol avoids Windows-only types. | The documented native-boundary baseline is `opencascade:x64-windows` 8.0.1; the delivery must supply the actual environment before native proof. | Medium |
 
 ## Options and evidence
 
@@ -65,52 +66,78 @@ Every projected type must have separate representations for:
 
 No layer may fall back to the C++ spelling when its own representation is missing. A method is exportable only when every parameter, result, receiver, and error path has a complete ABI mapping.
 
-### 2. Canonical ABI surface
+### 2. Canonical ABI surface and major-version boundary
 
 - The generator will produce a canonical header that is valid C11 and C++. This header, not generated C++ implementation text or managed code, defines the ABI.
 - Exports use C linkage, default visibility, and the C calling convention (`cdecl`). Exported functions are non-throwing at the boundary.
-- Every generated OCCT operation returns one `ted_occt_error` value. OCCT results, constructed objects, and converted values are written through validated out parameters. A failure must not expose a partially initialized result. Bootstrap ABI-version and idempotent cleanup exports may be infallible and use direct return values where their complete contract is representable without an error payload.
-- The canonical header is named `ted_toolkit_occt.h`. ABI version 1.0 is discoverable through `uint32_t ted_occt_abi_version(void)`, encoded as `(major << 16) | minor`; version 1.0 is `0x00010000`. A consumer requires an equal major and may accept an equal or newer compatible minor.
+- Every generated OCCT operation returns one `ted_occt_v1_error` value. OCCT results, constructed objects, and converted values are written through validated out parameters. A failure must not expose a partially initialized result. Bootstrap ABI-version and idempotent cleanup exports may be infallible and use direct return values where their complete contract is representable without an error payload.
+- ABI major 1 uses canonical header `ted_toolkit_occt_v1.h`, native library basename `ted_toolkit_occt_abi_v1`, lowercase C identifiers beginning with `ted_occt_v1_`, and preprocessor constants beginning with `TED_OCCT_V1_`. A later incompatible major uses a distinct header, library, identifier namespace, and symbol prefix so both majors can coexist in one process.
+- ABI version 1.0 is discoverable through `uint32_t ted_occt_v1_abi_version(void)`, encoded as `(major << 16) | minor`; version 1.0 is `0x00010000`. A consumer loads the major-specific library, calls this bootstrap export before any other operation, requires an equal major, and may accept an equal or newer compatible minor.
 - Existing prototype symbols are not ABI version 1 and receive no compatibility promise.
-- Exported symbol names are deterministic and globally unique. Once ABI version 1 is released, a symbol's parameter types, result convention, ownership, nullability, and meaning are immutable within version 1.
+- Exported symbol names are deterministic and globally unique under the rule below. Once ABI version 1 is released, a symbol's name, parameter types, result convention, ownership, nullability, and meaning are immutable within version 1.
 - Public ABI structs begin with a size/version field when forward-compatible extension is required. Fixed semantic value structs are frozen instead of being extended in place.
+
+Generated operation symbols have the form
+`ted_occt_v1_<owner>_<operation>__<digest>`. `<owner>` and `<operation>` are readable ASCII stems
+derived from the approved semantic owner and operation identifiers; they are not the uniqueness
+authority. `<digest>` is the first 128 bits of SHA-256, rendered as 32 lowercase hexadecimal
+characters, over this UTF-8 canonical identity:
+
+```text
+v1|owner=<semantic-owner-id>|kind=<constructor|method|operator|conversion|destroy|retain|release>
+|operation=<semantic-operation-id>|receiver=<none|borrowed-const|borrowed-mutable>
+|parameters=<direction>:<nullability>:<ownership>:<transport-id>,...
+|result=<none|direction:nullability:ownership:transport-id>
+```
+
+Semantic IDs and transport IDs come from approved mapping rules, never from C# projected names,
+compiler mangling, `ClangSharp.Type.AsString`, typedef spelling, or generated file order. Whitespace
+is exactly as shown: the canonical identity is one line with no spaces or trailing newline. A
+canonical-identity or exported-name collision is a generation error; the generator does not add an
+order-dependent suffix. Fixed bootstrap and cleanup exports use their explicitly specified names
+instead of this operation-name rule.
+
+Owner, operation, and transport IDs are versioned lowercase ASCII tokens matching
+`[a-z][a-z0-9_]*`. The readable stems use the same tokens. An OCCT identifier that cannot be assigned
+an unambiguous token under an approved mapping is unsupported; locale-sensitive case conversion and
+lossy punctuation removal are forbidden.
 
 ### 3. Error contract
 
-- `ted_occt_error` is the sole outcome carrier for native failure. There is no separate status return and no duplicated status field.
-- `ted_occt_error_kind` is a fixed-width `int32_t`. Kind `0` is success. Version 1 freezes the categories below; values `10` through `254` are reserved for additive version-1 categories.
+- `ted_occt_v1_error` is the sole outcome carrier for native failure. There is no separate status return and no duplicated status field.
+- `ted_occt_v1_error_kind` is a fixed-width `int32_t`. Kind `0` is success. Version 1 freezes the categories below; values `10` through `254` are reserved for additive version-1 categories.
 
 ```c
-typedef int32_t ted_occt_error_kind;
+typedef int32_t ted_occt_v1_error_kind;
 
-#define TED_OCCT_ERROR_NONE                  ((ted_occt_error_kind)0)
-#define TED_OCCT_ERROR_ARGUMENT              ((ted_occt_error_kind)1)
-#define TED_OCCT_ERROR_ARGUMENT_OUT_OF_RANGE ((ted_occt_error_kind)2)
-#define TED_OCCT_ERROR_ARITHMETIC            ((ted_occt_error_kind)3)
-#define TED_OCCT_ERROR_INVALID_OPERATION     ((ted_occt_error_kind)4)
-#define TED_OCCT_ERROR_NULL_OBJECT           ((ted_occt_error_kind)5)
-#define TED_OCCT_ERROR_OUT_OF_MEMORY         ((ted_occt_error_kind)6)
-#define TED_OCCT_ERROR_OVERFLOW              ((ted_occt_error_kind)7)
-#define TED_OCCT_ERROR_OCCT_FAILURE          ((ted_occt_error_kind)8)
-#define TED_OCCT_ERROR_STD_EXCEPTION         ((ted_occt_error_kind)9)
-#define TED_OCCT_ERROR_UNKNOWN               ((ted_occt_error_kind)255)
+#define TED_OCCT_V1_ERROR_NONE                  ((ted_occt_v1_error_kind)0)
+#define TED_OCCT_V1_ERROR_ARGUMENT              ((ted_occt_v1_error_kind)1)
+#define TED_OCCT_V1_ERROR_ARGUMENT_OUT_OF_RANGE ((ted_occt_v1_error_kind)2)
+#define TED_OCCT_V1_ERROR_ARITHMETIC            ((ted_occt_v1_error_kind)3)
+#define TED_OCCT_V1_ERROR_INVALID_OPERATION     ((ted_occt_v1_error_kind)4)
+#define TED_OCCT_V1_ERROR_NULL_OBJECT           ((ted_occt_v1_error_kind)5)
+#define TED_OCCT_V1_ERROR_OUT_OF_MEMORY         ((ted_occt_v1_error_kind)6)
+#define TED_OCCT_V1_ERROR_OVERFLOW              ((ted_occt_v1_error_kind)7)
+#define TED_OCCT_V1_ERROR_OCCT_FAILURE          ((ted_occt_v1_error_kind)8)
+#define TED_OCCT_V1_ERROR_STD_EXCEPTION         ((ted_occt_v1_error_kind)9)
+#define TED_OCCT_V1_ERROR_UNKNOWN               ((ted_occt_v1_error_kind)255)
 
-typedef struct ted_occt_error
+typedef struct ted_occt_v1_error
 {
-    ted_occt_error_kind kind;
+    ted_occt_v1_error_kind kind;
     const char* type_name;
     const char* message;
     const char* stack_trace;
-} ted_occt_error;
+} ted_occt_v1_error;
 
-uint32_t ted_occt_abi_version(void);
-void ted_occt_error_clear(ted_occt_error* error);
+uint32_t ted_occt_v1_abi_version(void);
+void ted_occt_v1_error_clear(ted_occt_v1_error* error);
 ```
 
-- `kind` is authoritative. `TED_OCCT_ERROR_NONE` means success and requires all text pointers to be null. Every nonzero value means failure, including a value introduced by a newer compatible minor version that the consumer does not recognize, even when one or all text allocations are unavailable.
+- `kind` is authoritative. `TED_OCCT_V1_ERROR_NONE` means success and requires all text pointers to be null. Every nonzero value means failure, including a value introduced by a newer compatible minor version that the consumer does not recognize, even when one or all text allocations are unavailable.
 - `type_name`, `message`, and `stack_trace` are optional, NUL-terminated UTF-8 diagnostic strings. They do not support embedded NUL and do not need explicit length fields.
-- Diagnostic string storage is owned by `ted_toolkit_occt`. The caller may read but must not mutate or free that storage. Ownership transfers from the callee into the single receiving `ted_occt_error` owner slot. A non-empty error is move-only at the contract level: callers must not bitwise-copy it, because copying does not duplicate ownership and clearing either duplicate would leave the other stale.
-- `ted_occt_error_clear` consumes the authoritative owner slot, frees its diagnostic strings, resets its kind to `NONE`, and nulls every pointer. Passing a null slot or an already-empty error is safe, so clearing the same authoritative slot repeatedly is idempotent; this guarantee does not make stale copied values safe.
+- Diagnostic string storage is owned by `ted_toolkit_occt_abi_v1`. The caller may read but must not mutate or free that storage. Ownership transfers from the callee into the single receiving `ted_occt_v1_error` owner slot. A non-empty error is move-only at the contract level: callers must not bitwise-copy it, because copying does not duplicate ownership and clearing either duplicate would leave the other stale.
+- `ted_occt_v1_error_clear` consumes the authoritative owner slot, frees its diagnostic strings, resets its kind to `NONE`, and nulls every pointer. Passing a null slot or an already-empty error is safe, so clearing the same authoritative slot repeatedly is idempotent; this guarantee does not make stale copied values safe.
 - The kind converts native exceptions into stable consumer categories while `type_name` preserves the concrete C++ or OCCT exception type for diagnostics.
 - Native adapters map caught exceptions in the following precedence order. Each row is tested before every later row; the first matching row supplies the kind.
 
@@ -137,13 +164,13 @@ void ted_occt_error_clear(ted_occt_error* error);
 - Failure remains reportable through `kind` even if diagnostic allocation fails. Error construction is non-throwing: if any optional text allocation fails, it releases any diagnostic storage already acquired, returns the original authoritative kind with all text pointers null, and does not terminate the process.
 - No exported operation depends on a process-global or thread-local “last error.” Concurrent calls receive independent error values.
 - All native exceptions, including `Standard_Failure`, `std::exception`, and unknown exceptions, are caught before the ABI boundary. Native destructors and release functions are also non-throwing at the boundary.
-- Operations known not to throw may avoid a catch path, but they still return an empty `ted_occt_error` so wrapper validation and consumer invocation remain uniform.
+- Operations known not to throw may avoid a catch path, but they still return an empty `ted_occt_v1_error` so wrapper validation and consumer invocation remain uniform.
 
 ### 4. Approved transport vocabulary
 
 | C++ semantic case | ABI version 1 direction | Required rule |
 | --- | --- | --- |
-| `void` | No result payload | The `ted_occt_error` return remains present. |
+| `void` | No result payload | The `ted_occt_v1_error` return remains present. |
 | `bool` / `Standard_Boolean` | `uint8_t` | `0` is false, `1` is true; other input values are invalid. Native `bool` layout is never exposed. |
 | Signed and unsigned integers | Exact-width `int8_t` through `uint64_t` | Width and signedness come from the parsed target ABI. Narrowing and out-of-range conversion fail rather than wrap silently. C/C++ `long` is not exposed directly. |
 | `float` / `double` | `float` / `double` | IEEE representation is required on a supported target. `long double`, 128-bit, half, and compiler-specific floating types remain unsupported until separately specified. |
@@ -197,6 +224,31 @@ This follows the documented OCCT handle model: `Standard_Transient` owns the ato
 - Collection adapters preserve input/output direction and ownership. They do not expose the C++ template object, allocator, iterator, or `myIsOwner` representation.
 - Nested, associative, node-based, polymorphic, or non-contiguous collections remain unsupported until a dedicated adapter defines their observable semantics.
 
+ABI version 1 uses these canonical byte-buffer carriers. A mapping states separately whether the
+bytes are text and which encoding applies. `ted_occt_v1_owned_bytes` is move-only at the contract
+level and is cleared through its authoritative owner slot by the allocating library.
+
+```c
+typedef struct ted_occt_v1_bytes_view
+{
+    const uint8_t* data;
+    uint64_t length;
+} ted_occt_v1_bytes_view;
+
+typedef struct ted_occt_v1_owned_bytes
+{
+    uint8_t* data;
+    uint64_t length;
+} ted_occt_v1_owned_bytes;
+
+void ted_occt_v1_owned_bytes_clear(ted_occt_v1_owned_bytes* buffer);
+```
+
+An empty view or owned buffer has a null pointer and zero length. A non-empty view requires a
+non-null pointer. Cleanup accepts a null owner slot or an already-empty authoritative slot, releases
+storage in `ted_toolkit_occt_abi_v1`, and resets the slot to the empty state. Copying an owned buffer
+does not duplicate ownership; clearing a stale copy is invalid.
+
 ### 9. Methods, constructors, conversions, and overloads
 
 - Instance receivers are explicit first parameters. Receivers are required unless the member is explicitly static or nullable by OCCT contract.
@@ -219,7 +271,9 @@ This follows the documented OCCT handle model: `Standard_Transient` owns the ato
 
 - ABI version 1 begins only after this decision is Accepted and its delivery passes the approved C consumer boundary proof. Current generated exports and handwritten runtime imports are pre-version prototypes.
 - Within ABI version 1, new symbols and new enum constants may be added. Existing symbols, transport layouts, numeric error-kind values, encodings, ownership rules, and release obligations may not be changed or removed.
-- A breaking change requires ABI version 2, a distinct compatibility boundary, and an explicit transition decision. Rebuilding the same ABI against a newer OCCT version is allowed only when contract and behavioral proofs show that the exposed semantics remain compatible.
+- A breaking change requires ABI version 2, its own header, library basename, C identifier namespace, symbol prefix, and an explicit transition decision. Version 1 remains loadable while supported; version 2 does not replace a version-1 library in place.
+- The initial conformance and release matrix is Windows x64, the MSVC x64 ABI, `cdecl`, and OCCT 8.0.1 from vcpkg triplet `x64-windows`. The portable C vocabulary is a design constraint, not evidence that another triplet is supported. A new triplet joins ABI version 1 only after its C layout, calling convention, ownership, error, and representative OCCT behavior pass the same boundary proof.
+- Rebuilding the same ABI against a newer OCCT version is allowed only when the canonical header is compatible and contract and behavioral proofs show that the exposed semantics remain compatible.
 - The runtime must verify that the loaded native library reports the ABI major it was generated to consume before using other exports.
 - Target architecture and calling convention remain part of binary compatibility. Fixed-width transport types remove avoidable source-language ambiguity but do not make binaries portable across CPU architectures.
 
@@ -280,9 +334,9 @@ Security and reliability consequences:
 - A generated export is valid only when every receiver, parameter, result, error, lifetime, nullability, and direction has an approved ABI mapping.
 - The canonical generated ABI declaration must compile as C11 and C++ and must not include OCCT or C++ standard-library headers.
 - Generated implementation code may use OCCT and C++, but every exported declaration must use only the approved transport vocabulary.
-- Every generated OCCT operation returns `ted_occt_error`; result values are committed only when its kind is `NONE`.
+- Every generated OCCT operation returns `ted_occt_v1_error`; result values are committed only when its kind is `NONE`.
 - Every library-owned allocation has a same-library release path. Error and buffer clear operations, and owner-slot release after that slot has been nulled, are idempotent. Releasing a stale copied object or handle token is invalid.
-- A non-empty error value has one authoritative owner slot and must not be copied. `ted_occt_error_clear` is idempotent only for that slot after it has been reset; a stale copied error is invalid.
+- A non-empty error value has one authoritative owner slot and must not be copied. `ted_occt_v1_error_clear` is idempotent only for that slot after it has been reset; a stale copied error is invalid.
 - Transient releases follow OCCT reference counting and never directly delete a live `Standard_Transient` target.
 - Ordinary opaque objects and transient handles remain distinct ownership categories even if both are represented by pointer-sized values.
 - Semantic value structs are defined from meaning and invariant, never inferred from C++ `sizeof` and field offsets alone.
@@ -297,8 +351,8 @@ Replacing this direction requires a successor that preserves or deliberately mig
 
 | Item | Owner | Due date or objective trigger | Status |
 | --- | --- | --- | --- |
-| Review and either accept or reject this proposed ABI direction. | TedToolkit.Occt maintainers | Before approving the explicit interop ABI delivery change | Open |
-| Preserve the canonical C consumer boundary as CMake presets named `ted-occt-abi-v1-consumer` for configure/build and CTest, exercising the generated `ted_toolkit_occt.h` against the built shared library. | TedToolkit.Occt maintainers | Before ABI version 1 delivery can complete | Open |
+| Review and either accept or reject this proposed ABI direction. | TedToolkit.Occt maintainers | Before approving the explicit interop ABI delivery change | Completed 2026-08-24 |
+| Preserve the canonical C consumer boundary as CMake presets named `ted-occt-abi-v1-consumer` for configure/build and CTest, exercising the generated `ted_toolkit_occt_v1.h` against the built `ted_toolkit_occt_abi_v1` shared library. | TedToolkit.Occt maintainers | Before ABI version 1 delivery can complete | Open |
 | Reassess type vocabulary and compatibility. | TedToolkit.Occt maintainers | Any required callback, cross-process boundary, new CPU ABI, public custom allocator, unsupported GPU/platform resource, or breaking OCCT upgrade | Open |
 | Reassess transient ownership. | TedToolkit.Occt maintainers | Any evidence that a required OCCT API cannot safely promote returned transient pointers to owned handles | Open |
 
