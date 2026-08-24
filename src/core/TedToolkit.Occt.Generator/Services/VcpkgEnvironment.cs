@@ -5,8 +5,11 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Diagnostics.CodeAnalysis;
+
 using Cysharp.Text;
 
+using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
@@ -51,44 +54,82 @@ internal sealed class VcpkgEnvironment : IVcpkgEnvironment
     }
 
     /// <inheritdoc/>
-    public async Task<string> GetIncludingHeaderContentAsync(string triplet, CancellationToken cancellationToken)
+    public Task<string> GetIncludingHeaderContentAsync(
+        string triplet,
+        IReadOnlyList<DeclOptions> declarations,
+        CancellationToken cancellationToken)
     {
-        var stringBuilder = ZString.CreateStringBuilder();
-
-        stringBuilder.AppendLine("#pragma once");
-
-        foreach (var file in new DirectoryInfo(GetOcctIncludeFolder(triplet))
-                     .EnumerateFiles("*.hxx"))
+        if (declarations is null || declarations.Count is 0)
         {
-            if (await IsDeprecatedAsync(file, cancellationToken).ConfigureAwait(false))
-            {
-                continue;
-            }
-
-            stringBuilder.Append("#include <");
-            stringBuilder.Append(file.Name);
-            stringBuilder.AppendLine(">");
+            throw new InvalidOperationException("At least one target declaration is required.");
         }
 
-        return stringBuilder.ToString();
+        cancellationToken.ThrowIfCancellationRequested();
+        var occtIncludeFolder = GetOcctIncludeFolder(triplet);
+        var targetStems = new List<string>(declarations.Count);
+        var seenTargetStems = new HashSet<string>(StringComparer.Ordinal);
+
+        for (var index = 0; index < declarations.Count; index++)
+        {
+            var targetStem = declarations[index]?.FileName;
+            if (!IsValidHeaderStem(targetStem))
+            {
+                var displayValue = targetStem is null ? "<null>" : $"\"{targetStem}\"";
+                throw new InvalidOperationException(
+                    $"Target at index {index} has invalid header stem {displayValue}. "
+                    + "Expected [A-Za-z_][A-Za-z0-9_]*.");
+            }
+
+            var headerPath = Path.Combine(occtIncludeFolder, $"{targetStem}.hxx");
+            if (!File.Exists(headerPath))
+            {
+                throw new InvalidOperationException(
+                    $"Target '{targetStem}' does not have a public header below OCCT include root "
+                    + $"'{occtIncludeFolder}'. Expected '{headerPath}'.");
+            }
+
+            if (seenTargetStems.Add(targetStem))
+            {
+                targetStems.Add(targetStem);
+            }
+        }
+
+        var stringBuilder = ZString.CreateStringBuilder();
+        foreach (var targetStem in targetStems)
+        {
+            stringBuilder.Append("#include <");
+            stringBuilder.Append(targetStem);
+            stringBuilder.AppendLine(".hxx>");
+        }
+
+        return Task.FromResult(stringBuilder.ToString());
     }
 
-    private static async Task<bool> IsDeprecatedAsync(FileInfo file, CancellationToken cancellationToken)
+    private static bool IsValidHeaderStem([NotNullWhen(true)] string? value)
     {
-        using var reader = file.OpenText();
-        while (await reader.ReadLineAsync(cancellationToken).ConfigureAwait(false) is { } line)
+        if (string.IsNullOrEmpty(value) || !IsAsciiIdentifierStart(value[0]))
         {
-            if (line.Contains(" @deprecated ", StringComparison.InvariantCulture))
-            {
-                return true;
-            }
+            return false;
+        }
 
-            if (line.Contains("Standard_HEADER_DEPRECATED", StringComparison.InvariantCulture))
+        for (var index = 1; index < value.Length; index++)
+        {
+            if (!IsAsciiIdentifierPart(value[index]))
             {
-                return true;
+                return false;
             }
         }
 
-        return false;
+        return true;
+    }
+
+    private static bool IsAsciiIdentifierStart(char value)
+    {
+        return value is >= 'A' and <= 'Z' or >= 'a' and <= 'z' or '_';
+    }
+
+    private static bool IsAsciiIdentifierPart(char value)
+    {
+        return IsAsciiIdentifierStart(value) || value is >= '0' and <= '9';
     }
 }

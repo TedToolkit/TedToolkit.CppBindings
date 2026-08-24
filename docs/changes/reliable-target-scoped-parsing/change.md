@@ -3,7 +3,7 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: bug-fix -->
-<!-- change-status: approved -->
+<!-- change-status: completed -->
 
 - Priority: P1
 - Approval: Approved by the repository owner on 2026-08-24 for Draft SHA-256 `BB8E9D382F4959A781E203E0AA3CADC821ED649937407E7D50AA01D5D14514D7`; this authorizes the single Controlled delivery below.
@@ -160,3 +160,11 @@ Required boundary evidence: set `VCPKG_ROOT=C:\vcpkg`, execute the real-OCCT Par
 ## Completion
 
 AC-01 through AC-06 pass; the Generator and Generator test-project Release builds are clean; the required real vcpkg/OCCT boundary parses `Geom2d_BSplineCurve` without unrelated-header diagnostics; and README pipeline documentation matches the actual target convention, diagnostic threshold, and module dependencies. This change does not require the generated native library to link.
+
+### Implementation evidence
+
+- Completed on 2026-08-24. The Generator test-project Release build completed with zero warnings and zero errors.
+- The 19 focused acceptance and regression tests passed: 10 target validation and relay tests, 5 Parse tests, 1 dependency metadata test, and 3 environment-driven real-boundary gate tests.
+- With `VCPKG_ROOT=C:\vcpkg` supplied by the invoking process, the real OCCT boundary executed and passed with zero skipped tests. Without that environment prerequisite, it reports one explicit skip instead of assuming a workstation path.
+- The approved full Generator command with the real boundary enabled executed 67 tests: 59 passed and the same 8 unrelated baseline tests failed before and after this change; no new regression failure was introduced.
+- Independent implementation review concluded Ready to merge with complete AC-01 through AC-06 traceability, no blocking or important findings, and no design deviation.

@@ -50,6 +50,8 @@ CMake + vcpkg 编译原生 DLL    │
 
 ClangSharp/libclang 将头文件解析为 C++ AST。生成器先寻找 `DeclOptions` 指定的声明，再递归分析：
 
+Each `DeclOptions.FileName` selects the exact public header `<FileName>.hxx`; unrelated OCCT headers are not added to the relay translation unit.
+
 - 基类；
 - 字段类型；
 - 方法参数和返回类型；
@@ -104,7 +106,7 @@ output/generated/
     └── bin/                        # 原生库输出目录
 ```
 
-> ⚠️ 该命令是当前端到端开发入口，不是已验证通过的发布示例。现有工作树可以完成依赖还原、OCCT 解析和 C++ 文件生成，但仍可能在解析诊断、C# 生成顺序或原生编译阶段停止。
+> ⚠️ This command remains a development entry point rather than a verified release example. Target-scoped parsing and generator ordering are enforced, but downstream model projection or native compilation can still reject unsupported OCCT surface.
 
 ## 组件
 
@@ -118,9 +120,7 @@ output/generated/
 
 ## 当前实现边界
 
-- `GenerateCSharpModule` 当前没有依赖 `ParseModule`，可能在模型建立前执行并产生空输出。
-- 解析器当前聚合包含已安装 OCCT 的全部非弃用 `.hxx`，容易受到无关头文件、包含顺序和未安装私有头文件影响。
-- Clang Error/Fatal 目前只写入日志，模块仍可能报告成功。
+- `DeclOptions.FileName` must identify both a top-level OCCT record and its exact public header stem; direct enum targets, namespaced targets, and declaration/header name mismatches are unsupported.
 - 递归类型发现尚未完整隔离 STL 和编译器内部类型，可能生成不应暴露的 `std::*` 包装。
 - C# 生成器已经生成类型、字段、接口和方法形状，但实际 P/Invoke 声明与公共方法调用体尚未接通。
 - 当前记录类型的结构生成分支只在 `recordDecl.IsAbstract` 为 true 时执行；非抽象记录目前只生成继承接口，类型生成条件仍需调整。
@@ -142,7 +142,13 @@ dotnet build TedToolkit.Occt.slnx -c Release --no-restore
 dotnet run --project tests/TedToolkit.Occt.Runtime.Tests/TedToolkit.Occt.Runtime.Tests.csproj -c Release --no-build -- --report-trx
 ```
 
-当前 Generator 测试项目仍被识别为 Library，与仓库约定的 `dotnet run` 测试方式不一致；在修正项目配置前，该入口无法直接运行。
+The Generator test project uses the same executable test entry point:
+
+```powershell
+dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj -c Release --no-build -- --report-trx
+```
+
+Set `VCPKG_ROOT` to a usable vcpkg installation to run the real OCCT boundary test. When it is unset or the selected OCCT header is unavailable, only that environment-dependent test is reported as skipped.
 
 ## 许可证
 

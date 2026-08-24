@@ -7,6 +7,8 @@
 
 namespace TedToolkit.Occt.Generator.Services.Interfaces;
 
+using TedToolkit.Occt.Generator.Options;
+
 /// <summary>
 /// Provides access to the local vcpkg installation and OCCT metadata.
 /// </summary>
@@ -33,10 +35,14 @@ internal interface IVcpkgEnvironment
     string GetOcctIncludeFolder(string triplet);
 
     /// <summary>
-    /// Builds the aggregate OCCT include header content for the specified triplet.
+    /// Builds the OCCT include header content for the requested declarations.
     /// </summary>
     /// <param name="triplet">The target vcpkg triplet.</param>
+    /// <param name="declarations">The requested declarations.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
     /// <returns>The include header content.</returns>
-    Task<string> GetIncludingHeaderContentAsync(string triplet, CancellationToken cancellationToken);
+    Task<string> GetIncludingHeaderContentAsync(
+        string triplet,
+        IReadOnlyList<DeclOptions> declarations,
+        CancellationToken cancellationToken);
 }

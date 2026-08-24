@@ -24,6 +24,7 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// Generates the C++ and C# source files for each parsed record.
 /// </summary>
 [DependsOn<CleanGenerationOutputModule>]
+[DependsOn<ParseModule>]
 public sealed class GenerateCSharpModule : Module<bool>
 {
     private readonly IOptions<GenerationOptions> _generationOptions;

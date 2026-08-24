@@ -28,68 +28,61 @@ await pipeline.RunAsync();
 
 完整开发样例位于 [`tests/TedToolkit.Occt.Console`](../../../tests/TedToolkit.Occt.Console)。
 
-## 输入与配置
+## Inputs and configuration
 
-生成器需要：
+The generator requires:
 
-1. `VCPKG_ROOT` 指向一个有效的 vcpkg 根目录。
-2. 对应 triplet 下已经安装 `opencascade`。
-3. `DeclOptions` 给出希望生成的 OCCT 声明名。
-4. C# 与 C++ 输出目录。
+1. `VCPKG_ROOT` pointing to a valid vcpkg root.
+2. `opencascade` installed for the selected triplet.
+3. At least one `DeclOptions` entry selecting an OCCT record.
+4. C# and C++ output directories.
 
-`GenerationOptions` 的主要选项如下：
+`DeclOptions.FileName` is both the top-level record name and its public header stem. It must match `[A-Za-z_][A-Za-z0-9_]*`, and the exact header `<FileName>.hxx` must exist below `installed/<triplet>/include/opencascade`. Duplicate names are coalesced in ordinal order. Direct enum targets, namespaced records, and records whose declaration and header stems differ are not supported.
 
-| 选项 | 作用 |
+The primary `GenerationOptions` values are:
+
+| Option | Purpose |
 | --- | --- |
-| `DeclOptions` | 生成入口声明列表，例如 `Geom2d_BSplineCurve`。 |
-| `CSharpFolder` | 生成的 C# 源文件目录。 |
-| `CppFolder` | C++ wrapper、CMake 工程和原生库目录。 |
-| `Triplet` | 显式指定 vcpkg triplet；留空时自动选择。 |
-| `CppVersion` | 传给 Clang 和 CMake 的 C++ 标准，默认 17。 |
-| `CommandLineArgs` | 追加到 Clang 解析的参数。 |
-| `FieldTypeToGenerate` | 根据 Clang `FieldDecl` 过滤字段。 |
-| `IsInternal` | 控制生成的 C# 类型是否使用 internal 可见性。 |
-| `GetFieldOffsetByRunning` | 已公开的布局选项；当前记录模型仍直接读取 libclang 的 size/offset。 |
+| `DeclOptions` | Entry records such as `Geom2d_BSplineCurve`. |
+| `CSharpFolder` | Generated C# source directory. |
+| `CppFolder` | C++ wrappers, CMake project, and native library directory. |
+| `Triplet` | Explicit vcpkg triplet; automatically selected when omitted. |
+| `CppVersion` | C++ standard passed to Clang and CMake; defaults to 17. |
+| `CommandLineArgs` | Additional Clang parse arguments. |
+| `FieldTypeToGenerate` | Filters fields from their Clang `FieldDecl`. |
+| `IsInternal` | Selects internal visibility for generated C# types. |
+| `GetFieldOffsetByRunning` | Exposed layout option; the current model still reads size and offsets from libclang. |
 
-## 生成管线
+## Generation pipeline
 
-逻辑上，生成过程分为四步：
+Clean and Parse are independent prerequisites of both generators:
 
 ```text
-CleanGenerationOutputModule
-            │
-            ▼
-       ParseModule
-        ┌───┴───┐
-        ▼       ▼
-GenerateC#   GenerateC++
+CleanGenerationOutputModule ───┬───────────────┐
+                               │               │
+ParseModule ───────────────────┤               │
+                               ▼               ▼
+                    GenerateCSharpModule  GenerateCppModule
 ```
 
-| 模块 | 当前责任 |
+| Module | Responsibility |
 | --- | --- |
-| `CleanGenerationOutputModule` | 清理上一次生成的 C#、C++、CMake 构建和二进制输出。 |
-| `ParseModule` | 聚合 OCCT 头文件，调用 libclang，记录诊断，并把目标声明加入模型管理器。 |
-| `GenerateCSharpModule` | 为记录和枚举写入 `.g.cs` 文件。 |
-| `GenerateCppModule` | 生成 C++ wrapper、复制异常桥头文件、生成 CMake 工程并编译原生库。 |
+| `CleanGenerationOutputModule` | Removes previous C#, C++, CMake build, and binary output. |
+| `ParseModule` | Parses only selected public headers, validates diagnostics and every requested definition, then commits the complete target set to the shared model. |
+| `GenerateCSharpModule` | Writes `.g.cs` files for records and enums. |
+| `GenerateCppModule` | Generates C++ wrappers, copies the exception bridge header, creates the CMake project, and compiles the native library. |
 
-当前依赖声明与上面的逻辑顺序尚不完全一致：`GenerateCppModule` 依赖 Parse 和 Clean，但 `GenerateCSharpModule` 目前只依赖 Clean。因此 C# 模块可能先于解析执行，产生空目录。
+If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnostics fail Parse; Warning diagnostics remain non-fatal and are logged literally. Parse resolves every requested record definition before adding any target to the shared model, so an unresolved mixed target set cannot expose a partial model.
 
-## 1. 从 vcpkg 发现 OCCT
+## 1. Discover OCCT through vcpkg
 
-`VcpkgDefaultTripletResolver` 扫描 `VCPKG_ROOT/installed`，查找存在 `include/opencascade` 的 triplet，并优先选择当前平台和架构对应的动态 triplet。
+`VcpkgDefaultTripletResolver` scans `VCPKG_ROOT/installed` for triplets containing `include/opencascade` and prefers the dynamic triplet matching the current platform and process architecture.
 
-`VcpkgEnvironment` 随后提供：
+`VcpkgEnvironment` supplies the vcpkg root, triplet include directory, OCCT include directory, and relay translation-unit content. The relay contains only the distinct selected `<FileName>.hxx` headers; each selected header supplies its own transitive include graph.
 
-- vcpkg 根目录；
-- triplet 公共 include 目录；
-- OCCT include 目录；
-- 用于 Clang 解析的聚合头文件文本。
+## 2. Build the model from the Clang AST
 
-当前聚合文本会包含 OCCT 目录下所有未被标记弃用的 `.hxx` 文件。这是现有实现，不是理想边界：更稳妥的方向是只包含 `DeclOptions` 对应的公共头文件，让 C++ 自身的 include 图解析依赖。
-
-## 2. 从 Clang AST 建立模型
-
-`ParseModule` 使用 C++17、vcpkg include 目录和调用方追加参数建立 Translation Unit，然后从顶层记录中匹配 `DeclOptions.FileName`。
+`ParseModule` creates a translation unit with the configured C++ standard, vcpkg include directories, and caller-provided arguments. It then matches each `DeclOptions.FileName` to a top-level record definition using ordinal comparison.
 
 `RecordModelManager` 将 Clang 声明转换为以下模型：
 
@@ -189,16 +182,13 @@ output/generated/
     └── bin/
 ```
 
-## 诊断与已知限制
+## Known limitations
 
-- Clang Error/Fatal 当前只记录日志，`ParseModule` 仍返回成功。
-- 聚合全部 `.hxx` 可能触发头文件顺序问题或引用 vcpkg 未安装的私有 `.pxx`。
-- 类型递归仍可能进入 STL 和编译器内部实现类型；这些类型尚未全部建模为边界适配器。
-- C# 模块缺少 Parse 依赖。
-- C# 记录类型的结构生成条件仍需修正，非抽象记录当前不会生成 struct。
-- P/Invoke 调用层尚未完成。
-- 仓库没有 vcpkg manifest，构建依赖机器级 OCCT 安装。
-- `GetFieldOffsetByRunning` 尚未改变当前从 libclang 读取布局的实现。
+- Recursive type discovery may still enter STL and compiler implementation types that are not yet modeled as boundary adapters.
+- The C# record-generation condition still needs correction; non-abstract records currently do not generate structs.
+- The P/Invoke invocation layer is incomplete.
+- The repository has no vcpkg manifest, so builds depend on a machine-level OCCT installation.
+- `GetFieldOffsetByRunning` does not yet replace the current libclang-based layout lookup.
 
 ## 开发与验证
 

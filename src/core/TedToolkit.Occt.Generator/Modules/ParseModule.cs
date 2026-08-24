@@ -69,37 +69,62 @@ public sealed class ParseModule : Module<bool>
         return Task.FromResult(commandLineArgs);
     }
 
-    private static void LogDiagnostics(IModuleContext context, ref CXTranslationUnit translationUnit)
+    private static List<string> LogDiagnostics(IModuleContext context, ref CXTranslationUnit translationUnit)
     {
+        var errors = new List<string>();
         for (uint i = 0; i < translationUnit.NumDiagnostics; i++)
         {
             using var cxDiagnostic = translationUnit.GetDiagnostic(i);
             var errorMessage = cxDiagnostic.Format(CXDiagnostic.DefaultDisplayOptions).ToString();
             switch (cxDiagnostic.Severity)
             {
-#pragma warning disable CA1848, CA2254
+#pragma warning disable CA1848
                 case CXDiagnosticSeverity.CXDiagnostic_Ignored:
-                    context.Logger.LogDebug(errorMessage);
+                    if (context.Logger.IsEnabled(LogLevel.Debug))
+                    {
+                        context.Logger.LogDebug("{ClangDiagnostic}", errorMessage);
+                    }
+
                     break;
 
                 case CXDiagnosticSeverity.CXDiagnostic_Note:
-                    context.Logger.LogInformation(errorMessage);
+                    if (context.Logger.IsEnabled(LogLevel.Information))
+                    {
+                        context.Logger.LogInformation("{ClangDiagnostic}", errorMessage);
+                    }
+
                     break;
 
                 case CXDiagnosticSeverity.CXDiagnostic_Warning:
-                    context.Logger.LogWarning(errorMessage);
+                    if (context.Logger.IsEnabled(LogLevel.Warning))
+                    {
+                        context.Logger.LogWarning("{ClangDiagnostic}", errorMessage);
+                    }
+
                     break;
 
                 case CXDiagnosticSeverity.CXDiagnostic_Error:
-                    context.Logger.LogError(errorMessage);
+                    if (context.Logger.IsEnabled(LogLevel.Error))
+                    {
+                        context.Logger.LogError("{ClangDiagnostic}", errorMessage);
+                    }
+
+                    errors.Add(errorMessage);
                     break;
 
                 case CXDiagnosticSeverity.CXDiagnostic_Fatal:
-                    context.Logger.LogCritical(errorMessage);
+                    if (context.Logger.IsEnabled(LogLevel.Critical))
+                    {
+                        context.Logger.LogCritical("{ClangDiagnostic}", errorMessage);
+                    }
+
+                    errors.Add(errorMessage);
                     break;
-#pragma warning restore CA1848, CA2254
+#pragma warning restore CA1848
             }
         }
+
+        return errors;
     }
 
     /// <inheritdoc />
@@ -110,7 +135,9 @@ public sealed class ParseModule : Module<bool>
         var triplet = _generationOptions.Value.GetTriplet(_defaultsResolver);
 
         using var file = CXUnsavedFile.Create(RELAY_FILE_NAME,
-            await _vcpkgEnvironment.GetIncludingHeaderContentAsync(triplet, cancellationToken).ConfigureAwait(false));
+            await _vcpkgEnvironment
+                .GetIncludingHeaderContentAsync(triplet, _generationOptions.Value.DeclOptions, cancellationToken)
+                .ConfigureAwait(false));
 
         using var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
@@ -120,16 +147,38 @@ public sealed class ParseModule : Module<bool>
             [file,],
             CXTranslationUnit_Flags.CXTranslationUnit_None);
 
-        LogDiagnostics(context, ref translationUnit);
-
         using var unit = TranslationUnit.GetOrCreate(translationUnit);
-
-        var names = _generationOptions.Value.DeclOptions.Select(i => i.FileName).ToArray();
-        foreach (var cxxRecordDecl in unit.TranslationUnitDecl.CursorChildren
-                     .OfType<CXXRecordDecl>()
-                     .Where(r => names.Contains(r.Name)))
+        var errors = LogDiagnostics(context, ref translationUnit);
+        if (errors.Count > 0)
         {
-            _recordModelManager.Add(cxxRecordDecl);
+            throw new InvalidOperationException(
+                $"Clang parsing failed.{Environment.NewLine}{string.Join(Environment.NewLine, errors)}");
+        }
+
+        var declarations = unit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>().ToArray();
+        var targets = _generationOptions.Value.DeclOptions
+            .Select(static declaration => declaration.FileName)
+            .Distinct(StringComparer.Ordinal);
+        var resolvedDefinitions = new List<CXXRecordDecl>();
+        foreach (var target in targets)
+        {
+            var definition = declarations
+                .Where(declaration => string.Equals(declaration.Name, target, StringComparison.Ordinal))
+                .Select(static declaration => declaration.Definition)
+                .OfType<CXXRecordDecl>()
+                .FirstOrDefault();
+            if (definition is null)
+            {
+                throw new InvalidOperationException(
+                    $"Requested declaration '{target}' was not defined by its selected public header.");
+            }
+
+            resolvedDefinitions.Add(definition);
+        }
+
+        foreach (var definition in resolvedDefinitions)
+        {
+            _recordModelManager.Add(definition);
         }
 
         return true;

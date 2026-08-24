@@ -683,7 +683,10 @@ internal sealed class AddTest
 
     private sealed class FakeVcpkgEnvironment : IVcpkgEnvironment
     {
-        public Task<string> GetIncludingHeaderContentAsync(string triplet, CancellationToken cancellationToken)
+        public Task<string> GetIncludingHeaderContentAsync(
+            string triplet,
+            IReadOnlyList<DeclOptions> declarations,
+            CancellationToken cancellationToken)
         {
             return Task.FromResult("");
         }
