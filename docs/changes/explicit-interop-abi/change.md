@@ -3,22 +3,42 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: draft -->
+<!-- change-status: approved -->
 
 - Priority: P1
-- Approval: None while Draft.
+- Approval: User approval in the current Codex task on 2026-08-24 for content SHA-256
+  `3617B1A181AE56E4D2611C3CCD7FBE85C6973D2D52E5295E79938F53EB34300E`.
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
 
-The generator must translate OCCT C++ semantics into an explicit, restricted, and verifiable C transport contract. `TypeModel.CppTypeName` currently represents both the native C++ spelling and the exported wrapper signature, so functions declared with `extern "C"` can still expose C++ references, STL types, and `opencascade::handle<T>`. C linkage fixes symbol linkage; it does not make those parameter representations safe for P/Invoke or a C caller. The ABI must become authoritative before managed invocation is completed.
+The generator must translate OCCT C++ semantics into an explicit, restricted, and verifiable C
+transport contract before managed invocation is completed. Today `TypeModel.CppTypeName` is both a
+source C++ spelling and an exported wrapper type, so `extern "C"` declarations can still expose C++
+references, templates, STL records, and `opencascade::handle<T>`. C linkage controls symbol linkage;
+it does not make those representations safe for P/Invoke or a C caller.
 
 <!-- section: scope -->
 ## Scope and non-goals
 
-- In scope: separate the source C++ type, ABI transport, C++ adaptation, managed transport, and public managed projection; implement the approved ABI vocabulary; convert at the wrapper boundary; reject declarations without a safe mapping; prevent STL and compiler-internal records from becoming generated targets.
-- Non-goals: generate final P/Invoke declarations or managed method bodies, finish every managed lifetime type, fix native CMake linking, or promise coverage of the complete OCCT type system.
-- Preserved behavior: representative existing public C# names and member selection, OCCT operation results, and native error information remain available. Current prototype native signatures and their names are not a released compatibility baseline; establishing deterministic ABI-version-1 symbol names is explicitly in scope.
+- In scope: separate source C++, ABI transport, C++ adaptation, managed transport, and public
+  managed projections; generate the ABI-major-1 header and native library; implement the approved
+  scalar, semantic value, UTF-8 buffer, transient handle, error, and lifetime contracts; reject a
+  member before export when any mapping is incomplete.
+- Initial conformance slice: `gp_Pnt2d` as a semantic value, `Geom2d_CartesianPoint` as a
+  `Standard_Transient` handle, and `TCollection_AsciiString` as a UTF-8 value. Representative
+  operations must construct and observe a point, construct/get/set/retain/release a transient
+  Cartesian point, and round-trip UTF-8 through library-owned output storage.
+- Frozen transports for this slice: `ted_occt_v1_pnt2d` contains `double x` followed by `double y`
+  with no additional validity rule; Cartesian points use
+  `typedef struct ted_occt_v1_geom2d_cartesian_point ted_occt_v1_geom2d_cartesian_point` and pointers
+  to that incomplete type; UTF-8 uses ADR-0001's byte view and owned-byte carriers.
+- Non-goals: final generated `LibraryImport`/`DllImport` declarations or public managed method
+  bodies, complete managed lifetime types, every `Geom2d_BSplineCurve` dependency, callbacks,
+  nested/non-contiguous collections, other triplets, or the complete OCCT type system.
+- Preserved behavior: the approved-base revision's public C# names and selected member set for the
+  conformance roots, observable OCCT results, and available native diagnostics remain available.
+  Prototype native signatures and names are not a released compatibility baseline.
 
 <!-- section: behavior-contract -->
 ## Behavior contract
@@ -26,128 +46,166 @@ The generator must translate OCCT C++ semantics into an explicit, restricted, an
 <!-- behavior-change: OB-01 -->
 | ID | Observable boundary | Current | Expected | Preserved |
 | --- | --- | --- | --- | --- |
-| OB-01 | Type model | Raw C++ spelling is reused as the wrapper signature | Source type, ABI transport, C++ adaptation, managed transport, and public type have separate non-fallback responsibilities | Public managed types may differ from transport types |
-| OB-02 | Exported declarations | C++ references, template instances, STL classes, and OCCT handle classes can appear | Only ADR-approved C scalars, semantic values, buffers, one error carrier, and opaque handles appear | Exports retain C linkage and the approved C calling convention |
-| OB-03 | Unsupported types | The generator may recursively emit STL/compiler wrappers or unusable signatures | It rejects the member before export with a deterministic diagnostic containing declaration and type evidence | Other supported members retain the approved selection behavior |
-| OB-04 | C++ invocation adaptation | ABI arguments may be passed directly into OCCT using compiler-specific representation | The wrapper explicitly constructs, borrows, retains, releases, reads, or writes OCCT values according to the ABI contract | OCCT APIs themselves are unchanged |
-| OB-05 | Existing projection and semantics | The mixed model already produces public names, member selection, error details, and OCCT call results | Representative supported declarations retain those public names, selected members, error information, and OCCT results after model separation | Managed P/Invoke method bodies remain a later change |
-| OB-06 | Exception outcome | Success is inferred from a null native type-name pointer, while concrete native type names drive managed exception mapping | Every operation returns one error value whose fixed-width kind is authoritative; concrete native type, message, and stack text remain optional diagnostics | No separate status value or process-global last-error state is introduced |
+| OB-01 | Type projection | Raw C++ spelling can become the export type | Every projection layer is explicit and non-fallback | Public managed and transport types may differ |
+| OB-02 | Canonical C surface | Prototype symbols can contain C++ ABI types and derive names from C# projections | `ted_toolkit_occt_v1.h` contains only approved C11 types and stable ABI-identity symbols for `ted_toolkit_occt_abi_v1` | Exports use C linkage and cdecl |
+| OB-03 | Unsupported members | Recursive discovery can emit STL/compiler wrappers or partial signatures | The member is omitted and one stable diagnostic identifies the declaration and missing mapping | Other supported members retain approved selection |
+| OB-04 | Adaptation and lifetime | ABI values may be passed directly and transient instances can be deleted incorrectly | C++ adapters validate, convert, retain, release, and commit outputs according to ADR-0001 | OCCT APIs are unchanged |
+| OB-05 | Failure outcome | Null type-name state implies success and concrete C++ types drive mapping | One fixed-width error kind is authoritative; optional diagnostics remain library-owned | No last-error state or separate status is introduced |
 
 <!-- acceptance-case: AC-01 -->
-### AC-01 — Supported types produce a pure C transport declaration
+### AC-01 — The generated ABI is canonical C11
 
 ```gherkin
-Scenario: Generate a wrapper for a supported OCCT operation
-  Given the operation uses only approved scalars, semantic values, buffers, or opaque handles
-  When its native wrapper and canonical ABI declaration are generated
-  Then the export contains no C++ reference, template instance, or standard-library type
-  And the adapter can invoke the original OCCT operation
+Scenario: Generate ABI-major-1 declarations twice from the same semantic model
+  Given every receiver, parameter, result, and failure path has an approved ABI mapping
+  When the canonical header and wrappers are generated in different input orders
+  Then both runs produce the same globally unique operation symbols
+  And the header compiles as C11 and C++ without OCCT or C++ standard-library headers
+  And no symbol identity depends on a C# projection name or raw C++ spelling
 ```
 
 <!-- acceptance-case: AC-02 -->
-### AC-02 — References, handles, and buffers do not leak the C++ ABI
+### AC-02 — The conformance slice crosses only approved transports
 
 ```gherkin
-Scenario: An operation uses references, an OCCT handle, or string input and output
-  Given each type has an ADR-approved transport and ownership rule
-  When the wrapper is generated
-  Then the export contains only the corresponding C transport values
-  And the original C++ types appear only inside adapter implementation
+Scenario: Generate representative point, Cartesian-point, and UTF-8 operations
+  Given the approved gp_Pnt2d, Geom2d_CartesianPoint, and TCollection_AsciiString mappings
+  When their canonical declarations and C++ adapters are generated
+  Then the declarations contain only the frozen semantic value, typed opaque handle, byte carriers, scalars, and error value
+  And C++ references, OCCT handles, and TCollection types appear only inside adapter implementation
 ```
 
 <!-- acceptance-case: AC-03 -->
-### AC-03 — Unsupported types are rejected deterministically
+### AC-03 — Unsupported types fail closed
 
 ```gherkin
-Scenario: An operation uses an unmapped STL or compiler-internal type
-  Given the type is outside the approved ABI vocabulary
-  When the generator analyzes the operation
-  Then it emits no export for that operation
-  And it reports the declaration, source location, source type, and missing mapping information
+Scenario: Analyze a member containing an unmapped STL, compiler-internal, or ownership-ambiguous type
+  Given no complete mapping exists for that type and direction
+  When exportability is validated
+  Then no declaration or wrapper body is emitted for that member
+  And one deterministic diagnostic reports the declaration, source location, source type, direction, ownership, and missing rule
 ```
 
 <!-- acceptance-case: AC-04 -->
-### AC-04 — An ABI projection cannot fall back to raw C++ spelling
+### AC-04 — Projection layers cannot fall back
 
 ```gherkin
-Scenario: A new OCCT type rule is incomplete
-  Given the rule defines only a source C++ type or public C# type
-  When that type appears in an interop signature
-  Then contract validation rejects the incomplete mapping
-  And it does not reuse raw C++ spelling as an ABI type
+Scenario: A type rule supplies only source or public-managed information
+  Given an interop signature requires the incomplete rule
+  When the signature contract is validated
+  Then generation rejects the member before naming or emission
+  And it never substitutes source C++ or public C# spelling as a transport type
 ```
 
 <!-- acceptance-case: AC-05 -->
-### AC-05 — Public projection and member selection remain stable
+### AC-05 — Established managed projection intent remains stable
 
 ```gherkin
-Scenario: A representative supported declaration moves to the separated model
-  Given its baseline public C# name and selected member set
-  When the same declaration is generated with the ABI model
-  Then its public C# name and selected member set match the baseline
-  And only the cross-language transport changes as approved
+Scenario: Regenerate existing projection fixtures and the configured development target after model separation
+  Given the approved base revision's Generator semantic assertions and Geom2d_BSplineCurve declaration selection
+  When the same fixture models and target declaration are processed
+  Then their public C# names and selected member identities match the approved-base baseline
+  And only the explicitly approved cross-language transport behavior changes
 ```
 
 <!-- acceptance-case: AC-06 -->
-### AC-06 — A C consumer observes correct calls and failures
+### AC-06 — A plain C consumer observes OCCT behavior and safe ownership
 
 ```gherkin
-Scenario: A plain C fixture calls representative exports
-  Given a shared library with approved scalar, semantic value, buffer or handle, and failure paths
-  When the C fixture compiles, links, and invokes those symbols
-  Then successful calls return the same observable OCCT results
-  And every frozen error kind and each documented derived-before-base exception collision returns the approved stable error kind
-  And failures preserve any available type and message diagnostics whose storage can be released by the library
-  And a nonzero error kind remains observable when diagnostic text allocation is unavailable
-  And catch-all kind 255 and an unrecognized reserved kind are both treated as failures
+Scenario: A C11 consumer calls the generated conformance slice
+  Given the x64-windows OCCT 8.0.1 shared library and canonical header
+  When it invokes point, transient-handle, UTF-8, success, and failure paths
+  Then successful results match the corresponding OCCT operations
+  And retain and release preserve intrusive ownership without directly deleting a live transient target
+  And every owned error or byte buffer is released by its authoritative owner slot
+  And allocation failure preserves a nonzero authoritative error kind without terminating the process
 ```
 
 <!-- acceptance-case: AC-07 -->
-### AC-07 — The by-value error result is valid through P/Invoke
+### AC-07 — A minimal P/Invoke consumer agrees with the native ABI
 
 ```gherkin
-Scenario: A minimal managed boundary fixture invokes the canonical ABI
-  Given a blittable sequential managed declaration that mirrors ted_occt_error
-  When it invokes representative success and failure exports using cdecl on each supported triplet
-  Then its size and field offsets match the native C layout
-  And it observes the same kinds and diagnostic pointers as the C fixture
-  And it releases each owned error through ted_occt_error_clear using its authoritative owner slot
+Scenario: A managed boundary fixture loads ABI major 1
+  Given blittable sequential declarations for the version-1 error, point, and buffer carriers
+  When it verifies the reported ABI major and invokes representative exports using cdecl
+  Then native and managed sizes and field offsets agree
+  And success, unknown/reserved failure, diagnostic pointers, and owner-slot cleanup match the C consumer
+  And an incompatible ABI major is rejected before any operation export is invoked
 ```
 
-## Architecture constraints, alternatives, and risks
+## Architecture constraints and risks
 
-- Approval prerequisite: [ADR-0001](../../adr/ADR-0001-stable-c-interop-abi.md) must be Accepted and pinned to an approved revision. Its transport vocabulary, ownership, errors, buffers, versioning, and compatibility rules govern this delivery. The current Proposed status keeps this change blocked from approval.
-- The selected direction is an explicit C transport ABI with C++ adapters. Continuing to place C++ types under `extern "C"` and switching to C++/CLI were considered and rejected in ADR-0001.
-- A real C consumer must compile, link, and call representative generated exports. C++ compilation under `extern "C"` is structural evidence only.
-- A minimal managed boundary fixture must independently prove the by-value `ted_occt_error` layout and calling convention on every initially supported triplet. This fixture proves ABI transport only and does not implement the final managed API surface.
-- `Standard_Transient` ownership is governed by intrusive retain/release; direct deletion of a live transient target is prohibited.
-- Once consumed, an ABI is difficult to reverse. Any change to released signatures, layouts, error-kind values, ownership, encodings, or compatibility requires a new approved ABI-major decision.
+- Governing decision: [ADR-0001](../../adr/ADR-0001-stable-c-interop-abi.md) is Accepted at commit
+  `49fb72c4010505a409b03ea25433136fd2fe306c`. That revision's version boundary, symbol identity,
+  transport, ownership, error, buffer, and compatibility rules govern this delivery.
+- The first supported matrix is Windows x64, the MSVC x64 ABI, cdecl, and OCCT 8.0.1 from vcpkg
+  triplet `x64-windows`. Portable types do not imply support for another triplet.
+- `Standard_Transient` lifetime uses intrusive retain/release. Direct deletion of a live transient
+  target, stale copied ownership tokens, and escaping borrowed results are invalid.
+- A real C consumer and a minimal managed boundary consumer are required. Text snapshots and C++
+  compilation under `extern "C"` are insufficient.
+- ABI version 1 is not released until all proof passes. After release, changing a symbol, layout,
+  error-kind value, ownership rule, encoding, or release obligation requires a new ABI major.
+- Escalate to architecture design for another triplet, callback, cross-process boundary, public
+  allocator, unsupported resource, or evidence that a transient result cannot be promoted safely.
 
 <!-- section: delivery-brief -->
 ## Delivery brief
 
-- Delivery disposition: one Controlled delivery. If evidence shows that the core model and multiple adapter families require independently verifiable releases, invoke `plan-work-items` rather than hiding additional deliveries here.
-- Outcome and target area: type resolution, projection models, canonical C declarations, and C++ wrapper generation enforce one accepted ABI contract.
-- Prerequisites: trustworthy target parsing; Accepted ADR-0001 pinned to its approved revision; a Microsoft Testing Platform executable test project; a compatible C/C++ toolchain, triplet, and valid `VCPKG_ROOT` for native boundary proof.
-- Likely touchpoints (non-binding): type models/results, Resolver and type rules, record/method/parameter models, C++ generation, Generator test configuration, contract/integration fixtures, and architecture documentation.
-- Private choices left open: internal model decomposition, rule registration, diagnostic object shape, adapter organization, and test fixture layout.
+- Delivery disposition: one Controlled delivery. If implementation evidence requires independently
+  releasable model, adapter-family, or consumer-boundary deliveries, stop and invoke
+  `plan-work-items` rather than hiding additional boundaries here.
+- Outcome and target area: type resolution and projection models, ABI identity, canonical C
+  declaration generation, C++ adapters, shared native support, and boundary fixtures enforce one
+  accepted ABI-major-1 contract.
+- Start conditions: ADR-0001 commit `49fb72c4010505a409b03ea25433136fd2fe306c`; .NET SDK 10;
+  CMake 3.28 or newer; Ninja and
+  `clang-cl` targeting the MSVC x64 ABI; `VCPKG_ROOT` containing `opencascade:x64-windows` 8.0.1.
+  The current environment lacks `VCPKG_ROOT` and Ninja, so native proof cannot run yet.
+- Supplied baseline: existing Generator semantic tests, native-boundary fixture patterns, and the
+  configured `Geom2d_BSplineCurve` declaration selection at the approved base revision. The new canonical
+  header, versioned library, CMake presets, and expanded boundary assertions are delivery outputs,
+  not start prerequisites.
+- Likely touchpoints (non-binding): type resolution/results, record/method/parameter models, C++
+  and C header generation, embedded native support, Generator tests, native consumer fixtures,
+  Runtime ABI carriers, and Generator/Runtime documentation.
+- Private choices left open: internal type decomposition, rule registration, diagnostic object
+  shape, adapter organization, test-file layout, and whether the managed fixture remains in the
+  existing Generator test project or gains a project for materially different execution needs.
 
 <!-- section: proof-plan -->
 ## Proof
 
 | Contract | Evidence purpose | Execution shape | Primary proof | Command or bounded procedure |
 | --- | --- | --- | --- | --- |
-| AC-01 | Acceptance, contract, regression | Contract plus C++ compile | Approved types produce only the canonical C vocabulary and adapters invoke OCCT | `dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj -c Release -- --report-trx`, then compile the generated native fixture |
-| AC-02 | Contract and boundary | Contract | References, handles, strings, and buffers are restored to C++ types only inside adapters | Same Generator command and canonical-header contract assertions |
-| AC-03 | Acceptance and regression | Component | Unsupported types produce no export and return a stable, locatable diagnostic | Same Generator command |
-| AC-04 | Architecture and regression | Unit | A type rule missing any required ABI projection cannot enter wrapper generation | Same Generator command |
-| AC-05 | Regression and compatibility | Contract | Representative public C# names, selected members, and public projections match a semantic baseline | Same Generator command using semantic assertions rather than full-file snapshots |
-| AC-06 | Acceptance, boundary, regression | Integration with a real C consumer plus deterministic fault injection | A C11 fixture exercises every frozen kind, the documented derived/base precedence, catch-all `UNKNOWN` 255, a distinct unrecognized reserved kind, ownership transfer, stale-copy prohibition, and idempotent authoritative-slot clear. A test-only diagnostic allocator seam fails each allocation point and proves the original kind remains, all diagnostic pointers become null, acquired storage is released, and the process does not terminate. | `cmake --preset ted-occt-abi-v1-consumer`, `cmake --build --preset ted-occt-abi-v1-consumer`, then `ctest --preset ted-occt-abi-v1-consumer --output-on-failure` |
-| AC-07 | Acceptance, boundary, regression | Integration with a minimal managed P/Invoke fixture | Fixture-only native layout queries are compared with `Marshal.SizeOf` and `Marshal.OffsetOf`; success and failure exports return the struct by value using cdecl, and every owned payload is cleared by owner-slot reference on every initially supported triplet | `dotnet run --project tests/TedToolkit.Occt.Runtime.Interop.Tests/TedToolkit.Occt.Runtime.Interop.Tests.csproj -c Release -- --report-trx` against the same native fixture used by AC-06 |
+| AC-01 | Acceptance, contract, structural | Contract plus C11/C++ compile | Order-independent generation yields identical valid C11 declarations and ABI-identity symbols | Generator test command below, then CMake consumer configure/build |
+| AC-02 | Acceptance, boundary | Contract | Frozen value, handle, and UTF-8 transports appear in the header; C++ types remain in adapters | Generator test command below |
+| AC-03 | Acceptance, regression | Component | Unsupported members emit no partial artifact and one complete deterministic diagnostic | Generator test command below |
+| AC-04 | Architecture, regression | Unit | Incomplete projection rules cannot reach naming or emission | Generator test command below |
+| AC-05 | Regression, compatibility | Contract | Semantic public-name and member-identity assertions match the approved base | Generator test command below |
+| AC-06 | Acceptance, boundary, regression | Integration with real C consumer | C11 calls prove results, retain/release, error precedence, faulted diagnostics, and same-library cleanup | CMake/CTest commands below |
+| AC-07 | Acceptance, boundary, regression | Integration with minimal P/Invoke consumer | Native layout queries match managed layout; version check, by-value errors, reserved failures, and cleanup agree | Generator test command below against the AC-06 library |
 
-Conditional evidence: if Accepted ADR-0001 permits fixed structs, cross-module release, or cross-compiler consumption, add the applicable layout, allocator-boundary, and compatibility proof. Text snapshots cannot replace a real compiled boundary. This Draft remains blocked from approval while ADR-0001 is Proposed.
+```powershell
+dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj -c Release -- --report-trx
+cmake --preset ted-occt-abi-v1-consumer
+cmake --build --preset ted-occt-abi-v1-consumer
+ctest --preset ted-occt-abi-v1-consumer --output-on-failure
+dotnet restore TedToolkit.Occt.slnx
+dotnet build TedToolkit.Occt.slnx -c Release --no-restore
+```
+
+The C consumer must exercise every frozen error kind, documented derived-before-base collision,
+catch-all value 255, a distinct unrecognized reserved value, idempotent authoritative-slot cleanup,
+and deterministic failure of each diagnostic allocation point. Cross-compiler or additional-triplet
+proof is required only if the approved scope expands.
 
 <!-- section: completion-criteria -->
 ## Completion
 
-ADR-0001 is Accepted and its constraints are implemented; AC-01 through AC-07 pass; representative wrappers compile and are called by real C and minimal P/Invoke consumers; no unapproved C++ reference, template, STL type, or OCCT handle representation appears in an export; representative public projections, member selection, OCCT results, and error information remain correct; Generator and Runtime documentation describe the supported matrix and rejection behavior. Final managed API invocation remains outside this change.
+ADR-0001 is Accepted and implemented; AC-01 through AC-07 pass on the initial supported matrix; the
+canonical header and versioned library are called by real C and P/Invoke consumers; unsupported
+members fail closed; no unapproved C++ representation appears in an export; conformance-root public
+projection intent remains stable; and Generator and Runtime documentation describe the supported
+matrix, ownership rules, version check, and rejection behavior. Final managed invocation remains a
+later change.
