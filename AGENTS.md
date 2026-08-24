@@ -11,3 +11,7 @@ Example:
 ```powershell
 dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj --no-build -- --report-trx
 ```
+
+## Documentation language
+
+- Write repository documentation, ADRs, change records, and new code comments in English.

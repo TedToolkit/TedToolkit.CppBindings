@@ -1,287 +1,149 @@
 # TedToolkit.Occt
 
-## 做一个自己的
-1. Occt相关的Net包不是要收费就是不好用。
-2. 官方的Occt Wrapper,非常不Occt, Handle<>、gp_pnt没有非常符合c#的习惯。
-3. 封装库，不论用多少，始终会打包完整的Occt包，冗余与臃肿。
-（2026.01调研的一个结果）
+TedToolkit.Occt 是一个面向 .NET 的 OCCT 绑定代码生成项目：它从 vcpkg 安装的 Open CASCADE Technology（OCCT）头文件中解析用户选择的 C++ 类型，并生成配套的 C++ ABI 包装代码与 C# 类型代码。
 
-## 理想状态下的C# Occt的库。
+> ⚠️ 项目目前处于开发阶段。核心解析与 C++ 生成链路已经建立，但尚未形成可直接消费的完整 C# 绑定包；请先阅读[当前实现边界](#当前实现边界)。
 
-1. Occt当中，是面向对象的。
-2. 跨平台，起码支持Windows和Linux。
-3. 堆上对象和栈上对象要和cpp的相对应。（gp_pnt struct, geom_XXXX (handle<>) class）
-4. 高性能的：无过多频繁的abi操作(点的x值修改，就别找cpp了)，或者gc操作 (class)，或者heap操作（new / delete）。
-5. 不能有非c#的exception出现，其会直接导致崩溃。
-6. 可被裁剪的，如果一些功能没有用到，对应的dll文件甚至代码不因出现。（Source/Code Generator）要用多少，生成多少。（精确到类/类中方法）
-7. 支持多framework。
+## 项目解决什么问题
 
-## 解决方案
+现有 OCCT .NET 封装通常需要在易用性、原生语义、包体积和平台覆盖之间取舍。本项目尝试采用代码生成方式解决这些问题：
 
-### 对象的生命周期
-其中内存分布必须和C++一致，能够直接调用cpp的函数。
+- 只从指定的 OCCT 类型开始生成，并递归加入实际依赖，避免无条件包装整个 OCCT。
+- 保留 OCCT 的值类型、继承和 `Standard_Transient` 生命周期语义。
+- 通过 `extern "C"` 建立稳定的 C ABI，避免 C# 直接调用 C++ ABI。
+- 分离 ABI 类型与公共 C# 类型，使内存布局正确性和 C# 易用性可以分别演进。
+- 在原生边界捕获 OCCT/C++ 异常，再转换成 .NET 异常。
 
-#### 栈（C#）
+## 工作原理
 
-##### 无特殊构造和析构函数
-
-只是一个c的typedef之类的。
-```c#
-
-[StructLayout(LayoutKind.Explicit)]
-public struct Dummy
-{
-    [FieldOffset(0)]
-    public float Field;
-}
-
+```text
+GenerationOptions / DeclOptions
+              │
+              ▼
+读取 VCPKG_ROOT 下的 OCCT 头文件和目标 triplet
+              │
+              ▼
+       ClangSharp / libclang 解析 C++ AST
+              │
+              ▼
+构造 RecordModel、MethodModel、FieldModel、TypeModel
+              │
+              ├───────────────┐
+              ▼               ▼
+生成 C++ extern "C"       生成 C# 类型、字段、
+包装与异常边界             接口和公共 API 形状
+              │               │
+              ▼               │
+CMake + vcpkg 编译原生 DLL    │
+              └───────┬───────┘
+                      ▼
+           Runtime 管理指针、生命周期与异常
 ```
 
-##### 有特殊构造和析构函数
+### 1. 从 vcpkg 获取真实 OCCT 环境
 
-```c#
+生成器读取 `VCPKG_ROOT`，在 `installed/<triplet>/include/opencascade` 中查找 OCCT 头文件。未显式指定 `GenerationOptions.Triplet` 时，它会从已安装 OCCT 的 triplet 中选择与当前操作系统和进程架构最匹配的一项。
 
-[StructLayout(LayoutKind.Explicit)]
-public struct Dummy : IDisposable
-{
-    [FieldOffset(0)]
-    public float Field;
+当前环境不是由仓库清单锁定的：仓库尚无 `vcpkg.json`，因此生成结果取决于本机 vcpkg 安装。
 
-    [SkipLocalsInit]
-     public unsafe Dummy(float a)
-    {
-        fixed (Dummy* ptr = &this)
-        {
-            Wrapper.ConstructDummy(ptr, a); // Cpp ::new()
-        }
-    }
+### 2. 解析 C++ AST 并建立依赖图
 
+ClangSharp/libclang 将头文件解析为 C++ AST。生成器先寻找 `DeclOptions` 指定的声明，再递归分析：
 
-    public void Dispose()
-    {
-        fixed (Dummy* ptr = &this)
-        {
-            Wrapper.DestructDummy(ptr, a); // Cpp ~
-        }
-    }
-}
+- 基类；
+- 字段类型；
+- 方法参数和返回类型；
+- 枚举；
+- `opencascade::handle<T>` 指向的实际记录类型；
+- 生成 C++ 签名需要包含的头文件。
 
+记录模型还保存对象大小、字段偏移、抽象性、是否含有虚函数，以及是否继承 `Standard_Transient`。这些信息决定生成类型的内存布局和生命周期策略。
+
+### 3. 生成两组代码
+
+| 输出 | 责任 |
+| --- | --- |
+| C++ 代码 | 把构造函数、成员函数、运算符和析构操作转换为 `extern "C"` 导出函数；处理重载命名、返回值输出参数、右值转发和异常捕获。 |
+| C# 代码 | 根据原生大小和字段偏移生成托管类型形状，区分 P/Invoke 类型与公共 API 类型，并投影继承接口、枚举和 XML 文档。 |
+
+C++ 代码通过 CMake 查找 vcpkg 的 `OpenCASCADE` 配置并链接 OCCT。异常包装层捕获 `Standard_Failure`、`std::exception` 和未知异常，以 `interop_error` 返回给托管侧。
+
+更详细的生成流程见 [TedToolkit.Occt.Generator](src/core/TedToolkit.Occt.Generator/README.md)，生命周期和异常模型见 [TedToolkit.Occt.Runtime](src/core/TedToolkit.Occt.Runtime/README.md)。
+
+## 🚀 运行开发示例
+
+### 前置条件
+
+- .NET SDK 10
+- CMake 3.28 或更高版本
+- 可用的 C++17 编译工具链；Windows 当前使用 Visual C++
+- vcpkg
+- 已安装的 `opencascade` triplet
+- 指向 vcpkg 根目录的 `VCPKG_ROOT` 环境变量
+
+先确认 OCCT 安装：
+
+```powershell
+& "$env:VCPKG_ROOT\vcpkg.exe" list opencascade
 ```
 
-#### 堆（C++ new/delete）
+示例程序当前选择 `Geom2d_BSplineCurve`，输出到 `output/generated`：
 
-```c#
-
-public struct Dummy;
-
-public class Handle<TUnmanaged> : IDisposalbe
-{
-
-}
-
+```powershell
+dotnet run --project tests/TedToolkit.Occt.Console/TedToolkit.Occt.Console.csproj -c Release
 ```
 
-#### 堆（C++）
+预期输出结构：
 
-```c#
-[StructLayout(LayoutKind.Explicit)]
-public struct Dummy
-{
-    [FieldOffset(0)]
-    public float Field;
-
-    public Dummy()
-    {
-        throw new InvalidOperationException();
-    }
-}
-
-public unsafe class Handle<TUnmanaged> : IDisposable
-{
-    private readonly TUnmanaged* _value;
-    public Handle()
-    {
-        _value = Wrapper.Construct();
-    }
-
-    public void Dispose()
-    {
-        Wrapper.Destruct(_value);
-    }
-}
-
-class MyClass
-{
-    public MyClass()
-    {
-        using var point = new Handle<Point>();
-    }
-}
+```text
+output/generated/
+├── csharp/                         # 生成的 C# 文件
+└── cpp/ted_toolkit_occt/
+    ├── src/                        # C++ wrapper 与 CMakeLists.txt
+    ├── build/                      # CMake 构建目录
+    └── bin/                        # 原生库输出目录
 ```
 
-#### 堆(C#)
+> ⚠️ 该命令是当前端到端开发入口，不是已验证通过的发布示例。现有工作树可以完成依赖还原、OCCT 解析和 C++ 文件生成，但仍可能在解析诊断、C# 生成顺序或原生编译阶段停止。
 
-使用TedToolkit.Refly
+## 组件
 
-### 解析头文件方案
+| 组件 | 责任 | 文档 |
+| --- | --- | --- |
+| `TedToolkit.Occt.Generator` | 读取 vcpkg/OCCT、解析 AST、建立模型并生成两组代码 | [README](src/core/TedToolkit.Occt.Generator/README.md) |
+| `TedToolkit.Occt.Runtime` | 提供原生句柄、借用视图、异常桥和生成类型依赖的基础契约 | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
+| `TedToolkit.Occt.Analyzer` | 从已安装 OCCT 头文件生成可选择的头文件类型枚举 | `src/tools/TedToolkit.Occt.Analyzer` |
+| `TedToolkit.Occt.Console` | 运行 `Geom2d_BSplineCurve` 生成流程的开发样例 | `tests/TedToolkit.Occt.Console` |
+| `Build` | 仓库构建管线，并在准备阶段生成 triplet 友元程序集声明 | `Build` |
 
-### 动态生成方案
+## 当前实现边界
 
-## 类型系统设计
+- `GenerateCSharpModule` 当前没有依赖 `ParseModule`，可能在模型建立前执行并产生空输出。
+- 解析器当前聚合包含已安装 OCCT 的全部非弃用 `.hxx`，容易受到无关头文件、包含顺序和未安装私有头文件影响。
+- Clang Error/Fatal 目前只写入日志，模块仍可能报告成功。
+- 递归类型发现尚未完整隔离 STL 和编译器内部类型，可能生成不应暴露的 `std::*` 包装。
+- C# 生成器已经生成类型、字段、接口和方法形状，但实际 P/Invoke 声明与公共方法调用体尚未接通。
+- 当前记录类型的结构生成分支只在 `recordDecl.IsAbstract` 为 true 时执行；非抽象记录目前只生成继承接口，类型生成条件仍需调整。
+- 仓库没有 vcpkg manifest/baseline，OCCT 版本仍由本机全局安装决定。
+- 当前没有证据表明 NuGet 包已经发布；不要把项目文件中的打包配置视为可用发布渠道。
 
-这个项目不是单纯把 `ClangSharp.Type` 翻译成一个 C# 类型名，而是要自动生成一整套 C++ / `extern "C"` / PInvoke / C# Public API 的 wrapper。  
-因此，一个类型不能只有一种“名字”，而应该根据使用位置投影成不同的形态。
+## 开发
 
-### 函数中的四种类型视图
+还原和构建解决方案：
 
-对于一个出现在函数签名中的类型，需要同时考虑下面四种状态：
-
-1. `CppOriginal`
-   C++ 原始语义中的类型，也就是直接在 C++ 成员函数、构造函数、返回值里真正使用的类型。
-   例子：`const gp_Pnt&`、`occ::handle<Geom_Surface>`。
-
-2. `CppInterop`
-   为了通过 `extern "C"` 暴露给外部时，C++ 侧导出函数真正使用的类型。
-   例子：把 `const gp_Pnt&` 改成 `const gp_Pnt*`，把 `occ::handle<Geom_Surface>` 改成 `Geom_Surface*`。
-
-3. `CSharpPInvoke`
-   C# 中 `[DllImport]` / source-generated PInvoke 层看到的类型，也就是和 `CppInterop` 一一对应的 C# 表达。
-   这个层级的目标不是“最符合 C# 习惯”，而是“内存布局与 ABI 对齐”。
-   例子：`gp_Pnt*`、`Geom_Surface*`、`int`。
-
-4. `CSharpPublic`
-   最终对用户公开的 C# API 类型。
-   这一层才允许出现 `ref`、`in`、`out`、`Span<T>`、包装类等更符合 C# 使用习惯的表达。
-   例子：`in gp_Pnt`、`Handle<Geom_Surface>`、`out double`。
-
-### 字段中的类型视图
-
-字段和函数不同。
-
-字段本质上只需要关心内存布局，因此通常只需要 `CSharpPInvoke` 这一层的类型视图。  
-因为字段生成时不需要重建 C++ 语义，只需要保证和原生内存一致，所以：
-
-- `&` 在字段上下文中通常需要转成 `*`
-- 关键目标是布局一致，不是 API 友好
-
-也就是说：
-
-- 函数：需要 `CppOriginal` / `CppInterop` / `CSharpPInvoke` / `CSharpPublic`
-- 字段：通常只需要 `CSharpPInvoke`
-
-### 模型方向
-
-因此类型模型不应该只是：
-
-- 一个 `NativeType`
-- 一个 `ManagedType`
-
-而应该是“一个类型，按上下文产出多种投影”。
-
-建议的核心模型如下：
-
-```csharp
-public sealed class TypeModel
-{
-    public required ClangSharp.Type SourceType { get; init; }
-
-    public required string CppOriginalDisplayName { get; init; }
-
-    public ClangSharp.CXXRecordDecl? ReferencedRecord { get; init; }
-
-    public required CppAst.CppType CppInteropType { get; init; }
-
-    public required DataType CSharpPInvokeType { get; init; }
-
-    public required DataType CSharpPublicType { get; init; }
-}
+```powershell
+dotnet restore TedToolkit.Occt.slnx
+dotnet build TedToolkit.Occt.slnx -c Release --no-restore
 ```
 
-其中：
+仓库使用 TUnit 和 Microsoft Testing Platform。测试项目已构建时，优先使用 `dotnet run`：
 
-- `CppOriginalDisplayName` 用于保留 C++ 原始语义
-- `ReferencedRecord` 用于递归生成依赖类型
-- `CppInteropType` 用于生成 `extern "C"` 导出函数
-- `CSharpPInvokeType` 用于生成 PInvoke 层和字段
-- `CSharpPublicType` 用于生成最终对外公开的方法签名
-- `ref` / `in` / `out` 不放进 `TypeModel`，而是在参数生成阶段直接使用 RoslynHelper 原生节点处理
+```powershell
+dotnet run --project tests/TedToolkit.Occt.Runtime.Tests/TedToolkit.Occt.Runtime.Tests.csproj -c Release --no-build -- --report-trx
+```
 
-### 为什么 `CppInteropType` 用 `CppAst`，`CSharpPInvokeType` 和 `CSharpPublicType` 用 `DataType`
+当前 Generator 测试项目仍被识别为 Library，与仓库约定的 `dotnet run` 测试方式不一致；在修正项目配置前，该入口无法直接运行。
 
-`CppInteropType` 服务的是 `extern "C"` 导出层，它本质上仍然属于 C++ 语义。  
-因此这里不建议复用 RoslynHelper，而应尽量复用现成的 C++ 类型模型。
+## 许可证
 
-当前更合适的方向是：
-
-- `SourceType` 继续来自 `ClangSharp`
-- `CppInteropType` 使用 `CppAst` 的类型模型
-- `CSharpPInvokeType` / `CSharpPublicType` 使用 RoslynHelper `DataType`
-- `ref` / `in` / `out` 不混进类型本体，而是在参数生成阶段单独处理
-
-这样可以避免自己维护一套半成品的 C++ AST。
-
-### 为什么 `CSharpPInvokeType` 和 `CSharpPublicType` 用 `DataType`，而不是只用 `IExpression`
-
-这两层不是简单字符串，但它们也不应该只是裸 `IExpression`。
-
-原因是 C# 里“类型”和“参数修饰”不是一个维度：
-
-- `XXX*` 是类型本体
-- `Handle<XXX>` 是类型本体
-- `ref XXX` / `in XXX` / `out XXX` 则是“参数位置上的修饰”
-
-因此更稳妥的做法是：
-
-- 类型本体使用 RoslynHelper `DataType`
-- 参数修饰留在参数生成层处理
-
-这样：
-
-- 字段可以直接复用 `CSharpPInvokeType`
-- 方法参数可以在生成时组合 `DataType` 和 RoslynHelper 自带的参数/表达式节点
-- 不需要把 `ref` / `in` / `out` 错塞进类型表达式内部
-- 仍然可以继续复用 RoslynHelper 的语法节点来表达 `XXX*` 之类的结构化类型
-
-### 关于 `offset` / `size`
-
-即使类型投影层使用 `CppAst`，`offset` / `size` 的计算也仍然应该保留“生成原生探针并编译运行”的路线。  
-原因是字段偏移和对象大小不是单纯语法问题，而是 ABI、编译器、平台、宏和编译选项共同决定的结果。
-
-也就是说：
-
-- `CppAst` 适合承载类型模型和类型投影
-- `offset` / `size` 仍然应以真实 C++ 编译结果为准
-
-可以优化的是“探针源码的构造方式”，例如减少字符串拼接、集中抽象探针模板；  
-但不建议把字段布局判断退化成纯 AST 推导。
-
-### 规则系统
-
-类型转换应当通过规则完成，而不是把逻辑硬编码在一个大 `TypeService` 中。
-
-建议采用：
-
-- `ITypeResolver`
-- `ITypeRule`
-
-流程如下：
-
-1. 从 `ClangSharp.Type` 构造基础 `TypeModel`
-2. 规则按顺序匹配并改写不同投影
-3. 生成器按上下文读取对应投影
-
-第一条规则就是 `occ::handle<XXX>`：
-
-- `CppOriginalDisplayName` 保持 `occ::handle<XXX>`
-- `ReferencedRecord` 指向 `XXX`
-- `CppInteropType` 投影为 `XXX*`
-- `CSharpPInvokeType` 投影为 `XXX*`
-- `CSharpPublicType` 当前也可以先投影为 `XXX*`，后续再单独提升为 `Handle<XXX>` 或别的公开包装
-
-### 设计原则
-
-1. 一个 `Clang` 类型只解析一次，得到一个 `TypeModel`。
-2. 不同代码生成阶段只读取自己需要的投影，不再各自重新猜类型。
-3. 递归生成依赖时只看 `ReferencedRecord`，不从显示名或字符串里反推。
-4. 字段优先保证 ABI 和布局一致。
-5. 函数签名再在 ABI 正确的前提下追求 C# 友好。
+本项目使用 LGPL-3.0 许可，详见 [COPYING](COPYING) 和 [COPYING.LESSER](COPYING.LESSER)。OCCT 及其他依赖分别遵循其自身许可。
