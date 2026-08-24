@@ -444,4 +444,69 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("Transient* instance");
         await Assert.That(code).Contains("delete instance;");
     }
+
+    /// <summary>
+    /// Verifies rvalue-reference constructor arguments are forwarded with <c>std::move</c>.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_move_rvalue_reference_constructor_arguments_Async()
+    {
+        var generator = new CppGenerator(
+            new RecordModel()
+            {
+                DescriptionItems = [],
+                Base = null,
+                IsAbstract = false,
+                IsStandardTransient = false,
+                RequiresNew = true,
+                SourceHeader = "sstream",
+                Size = 0,
+                Type = new()
+                {
+                    CppTypeName = "std::basic_stringstream<char>",
+                    CSharpPInvokeType = new("std_basic_stringstream_char"),
+                    CSharpPublicType = new("std_basic_stringstream_char"),
+                },
+                FieldModels = [],
+                MethodModels =
+                [
+                    new MethodModel()
+                    {
+                        DescriptionItems = [],
+                        ReturnTypeDescriptionItems = [],
+                        NoExceptions = false,
+                        IsConst = false,
+                        IsStatic = false,
+                        ReturnType = new()
+                        {
+                            CppTypeName = "void",
+                            CSharpPInvokeType = DataType.Void,
+                            CSharpPublicType = DataType.Void,
+                        },
+                        MethodName = "New",
+                        Type = MethodModelType.NEW,
+                        Parameters =
+                        [
+                            new ParameterModel()
+                            {
+                                DescriptionItems = [],
+                                Type = new()
+                                {
+                                    CppTypeName = "std::basic_stringstream<char> &&",
+                                    CSharpPInvokeType = new DataType("std_basic_stringstream_char").Pointer,
+                                    CSharpPublicType = new("std_basic_stringstream_char"),
+                                },
+                                Name = "_Right",
+                            },
+                        ],
+                    },
+                ],
+            });
+
+        var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("instance = new std::basic_stringstream<char>(std::move(_Right));");
+        await Assert.That(code).DoesNotContain("instance = new std::basic_stringstream<char>(_Right);");
+    }
 }

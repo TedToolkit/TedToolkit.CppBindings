@@ -24,6 +24,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
         try
         {
             builder.AppendLine("#include \"csharp_interop.h\"");
+            builder.AppendLine("#include <utility>");
             foreach (var header in GetRequiredHeaders(recordDecl))
             {
                 builder.Append("#include <");
@@ -169,7 +170,7 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
             }
 
             started = true;
-            builder.Append(parameterModel.Name);
+            AppendInvocationArgument(ref builder, parameterModel);
         }
 
         builder.AppendLine(");");
@@ -375,9 +376,27 @@ internal sealed class CppGenerator(RecordModel recordDecl) : IGenerator
             }
 
             started = true;
-            builder.Append(parameterModel.Name);
+            AppendInvocationArgument(ref builder, parameterModel);
         }
 
         builder.Append(')');
+    }
+
+    private static void AppendInvocationArgument(ref Utf16ValueStringBuilder builder, ParameterModel parameterModel)
+    {
+        if (RequiresMove(parameterModel))
+        {
+            builder.Append("std::move(");
+            builder.Append(parameterModel.Name);
+            builder.Append(')');
+            return;
+        }
+
+        builder.Append(parameterModel.Name);
+    }
+
+    private static bool RequiresMove(ParameterModel parameterModel)
+    {
+        return parameterModel.Type.CppTypeName.TrimEnd().EndsWith("&&", StringComparison.Ordinal);
     }
 }
