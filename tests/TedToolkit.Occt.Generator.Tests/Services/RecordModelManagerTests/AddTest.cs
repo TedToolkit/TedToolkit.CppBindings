@@ -130,6 +130,144 @@ internal sealed class AddTest
     }
 
     /// <summary>
+    /// Verifies non-callable methods are excluded from generated method models.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_non_callable_methods_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct StreamLike
+            {
+                StreamLike();
+                void Reset() = delete;
+                void Legacy() __attribute__((unavailable("legacy API")));
+                void Write(int value);
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "StreamLike");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var methods = manager.RecordModels.Single().MethodModels
+            .Select(static m => (m.Type, m.MethodName, ParameterCount: m.Parameters.Count))
+            .ToArray();
+
+        await Assert.That(methods.Length).IsEqualTo(2);
+        await Assert.That(methods).Contains((MethodModelType.NEW, "New", 0));
+        await Assert.That(methods).Contains((MethodModelType.NORMAL, "Write", 1));
+    }
+
+    /// <summary>
+    /// Verifies deleted copy constructors are excluded from generated constructor models.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_deleted_copy_constructor_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct StreamLike
+            {
+                StreamLike();
+                StreamLike(const StreamLike&) = delete;
+                void Write(int value);
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "StreamLike");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var constructors = manager.RecordModels.Single().MethodModels
+            .Where(static m => m.Type == MethodModelType.NEW)
+            .Select(static m => m.Parameters.Count)
+            .ToArray();
+
+        await Assert.That(constructors).IsEquivalentTo([0,]);
+    }
+
+    /// <summary>
+    /// Verifies constructors that take non-copyable record values are excluded.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_constructors_with_non_copyable_value_parameters_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct StreamLike
+            {
+                StreamLike();
+                StreamLike(const StreamLike&) = delete;
+            };
+
+            struct Holder
+            {
+                Holder(StreamLike stream);
+                Holder(int value);
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Holder");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var constructors = manager.RecordModels.Single().MethodModels
+            .Where(static m => m.Type == MethodModelType.NEW)
+            .Select(static m => m.Parameters.Select(p => p.Type.CppTypeName).ToArray())
+            .ToArray();
+
+        await Assert.That(constructors.Length).IsEqualTo(1);
+        await Assert.That(constructors.Single()).IsEquivalentTo(["int",]);
+    }
+
+    /// <summary>
+    /// Verifies methods with unnamed parameters are excluded from generated method models.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_methods_with_unnamed_parameters_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct StreamLike
+            {
+                StreamLike();
+                void Write(int);
+                void Flush();
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "StreamLike");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var methods = manager.RecordModels.Single().MethodModels
+            .Select(static m => (m.Type, m.MethodName, ParameterCount: m.Parameters.Count))
+            .ToArray();
+
+        await Assert.That(methods).IsEquivalentTo([
+            (MethodModelType.NEW, "New", 0),
+            (MethodModelType.NORMAL, "Flush", 0),
+        ]);
+    }
+
+    /// <summary>
     /// Verifies implicit and explicit conversion operators are classified correctly.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -195,6 +333,57 @@ internal sealed class AddTest
         await Assert.That(manager.RecordModels.Single(static m => m.Type.CppTypeName == "Parent")
             .FieldModels.Single().Type.CppTypeName)
             .IsEqualTo("Child");
+    }
+
+    /// <summary>
+    /// Verifies handle specializations are unwrapped to the referenced record before model creation.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    /// <exception cref="InvalidOperationException">Thrown when the handle field does not resolve to a C++ record.</exception>
+    [Test]
+    public async Task Should_unwrap_handle_specializations_before_adding_record_models_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            namespace opencascade
+            {
+                template<typename T>
+                class handle
+                {
+                public:
+                    handle();
+                    explicit handle(const T* value);
+                    T* get() const;
+                };
+            }
+
+            struct Geom2d_Curve
+            {
+                int Value;
+            };
+
+            struct Holder
+            {
+                opencascade::handle<Geom2d_Curve> Value;
+            };
+            """, "__occt__/test.cpp");
+
+        var handleRecord = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Holder")
+            .Fields
+            .Single()
+            .Type
+            .AsCXXRecordDecl
+            ?? throw new InvalidOperationException("Handle field type did not resolve to a CXX record declaration.");
+
+        var manager = CreateManager();
+
+        var model = manager.Add(handleRecord);
+
+        await Assert.That(model.Type.CppTypeName).IsEqualTo("Geom2d_Curve");
+        await Assert.That(model.FieldModels.Single().Name).IsEqualTo("Value");
+        await Assert.That(manager.RecordModels.Select(static m => m.Type.CppTypeName))
+            .IsEquivalentTo(["Geom2d_Curve",]);
     }
 
     /// <summary>

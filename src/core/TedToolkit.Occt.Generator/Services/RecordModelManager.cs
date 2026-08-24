@@ -62,12 +62,7 @@ internal sealed class RecordModelManager(
     /// <inheritdoc/>
     public RecordModel Add(CXXRecordDecl record)
     {
-        record = record.Definition!;
-
-        if (record is null)
-        {
-            throw new NotSupportedException("Record is not defined");
-        }
+        record = UnwrapRecord(record.Definition!);
 
         var key = record.CanonicalDecl.Handle;
         if (_recordNames.TryGetValue(key, out var existing))
@@ -145,7 +140,7 @@ internal sealed class RecordModelManager(
 
         if (result.Enum is not null)
         {
-            Add(result.Enum);
+            Add((EnumDecl)result.Enum);
         }
 
         return ApplyRequiredHeaders(result.Type, type);
@@ -165,7 +160,7 @@ internal sealed class RecordModelManager(
 
         CollectRequiredHeaders(type, headers, visitedTypes, visitedDecls);
 
-        return [.. headers];
+        return [.. headers,];
     }
 
     private static void CollectRequiredHeaders(
@@ -208,7 +203,7 @@ internal sealed class RecordModelManager(
                 break;
         }
 
-        if (TryGetEnumDecl(type, out var enumDecl))
+        if (TryGetEnumDecl((ClangSharp.Type)type, out var enumDecl))
         {
             AddHeader(enumDecl, headers, visitedDecls);
             return;
@@ -246,9 +241,6 @@ internal sealed class RecordModelManager(
 
             case CXTemplateArgumentKind.CXTemplateArgumentKind_NullPtr:
                 CollectRequiredHeaders(templateArgument.NullPtrType, headers, visitedTypes, visitedDecls);
-                break;
-
-            default:
                 break;
         }
     }
@@ -537,12 +529,17 @@ internal sealed class RecordModelManager(
             return false;
         }
 
-        if (method.Parameters.Any(p => !IsDefined(p.Type) || string.IsNullOrEmpty(p.Name)))
+        if (method.Parameters.Any(p => !ShouldIncludeParameter(p)))
         {
             return false;
         }
 
         if (method.Access is not CX_CXXAccessSpecifier.CX_CXXPublic)
+        {
+            return false;
+        }
+
+        if (method.IsDeleted || method.IsUnavailable || method.IsInvalidDecl)
         {
             return false;
         }
@@ -565,6 +562,52 @@ internal sealed class RecordModelManager(
         }
 
         return true;
+    }
+
+    private static bool ShouldIncludeParameter(ParmVarDecl parameter)
+    {
+        if (!IsDefined(parameter.Type) || string.IsNullOrEmpty(parameter.Name))
+        {
+            return false;
+        }
+
+        return !RequiresDeletedCopyForByValuePassing(parameter.Type);
+    }
+
+    private static bool RequiresDeletedCopyForByValuePassing(ClangSharp.Type type)
+    {
+        type = type.CanonicalType;
+
+        while (type.IsLocalConstQualified)
+        {
+            type = type.Desugar.CanonicalType;
+        }
+
+        if (type is PointerType or LValueReferenceType or RValueReferenceType)
+        {
+            return false;
+        }
+
+        if (type.AsCXXRecordDecl?.Definition is not { } record)
+        {
+            return false;
+        }
+
+        var copyConstructors = record.Methods
+            .OfType<CXXConstructorDecl>()
+            .Where(static ctor => ctor.IsCopyConstructor)
+            .ToArray();
+
+        if (copyConstructors.Length is 0)
+        {
+            return record.HasUserDeclaredMoveOperation;
+        }
+
+        return !copyConstructors.Any(static ctor =>
+            ctor.Access is CX_CXXAccessSpecifier.CX_CXXPublic
+            && !ctor.IsDeleted
+            && !ctor.IsUnavailable
+            && !ctor.IsInvalidDecl);
     }
 
     private static bool IsOperatorNewOrDelete(CXXMethodDecl method)
@@ -628,6 +671,42 @@ internal sealed class RecordModelManager(
         }
 
         yield return record;
+    }
+
+    private static CXXRecordDecl UnwrapRecord(CXXRecordDecl record)
+    {
+        ArgumentNullException.ThrowIfNull(record);
+
+        if ((record.Definition ?? record) is not ClassTemplateSpecializationDecl classTemplateSpecializationDecl)
+        {
+            return record;
+        }
+
+        if (!IsHandleSpecialization(classTemplateSpecializationDecl))
+        {
+            return record;
+        }
+
+        foreach (var templateArgument in classTemplateSpecializationDecl.TemplateArgs)
+        {
+            if (templateArgument.Kind is not CXTemplateArgumentKind.CXTemplateArgumentKind_Type)
+            {
+                continue;
+            }
+
+            if (templateArgument.AsType.AsCXXRecordDecl?.Definition is { } innerRecord)
+            {
+                return innerRecord;
+            }
+        }
+
+        throw new NotSupportedException($"Can't unwrap handle specialization ({record.TypeForDecl.AsString})");
+    }
+
+    private static bool IsHandleSpecialization(ClassTemplateSpecializationDecl record)
+    {
+        return record.TypeForDecl.AsString.StartsWith("opencascade::handle<", StringComparison.Ordinal)
+               || record.TypeForDecl.AsString.StartsWith("occ::handle<", StringComparison.Ordinal);
     }
 
     private void Add(EnumDecl enumModel)

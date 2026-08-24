@@ -399,7 +399,7 @@ internal static class Helpers
             var descriptionItem = child.ToDescriptionItem();
             if (descriptionItem is not null)
             {
-                descriptionItems.Add(descriptionItem);
+                descriptionItems.Add((IDescriptionItem)descriptionItem);
             }
         }
 
