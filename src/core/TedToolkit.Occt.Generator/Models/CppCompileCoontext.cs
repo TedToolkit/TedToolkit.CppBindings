@@ -1,4 +1,4 @@
-﻿// -----------------------------------------------------------------------
+// -----------------------------------------------------------------------
 // <copyright file="CppCompileCoontext.cs" company="TedToolkit">
 // Copyright (c) TedToolkit. All rights reserved.
 // Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
@@ -8,6 +8,7 @@
 using Cysharp.Text;
 
 using ModularPipelines.Context.Domains;
+using ModularPipelines.Exceptions;
 using ModularPipelines.Options;
 
 namespace TedToolkit.Occt.Generator.Models;
@@ -26,8 +27,6 @@ internal sealed class CppCompileCoontext
     private readonly DirectoryInfo _buildDirectory;
 
     private readonly DirectoryInfo _binaryDirectory;
-
-    private readonly List<string> _fileNames = [];
 
     /// <summary>
     /// Initializes a new instance of the <see cref="CppCompileCoontext"/> class.
@@ -55,7 +54,6 @@ internal sealed class CppCompileCoontext
     /// <returns>A task that completes when the source file is written.</returns>
     public Task AddSourceAsync(string name, string source, in CancellationToken cancellationToken)
     {
-        _fileNames.Add(name);
         var path = Path.Combine(_sourceDirectory.FullName, name);
         return File.WriteAllTextAsync(path, source, cancellationToken);
     }
@@ -68,19 +66,71 @@ internal sealed class CppCompileCoontext
     /// <param name="vcpkgRoot">The vcpkg root folder.</param>
     /// <param name="triplet">The target vcpkg triplet.</param>
     /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The output directory containing the compiled binary.</returns>
-    public async Task<DirectoryInfo> BuildAsync(
+    /// <returns>The compiled native artifact.</returns>
+    /// <exception cref="InvalidOperationException">The command fails or the expected artifact is not produced.</exception>
+    /// <exception cref="OperationCanceledException">The build is cancelled.</exception>
+    public Task<FileInfo> BuildAsync(
         IShellContext shell,
+        bool isExecutable,
+        string vcpkgRoot,
+        string triplet,
+        in CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(shell);
+
+        return BuildAsync(RunCommandAsync, isExecutable, vcpkgRoot, triplet, cancellationToken);
+
+        async Task<CppCommandResult> RunCommandAsync(
+            string fileName,
+            IReadOnlyList<string> arguments,
+            CancellationToken token)
+        {
+            try
+            {
+                var result = await shell.Command.ExecuteCommandLineTool(
+                        new GenericCommandLineToolOptions(fileName) { Arguments = arguments, },
+                        new CommandExecutionOptions() { ThrowOnNonZeroExitCode = false, },
+                        cancellationToken: token)
+                    .ConfigureAwait(false);
+                return new(result.ExitCode, result.StandardOutput, result.StandardError);
+            }
+            catch (CommandException exception) when (token.IsCancellationRequested)
+            {
+                throw new OperationCanceledException("Native build command was cancelled.", exception, token);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Configures and builds the transient C++ project through a controlled command boundary.
+    /// </summary>
+    /// <param name="commandRunner">The native command runner.</param>
+    /// <param name="isExecutable">A value indicating whether to build an executable instead of a shared library.</param>
+    /// <param name="vcpkgRoot">The vcpkg root folder.</param>
+    /// <param name="triplet">The target vcpkg triplet.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The compiled native artifact.</returns>
+    /// <exception cref="InvalidOperationException">The command fails or the expected artifact is not produced.</exception>
+    /// <exception cref="OperationCanceledException">The build is cancelled.</exception>
+    internal async Task<FileInfo> BuildAsync(
+        CppCommandRunner commandRunner,
         bool isExecutable,
         string vcpkgRoot,
         string triplet,
         CancellationToken cancellationToken)
     {
-        var path = Path.Combine(_sourceDirectory.FullName, "CMakeLists.txt");
-        await File.WriteAllTextAsync(path, GenerateCMake(isExecutable), cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(commandRunner);
+        _ = await MaterializeProjectAsync(isExecutable, cancellationToken).ConfigureAwait(false);
 
-        await RunCommandAsync(
-            shell,
+        var artifact = GetExpectedArtifact(isExecutable);
+        if (artifact.Exists)
+        {
+            artifact.Delete();
+        }
+
+        await RunCommandStageAsync(
+            commandRunner,
+            "configure",
             "cmake",
             [
                 "-S",
@@ -101,21 +151,51 @@ internal sealed class CppCompileCoontext
             "--build", _buildDirectory.FullName, "--config", "Release",
         };
 
-        await RunCommandAsync(
-            shell,
+        await RunCommandStageAsync(
+            commandRunner,
+            "build",
             "cmake",
             buildArguments,
             cancellationToken).ConfigureAwait(false);
 
-        return _binaryDirectory;
+        artifact.Refresh();
+        if (!artifact.Exists)
+        {
+            throw new InvalidOperationException(
+                $"CMake build reported success but the expected native artifact was not produced: {artifact.FullName}");
+        }
+
+        return artifact;
+    }
+
+    /// <summary>
+    /// Writes the deterministic transient <c>CMakeLists.txt</c> file.
+    /// </summary>
+    /// <param name="isExecutable">A value indicating whether to build an executable.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>The materialized CMake project file.</returns>
+    internal async Task<FileInfo> MaterializeProjectAsync(bool isExecutable, CancellationToken cancellationToken)
+    {
+        var compilationSources = _sourceDirectory
+            .EnumerateFiles("*", SearchOption.TopDirectoryOnly)
+            .Where(static file => IsCompilationSource(file.Extension))
+            .Select(static file => file.Name)
+            .Distinct(StringComparer.Ordinal)
+            .OrderBy(static name => name, StringComparer.Ordinal)
+            .ToArray();
+        var path = Path.Combine(_sourceDirectory.FullName, "CMakeLists.txt");
+        await File.WriteAllTextAsync(path, GenerateCMake(isExecutable, compilationSources), cancellationToken)
+            .ConfigureAwait(false);
+        return new(path);
     }
 
     /// <summary>
     /// Generates the transient <c>CMakeLists.txt</c> content.
     /// </summary>
     /// <param name="isExecutable">A value indicating whether to build an executable.</param>
+    /// <param name="fileNames">The deterministic compilation-source names.</param>
     /// <returns>The generated CMake file content.</returns>
-    private string GenerateCMake(bool isExecutable)
+    private string GenerateCMake(bool isExecutable, IReadOnlyList<string> fileNames)
     {
         return $$"""
                  cmake_minimum_required(VERSION 3.28)
@@ -132,27 +212,88 @@ internal sealed class CppCompileCoontext
 
                  target_include_directories({{_projectName}} PRIVATE ${OpenCASCADE_INCLUDE_DIR})
                  target_link_libraries({{_projectName}} PRIVATE ${OpenCASCADE_LIBRARIES})
+
+                 if(MSVC OR CMAKE_CXX_SIMULATE_ID STREQUAL "MSVC")
+                     target_compile_options({{_projectName}} PRIVATE /EHsc)
+                 endif()
                  """;
 
         string GetAddingFiles(bool isExecutable)
         {
             return isExecutable
-                ? $"add_executable({_projectName} {string.Join(" ", _fileNames)})"
-                : $"add_library({_projectName} SHARED {string.Join(" ", _fileNames)})";
+                ? $"add_executable({_projectName} {string.Join(" ", fileNames)})"
+                : $"add_library({_projectName} SHARED {string.Join(" ", fileNames)})";
         }
     }
 
-    private static async Task RunCommandAsync(
-        IShellContext shell,
+    private FileInfo GetExpectedArtifact(bool isExecutable)
+    {
+        string fileName;
+        if (isExecutable)
+        {
+            if (OperatingSystem.IsWindows())
+            {
+                fileName = $"{_projectName}.exe";
+            }
+            else
+            {
+                fileName = _projectName;
+            }
+        }
+        else if (OperatingSystem.IsWindows())
+        {
+            fileName = $"{_projectName}.dll";
+        }
+        else if (OperatingSystem.IsMacOS())
+        {
+            fileName = $"lib{_projectName}.dylib";
+        }
+        else
+        {
+            fileName = $"lib{_projectName}.so";
+        }
+
+        return new(Path.Combine(_binaryDirectory.FullName, fileName));
+    }
+
+    private static bool IsCompilationSource(string extension)
+    {
+        return extension.Equals(".cpp", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".cxx", StringComparison.OrdinalIgnoreCase)
+               || extension.Equals(".cc", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static async Task RunCommandStageAsync(
+        CppCommandRunner commandRunner,
+        string stage,
         string fileName,
         IReadOnlyList<string> arguments,
         CancellationToken cancellationToken)
     {
-        ArgumentNullException.ThrowIfNull(shell);
+        CppCommandResult result;
+        try
+        {
+            result = await commandRunner(fileName, arguments, cancellationToken).ConfigureAwait(false);
+        }
+        catch (OperationCanceledException)
+        {
+            throw;
+        }
+        catch (Exception exception)
+        {
+            throw new InvalidOperationException($"{fileName} {stage} failed to execute.", exception);
+        }
 
-        _ = await shell.Command.ExecuteCommandLineTool(
-                new GenericCommandLineToolOptions(fileName) { Arguments = arguments, },
-                cancellationToken: cancellationToken)
-            .ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        if (result.ExitCode == 0)
+        {
+            return;
+        }
+
+        var diagnostic = string.IsNullOrWhiteSpace(result.StandardError)
+            ? result.StandardOutput
+            : result.StandardError;
+        throw new InvalidOperationException(
+            $"{fileName} {stage} failed with exit code {result.ExitCode}: {diagnostic.Trim()}");
     }
 }

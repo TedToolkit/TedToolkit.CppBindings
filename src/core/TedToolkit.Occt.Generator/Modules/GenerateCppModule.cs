@@ -74,13 +74,13 @@ public sealed class GenerateCppModule : Module<bool>
         if (duplicateOutputNames.Length > 0)
         {
             throw new InvalidOperationException(
-                $"Duplicate C++ output names detected: {string.Join(", ", duplicateOutputNames)}"); // run-fix:debug
+                $"Duplicate C++ output names detected: {string.Join(", ", duplicateOutputNames)}");
         }
 
         var compile = new CppCompileCoontext(_generationOptions.Value.CppFolder, "ted_toolkit_occt",
             _generationOptions.Value.CppVersion);
 
-        var tasks = new List<Task>() { CopyCppInteropHeaderAsync(compile, cancellationToken), };
+        var tasks = new List<Task>() { CopyCppInteropSourcesAsync(compile, cancellationToken), };
 
         foreach (var recordManagerRecordModel in _recordManager.RecordModels)
         {
@@ -92,7 +92,7 @@ public sealed class GenerateCppModule : Module<bool>
 
         await Task.WhenAll(tasks).ConfigureAwait(false);
 
-        var folder = await compile.BuildAsync(context.Shell, false, _vcpkgEnvironment.GetRoot(), triplet,
+        _ = await compile.BuildAsync(context.Shell, false, _vcpkgEnvironment.GetRoot(), triplet,
                 cancellationToken)
             .ConfigureAwait(false);
         return true;
@@ -107,21 +107,34 @@ public sealed class GenerateCppModule : Module<bool>
             .ConfigureAwait(false);
     }
 
-    private async Task CopyCppInteropHeaderAsync(CppCompileCoontext compile, CancellationToken cancellationToken)
+    /// <summary>
+    /// Copies the shared native interop declaration and implementation into the transient project.
+    /// </summary>
+    /// <param name="compile">The transient native compilation context.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes when both sources have been written.</returns>
+    internal static async Task CopyCppInteropSourcesAsync(
+        CppCompileCoontext compile,
+        CancellationToken cancellationToken)
     {
-        var cppFolder = _generationOptions.Value.CppFolder;
-        cppFolder.Create();
+        ArgumentNullException.ThrowIfNull(compile);
+        await Task.WhenAll(
+                CopyEmbeddedSourceAsync("csharp_interop.h", cancellationToken),
+                CopyEmbeddedSourceAsync("csharp_interop.cpp", cancellationToken))
+            .ConfigureAwait(false);
 
-        var headerStream = typeof(GenerateCSharpModule).Assembly
-            .GetManifestResourceStream("TedToolkit.Occt.Generator.Assets.cpp.csharp_interop.h");
-
-        ArgumentNullException.ThrowIfNull(headerStream);
-
-        using (var reader = new StreamReader(headerStream))
+        async Task CopyEmbeddedSourceAsync(string fileName, CancellationToken token)
         {
-            await compile.AddSourceAsync("csharp_interop.h",
-                    await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false),
-                    cancellationToken)
+            var resourceName = ZString.Concat("TedToolkit.Occt.Generator.Assets.cpp.", fileName);
+            var sourceStream = typeof(GenerateCppModule).Assembly.GetManifestResourceStream(resourceName);
+            ArgumentNullException.ThrowIfNull(sourceStream);
+            await using var _ = sourceStream.ConfigureAwait(false);
+
+            using var reader = new StreamReader(sourceStream);
+            await compile.AddSourceAsync(
+                    fileName,
+                    await reader.ReadToEndAsync(token).ConfigureAwait(false),
+                    token)
                 .ConfigureAwait(false);
         }
     }

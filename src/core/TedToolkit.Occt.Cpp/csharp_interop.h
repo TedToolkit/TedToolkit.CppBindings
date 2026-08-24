@@ -72,12 +72,7 @@ interop_error wrap_call(TAction&& action) noexcept
 }
 
 // ReSharper disable once CppPassValueParameterByConstReference
-API_EXPORT void free_error(const interop_error error) noexcept
-{
-    delete[] error.type_name;
-    delete[] error.message;
-    delete[] error.stack_trace;
-}
+API_EXPORT void free_error(interop_error error) noexcept;
 
 #define CSHARP_WRAPPER(FUNC_DECL, BODY) \
 API_EXPORT void FUNC_DECL noexcept { \

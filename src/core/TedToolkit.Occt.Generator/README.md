@@ -70,7 +70,7 @@ ParseModule ───────────────────┤        
 | `CleanGenerationOutputModule` | Removes previous C#, C++, CMake build, and binary output. |
 | `ParseModule` | Parses only selected public headers, validates diagnostics and every requested definition, then commits the complete target set to the shared model. |
 | `GenerateCSharpModule` | Writes `.g.cs` files for records and enums. |
-| `GenerateCppModule` | Generates C++ wrappers, copies the exception bridge header, creates the CMake project, and compiles the native library. |
+| `GenerateCppModule` | Generates C++ wrappers, copies the exception bridge declaration and implementation, creates the CMake project, and compiles the native library. |
 
 If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnostics fail Parse; Warning diagnostics remain non-fatal and are logged literally. Parse resolves every requested record definition before adding any target to the shared model, so an unresolved mixed target set cannot expose a partial model.
 
@@ -139,6 +139,8 @@ Clang C++ 类型
 
 可能抛异常的方法使用 `CSHARP_WRAPPER_TRY`。嵌入的 `csharp_interop.h` 捕获 `Standard_Failure`、`std::exception` 和未知异常，并返回只包含堆分配 UTF-8 字符串的 `interop_error`。`noexcept` 方法使用不返回错误结构的 `CSHARP_WRAPPER`。
 
+The header declares `free_error`, while `csharp_interop.cpp` provides its only exported definition. This keeps the bridge linkable when multiple generated wrappers include the common header and ensures error payloads are released by the library that allocated them.
+
 所有生成源文件被写入临时 CMake 工程：
 
 ```cmake
@@ -148,6 +150,8 @@ target_link_libraries(... ${OpenCASCADE_LIBRARIES})
 ```
 
 CMake 使用 vcpkg toolchain 和选定 triplet，最终目标库名为 `ted_toolkit_occt`。
+
+The transient project discovers `.cpp`, `.cxx`, and `.cc` files only after source generation completes, removes duplicates, and writes them to `CMakeLists.txt` in ordinal order. MSVC and MSVC-compatible frontends receive `/EHsc`. Configure and build exit codes are checked separately; cancellation remains cancellation, and a successful command sequence is rejected unless it produces a new expected native artifact.
 
 ## 5. 生成 C# 类型
 
@@ -176,6 +180,7 @@ output/generated/
 └── cpp/ted_toolkit_occt/
     ├── src/
     │   ├── csharp_interop.h
+    │   ├── csharp_interop.cpp
     │   ├── CMakeLists.txt
     │   └── <Type>.cpp
     ├── build/
@@ -191,6 +196,16 @@ output/generated/
 - `GetFieldOffsetByRunning` does not yet replace the current libclang-based layout lookup.
 
 ## 开发与验证
+
+The verified native boundary baseline is Windows x64 with CMake 3.28 or newer, Ninja, `clang-cl` targeting the MSVC ABI, and vcpkg `x64-windows` with OCCT 8.0.1. Supply the following environment and ensure Ninja and `clang-cl` are available on `PATH`:
+
+```powershell
+$env:VCPKG_ROOT = 'C:\vcpkg'
+$env:CMAKE_GENERATOR = 'Ninja'
+$env:CXX = 'clang-cl'
+```
+
+This is the verification baseline, not an exclusive consumer toolchain requirement. The native integration fixture must execute without being skipped to prove multi-wrapper linking, library loading, exported `free_error` resolution, and same-library exception-payload release.
 
 从仓库根目录运行开发样例：
 

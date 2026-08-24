@@ -5,65 +5,39 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System.Reflection;
-
-using Microsoft.Extensions.Options;
-
-using ModularPipelines.Context;
-
-using TedToolkit.Occt.Generator.Generators;
 using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Modules;
-using TedToolkit.Occt.Generator.Options;
-using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Tests.Modules.GenerateModuleTests;
 
 /// <summary>
-/// <see cref="GenerateCSharpModule"/> execution.
+/// Shared C++ interop source materialization.
 /// </summary>
 internal sealed class ExecuteAsyncTest
 {
     /// <summary>
-    /// Verifies the module materializes the shared interop header into the C++ output folder even when no records are generated.
+    /// Verifies the native interop declaration and its single implementation are copied into the transient project.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
-    public async Task Should_copy_csharp_interop_header_into_cpp_output_folder_Async()
+    public async Task Should_copy_one_interop_declaration_and_implementation_into_the_cpp_project_Async()
     {
         var rootDirectory = new DirectoryInfo(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
-        var cppDirectory = rootDirectory.CreateSubdirectory("cpp");
-        var csharpDirectory = rootDirectory.CreateSubdirectory("csharp");
-
         try
         {
-            var module = new GenerateCSharpModule(
-                Microsoft.Extensions.Options.Options.Create(new GenerationOptions()
-                {
-                    DeclOptions = [],
-                    CSharpFolder = csharpDirectory,
-                    CppFolder = cppDirectory,
-                }),
-                new EmptyRecordModelManager(),
-                new ThrowingGeneratorService());
+            var context = new CppCompileCoontext(rootDirectory, "ted_toolkit_occt", 17);
+            await GenerateCppModule.CopyCppInteropSourcesAsync(context, CancellationToken.None)
+                .ConfigureAwait(false);
+            var sourceDirectory = Path.Combine(rootDirectory.FullName, "ted_toolkit_occt", "src");
+            var header = await File.ReadAllTextAsync(Path.Combine(sourceDirectory, "csharp_interop.h"))
+                .ConfigureAwait(false);
+            var implementation = await File.ReadAllTextAsync(Path.Combine(sourceDirectory, "csharp_interop.cpp"))
+                .ConfigureAwait(false);
 
-            var context = Mock.Of<IModuleContext>();
-            var executeAsyncMethod = typeof(GenerateCSharpModule).GetMethod(
-                "ExecuteAsync",
-                BindingFlags.Instance | BindingFlags.NonPublic);
-
-            await Assert.That(executeAsyncMethod).IsNotNull();
-
-            var task = (Task<bool>)executeAsyncMethod!
-                .Invoke(module, [context, CancellationToken.None,])!;
-
-            var result = await task.ConfigureAwait(false);
-            var interopHeaderPath = Path.Combine(cppDirectory.FullName, "csharp_interop.h");
-
-            await Assert.That(result).IsTrue();
-            await Assert.That(File.Exists(interopHeaderPath)).IsTrue();
-            await Assert.That(await File.ReadAllTextAsync(interopHeaderPath).ConfigureAwait(false))
-                .Contains("#ifndef CSHARP_INTEROP_H");
+            await Assert.That(header).Contains("API_EXPORT void free_error(interop_error error) noexcept;");
+            await Assert.That(header).DoesNotContain("delete[] error.type_name");
+            await Assert.That(implementation).Contains("API_EXPORT void free_error(interop_error error) noexcept");
+            await Assert.That(implementation).Contains("delete[] error.type_name");
         }
         finally
         {
@@ -71,36 +45,6 @@ internal sealed class ExecuteAsyncTest
             {
                 rootDirectory.Delete(true);
             }
-        }
-    }
-
-    private sealed class EmptyRecordModelManager : IRecordModelManager
-    {
-        public IReadOnlyList<EnumModel> EnumModels { get; } = [];
-
-        public IEnumerable<RecordModel> RecordModels { get; } = [];
-
-        public RecordModel Add(ClangSharp.CXXRecordDecl record)
-        {
-            throw new NotSupportedException();
-        }
-    }
-
-    private sealed class ThrowingGeneratorService : IGeneratorService
-    {
-        public IGenerator GenerateCSharp(EnumModel enumModel)
-        {
-            throw new NotSupportedException();
-        }
-
-        public IGenerator GenerateCSharp(RecordModel record)
-        {
-            throw new NotSupportedException();
-        }
-
-        public IGenerator GenerateCpp(RecordModel record)
-        {
-            throw new NotSupportedException();
         }
     }
 }
