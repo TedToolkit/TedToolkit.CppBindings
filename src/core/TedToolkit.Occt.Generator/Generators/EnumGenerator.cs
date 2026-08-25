@@ -7,7 +7,7 @@
 
 using System.Text;
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.RoslynHelper.Generators;
 
 using static TedToolkit.RoslynHelper.Generators.SourceComposer;

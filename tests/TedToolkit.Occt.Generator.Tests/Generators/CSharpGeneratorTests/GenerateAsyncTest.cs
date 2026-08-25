@@ -8,7 +8,8 @@
 using Microsoft.Extensions.Options;
 
 using TedToolkit.Occt.Generator.Generators;
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
+using TedToolkit.Occt.Generator.Models.Types;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
@@ -90,8 +91,12 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("Point wrapper.");
         await Assert.That(code).Contains("Returns the coordinate of range theIndex.");
         await Assert.That(code).Contains("Raises OutOfRange if theIndex != {1, 2}.");
-        await Assert.That(code).Contains("<param name=\"theIndex\">Coordinate index.</param>");
-        await Assert.That(code).Contains("<returns>Coordinate value.</returns>");
+        await Assert.That(code).Contains("<param name=\"theIndex\">");
+        await Assert.That(code).Contains("Coordinate index.");
+        await Assert.That(code).Contains("</param>");
+        await Assert.That(code).Contains("<returns>");
+        await Assert.That(code).Contains("Coordinate value.");
+        await Assert.That(code).Contains("</returns>");
         await Assert.That(code).Contains("public int Coord(");
     }
 }

@@ -5,12 +5,14 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Reflection;
+
 using ClangSharp;
 using ClangSharp.Interop;
 
 using Microsoft.Extensions.Options;
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services;
 using TedToolkit.Occt.Generator.Services.Interfaces;
@@ -24,6 +26,10 @@ namespace TedToolkit.Occt.Generator.Tests.Services.RecordModelManagerTests;
 /// </summary>
 internal sealed class AddTest
 {
+    private static readonly FieldInfo SourceBuilderField = typeof(SourceBuilder)
+        .GetField("_stringBuilder", BindingFlags.Instance | BindingFlags.NonPublic)
+        ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
+
     /// <summary>
     /// Verifies enums referenced by fields are collected and documented.
     /// </summary>
@@ -78,7 +84,9 @@ internal sealed class AddTest
             .Contains("Return summary.");
         await Assert.That(Render(manager.EnumModels.Single().DescriptionItems.Single()))
             .Contains("Supported color kinds.");
-        await Assert.That(Render(manager.EnumModels.Single().Members.Single().DescriptionItems.Single()))
+        await Assert.That(Render(manager.EnumModels.Single().Members
+                .Single(static member => member.Name == "Quantity_TypeOfColor_RGB")
+                .DescriptionItems.Single()))
             .Contains("RGB space.");
     }
 
@@ -125,7 +133,7 @@ internal sealed class AddTest
             (MethodModelType.NEW, "New"),
             (MethodModelType.DELETE, "Delete"),
             (MethodModelType.NORMAL, "OwnMethod"),
-            (MethodModelType.OPERATOR, "operator=="),
+            (MethodModelType.OPERATOR, "=="),
         ]);
     }
 
@@ -620,7 +628,8 @@ internal sealed class AddTest
     {
         var builder = new SourceBuilder();
         description.ToDescription(ref builder);
-        return builder.ToString();
+        return SourceBuilderField.GetValue(builder)?.ToString()
+               ?? throw new InvalidOperationException("Unable to render RoslynHelper description.");
     }
 
     private sealed class FakeVcpkgEnvironment : IVcpkgEnvironment

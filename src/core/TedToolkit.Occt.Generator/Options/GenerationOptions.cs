@@ -7,7 +7,6 @@
 
 using ClangSharp;
 
-using TedToolkit.Occt.Generator.Models;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Options;

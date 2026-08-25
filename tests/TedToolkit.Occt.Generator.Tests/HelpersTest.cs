@@ -90,16 +90,15 @@ internal sealed class HelpersTest
         var intPointerValue = method.Parameters.Single(static p => p.Name == "intPointerValue").Type.ToPInvokeDataType();
         var voidPointerValue = method.Parameters.Single(static p => p.Name == "voidPointerValue").Type.ToPInvokeDataType();
 
-        var geomSurface = new DataType("Geom_Surface");
         var lValueReference = method.Parameters.Single(static p => p.Name == "lValueReference").Type.ToPInvokeDataType();
         var rValueReference = method.Parameters.Single(static p => p.Name == "rValueReference").Type.ToPInvokeDataType();
         var doublePointerValue = method.Parameters.Single(static p => p.Name == "doublePointerValue").Type.ToPInvokeDataType();
 
         await AssertRenderedAsync(intPointerValue, DataType.Int.Pointer).ConfigureAwait(false);
         await AssertRenderedAsync(voidPointerValue, DataType.Void.Pointer).ConfigureAwait(false);
-        await AssertRenderedAsync(lValueReference, geomSurface.Pointer).ConfigureAwait(false);
-        await AssertRenderedAsync(rValueReference, geomSurface.Pointer).ConfigureAwait(false);
-        await AssertRenderedAsync(doublePointerValue, geomSurface.Pointer.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(lValueReference, new DataType("Geom_Surface").Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(rValueReference, new DataType("Geom_Surface").Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(doublePointerValue, new DataType("Geom_Surface").Pointer.Pointer).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -126,13 +125,12 @@ internal sealed class HelpersTest
 
         var constIntValue = method.Parameters.Single(static p => p.Name == "constIntValue").Type.ToPInvokeDataType();
 
-        var geomSurface = new DataType("Geom_Surface");
         var constReferenceValue = method.Parameters.Single(static p => p.Name == "constReferenceValue").Type.ToPInvokeDataType();
         var constPointerValue = method.Parameters.Single(static p => p.Name == "constPointerValue").Type.ToPInvokeDataType();
 
         await AssertRenderedAsync(constIntValue, DataType.Int).ConfigureAwait(false);
-        await AssertRenderedAsync(constReferenceValue, geomSurface.Pointer).ConfigureAwait(false);
-        await AssertRenderedAsync(constPointerValue, geomSurface.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(constReferenceValue, new DataType("Geom_Surface").Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(constPointerValue, new DataType("Geom_Surface").Pointer).ConfigureAwait(false);
     }
 
     /// <summary>

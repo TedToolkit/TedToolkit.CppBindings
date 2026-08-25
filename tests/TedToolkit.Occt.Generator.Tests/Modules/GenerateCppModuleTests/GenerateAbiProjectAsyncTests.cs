@@ -13,6 +13,7 @@ using ModularPipelines.Context;
 
 using TedToolkit.Occt.Generator.Modules;
 using TedToolkit.Occt.Generator.Options;
+using TedToolkit.Occt.Generator.Tests.Modules.ParseModuleTests;
 
 namespace TedToolkit.Occt.Generator.Tests.Modules.GenerateCppModuleTests;
 
@@ -230,6 +231,7 @@ internal sealed class GenerateAbiProjectAsyncTests
     /// <exception cref="PlatformNotSupportedException">The test is not running on Windows.</exception>
     /// <exception cref="InvalidOperationException">The native toolchain is unavailable or fails.</exception>
     [Test]
+    [RequiresRealOcct]
     [NotInParallel("native-build-toolchain")]
     public async Task Should_build_a_custom_named_production_library_without_test_exports_Async()
     {

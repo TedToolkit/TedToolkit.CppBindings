@@ -13,8 +13,8 @@ using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
 
-using TedToolkit.Occt.Generator.Generators;
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Abi.Conformance;
+using TedToolkit.Occt.Generator.Abi.Generation;
 using TedToolkit.Occt.Generator.Options;
 
 namespace TedToolkit.Occt.Generator.Modules;
@@ -118,7 +118,7 @@ public sealed class GenerateCppModule : Module<bool>
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(outputDirectory);
-        var generated = CAbiHeaderGenerator.Generate(AbiV1ConformanceModel.CreateOperations());
+        var generated = CAbiHeaderGenerator.Generate(AbiV1ConformanceCatalog.CreateOperations());
         if (generated.Diagnostics.Count > 0)
         {
             throw new InvalidOperationException(string.Join(Environment.NewLine, generated.Diagnostics));

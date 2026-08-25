@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 using ModularPipelines.Context;
 using ModularPipelines.Logging;
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.Occt.Generator.Modules;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services;

@@ -8,7 +8,7 @@
 using Microsoft.Extensions.Options;
 
 using TedToolkit.Occt.Generator.Generators;
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 

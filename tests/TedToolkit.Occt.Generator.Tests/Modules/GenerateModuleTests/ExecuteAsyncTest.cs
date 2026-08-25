@@ -5,7 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Abi.Conformance;
+using TedToolkit.Occt.Generator.Abi.Generation;
 using TedToolkit.Occt.Generator.Modules;
 
 namespace TedToolkit.Occt.Generator.Tests.Modules.GenerateModuleTests;
@@ -32,7 +33,7 @@ internal sealed class ExecuteAsyncTest
             await Assert.That(header.Name).IsEqualTo("ted_toolkit_occt_v1.h");
             await Assert.That(outputDirectory.EnumerateFiles("*.cpp", SearchOption.AllDirectories)).IsEmpty();
             await Assert.That(content).DoesNotContain("CSHARP_WRAPPER");
-            foreach (var operation in AbiV1ConformanceModel.CreateOperations())
+            foreach (var operation in AbiV1ConformanceCatalog.CreateOperations())
             {
                 await Assert.That(content).Contains(AbiOperationIdentity.Create(operation).SymbolName);
             }
@@ -68,7 +69,7 @@ internal sealed class ExecuteAsyncTest
             await Assert.That(outputDirectory.EnumerateFiles("ted_toolkit_occt_v1.cpp")).HasSingleItem();
             await Assert.That(cmake).Contains("ted_toolkit_occt_abi_v1");
             await Assert.That(cmake).Contains("find_package(OpenCASCADE CONFIG REQUIRED)");
-            foreach (var operation in AbiV1ConformanceModel.CreateOperations())
+            foreach (var operation in AbiV1ConformanceCatalog.CreateOperations())
             {
                 await Assert.That(implementation).Contains(AbiOperationIdentity.Create(operation).SymbolName);
             }

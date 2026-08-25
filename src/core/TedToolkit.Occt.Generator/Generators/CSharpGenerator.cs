@@ -9,7 +9,7 @@ using System.Runtime.InteropServices;
 
 using Microsoft.Extensions.Options;
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;

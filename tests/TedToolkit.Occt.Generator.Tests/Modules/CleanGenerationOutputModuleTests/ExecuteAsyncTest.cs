@@ -31,7 +31,8 @@ internal sealed class ExecuteAsyncTest
         var cleaner = IGenerationOutputCleaner.Mock();
         var serviceProvider = new ServiceCollection()
             .AddSingleton<IGenerationOutputCleaner>(cleaner)
-            .AddSingleton<CleanGenerationOutputModule>()
+            .AddSingleton<CleanGenerationOutputModule>(serviceProvider =>
+                new(serviceProvider.GetRequiredService<IGenerationOutputCleaner>()))
             .BuildServiceProvider();
         await using var _ = serviceProvider.ConfigureAwait(false);
 

@@ -213,4 +213,6 @@ dotnet run --project tests/TedToolkit.Occt.Console/TedToolkit.Occt.Console.cspro
 ## 相关文档
 
 - [仓库概览](../../../README.md)
+- [Binding model internals](Models/README.md)
+- [C ABI internals](Abi/README.md)
 - [Runtime 契约](../TedToolkit.Occt.Runtime/README.md)

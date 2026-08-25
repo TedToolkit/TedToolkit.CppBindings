@@ -8,7 +8,7 @@
 using ClangSharp;
 using ClangSharp.Interop;
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Types;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 

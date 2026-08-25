@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------
 
 using TedToolkit.Occt.Generator.Generators;
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 

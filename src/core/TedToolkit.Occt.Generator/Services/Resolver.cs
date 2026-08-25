@@ -9,7 +9,7 @@ using System.Diagnostics.CodeAnalysis;
 
 using ClangSharp;
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Types;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Services;
@@ -34,7 +34,7 @@ internal sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
                 Type = new()
                 {
                     CppTypeName = enumDecl.Name,
-                    CSharpPInvokeType = new(enumDecl.Name),
+                    CSharpPInvokeType = enumDecl.IntegerType.ToPInvokeDataType(),
                     CSharpPublicType = new(enumDecl.Name),
                 },
                 Enum = enumDecl,

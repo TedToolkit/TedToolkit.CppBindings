@@ -14,7 +14,8 @@ using ClangSharp.Interop;
 
 using Microsoft.Extensions.Options;
 
-using TedToolkit.Occt.Generator.Models;
+using TedToolkit.Occt.Generator.Models.Declarations;
+using TedToolkit.Occt.Generator.Models.Types;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
 using TedToolkit.RoslynHelper.Generators;
@@ -106,6 +107,10 @@ internal sealed class RecordModelManager(
             .ToArray();
 
         result.MethodModels = record.Methods
+            .Concat(GetAllDecls(record)
+                .Where(baseRecord => baseRecord.Handle != record.Handle)
+                .SelectMany(static baseRecord => baseRecord.Methods)
+                .Where(static method => method is not (CXXConstructorDecl or CXXDestructorDecl)))
             .Where(m => ShouldIncludeMethod(m, record.IsAbstract))
             .GroupBy(GetMethodSignatureKey)
             .Select(static methods => methods
@@ -282,7 +287,9 @@ internal sealed class RecordModelManager(
             ReturnSelf = IsCompoundAssignmentOperator(method),
             MethodName = GetMethodName(method),
             Type = GetMethodType(method),
-            Parameters = method.Parameters.Select(p => ToModel(p,
+            Parameters = method.Parameters.Select((p, index) => ToModel(
+                    p,
+                    index,
                     commentProjection))
                 .ToArray(),
             NoExceptions = IsNoExcept(method),
@@ -447,7 +454,10 @@ internal sealed class RecordModelManager(
         };
     }
 
-    private ParameterModel ToModel(ParmVarDecl paramDel, CommentProjection methodCommentProjection)
+    private ParameterModel ToModel(
+        ParmVarDecl paramDel,
+        int parameterIndex,
+        CommentProjection methodCommentProjection)
     {
         methodCommentProjection.ParameterDescriptionItems.TryGetValue(paramDel.Name, out var descriptionItems);
 
@@ -455,7 +465,7 @@ internal sealed class RecordModelManager(
         {
             DescriptionItems = descriptionItems ?? [],
             Type = ToModel(paramDel.Type),
-            Name = paramDel.Name,
+            Name = string.IsNullOrEmpty(paramDel.Name) ? $"value{parameterIndex}" : paramDel.Name,
         };
     }
 
@@ -512,6 +522,11 @@ internal sealed class RecordModelManager(
             return true;
         }
 
+        if (TryGetEnumDecl(addingType, out _))
+        {
+            return true;
+        }
+
         var result = addingType.AsCXXRecordDecl?.Definition is not null;
         if (!result)
         {
@@ -522,12 +537,12 @@ internal sealed class RecordModelManager(
 
     private static bool ShouldIncludeMethod(CXXMethodDecl method, bool isAbstract)
     {
-        if (!IsDefined(method.ReturnType))
+        if (method is not (CXXConstructorDecl or CXXDestructorDecl) && !IsDefined(method.ReturnType))
         {
             return false;
         }
 
-        if (method.Parameters.Any(p => !ShouldIncludeParameter(p)))
+        if (method.Parameters.Any(p => !ShouldIncludeParameter(p, method.IsOverloadedOperator)))
         {
             return false;
         }
@@ -562,9 +577,9 @@ internal sealed class RecordModelManager(
         return true;
     }
 
-    private static bool ShouldIncludeParameter(ParmVarDecl parameter)
+    private static bool ShouldIncludeParameter(ParmVarDecl parameter, bool allowUnnamed)
     {
-        if (!IsDefined(parameter.Type) || string.IsNullOrEmpty(parameter.Name))
+        if (!IsDefined(parameter.Type) || (!allowUnnamed && string.IsNullOrEmpty(parameter.Name)))
         {
             return false;
         }
