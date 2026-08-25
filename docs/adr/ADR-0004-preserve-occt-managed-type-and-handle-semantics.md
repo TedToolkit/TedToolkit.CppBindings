@@ -90,8 +90,10 @@ unsupported and every generated operation rejects them with `ArgumentException` 
 lease or probing native code.
 Generated bindings reference the shared contract and provide only target descriptors, public OCCT
 operations, and internal type-specific glue needed to reach the correct ABI retain/release exports.
-Because every implementation is a reference type, conversion from `Handle<TDerived>` to
-`Handle<TBase>` is a non-boxing covariant reference conversion and creates no second owner.
+Because the only supported Runtime implementation is a reference type, conversion of a valid
+Runtime-supplied owner from `Handle<TDerived>` to `Handle<TBase>` is a non-boxing covariant reference
+conversion and creates no second owner. No allocation or boxing guarantee is made for an
+unsupported consumer implementation before provenance rejection.
 
 Each Runtime owner owns exactly one native ownership token.
 
@@ -208,9 +210,9 @@ leasing cost is material for a representative workload.
   handle, duplicate `I<OCCTType>` hierarchy, or native-pointer view is emitted.
 - Generated transient target descriptors use one source-faithful class-inheritance chain. A type
   with more than one supported direct base is rejected until another accepted projection exists.
-- Passing `Handle<TDerived>` to a `Handle<TBase>` parameter uses covariance without boxing,
-  allocation, native retain, or ownership transfer; the callee leases but does not dispose the
-  caller's owner.
+- Passing a valid Runtime-supplied `Handle<TDerived>` to a `Handle<TBase>` parameter uses covariance
+  without boxing, allocation, native retain, or ownership transfer; the callee leases but does not
+  dispose the caller's owner.
 - Disposal linearizes before returning, rejects new leases, does not wait for existing leases, and
   defers native release until their completion; the same non-throwing exactly-once rule and module
   liveness apply to finalization.

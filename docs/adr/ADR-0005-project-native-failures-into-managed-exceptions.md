@@ -60,8 +60,8 @@ Construction policy alternatives are:
 
 | Option | Evidence and confidence | Meets drivers | Decisive trade-off | Outcome |
 | --- | --- | --- | --- | --- |
-| Expose conventional public or protected exception constructors | This is familiar for ordinary application exceptions. Confidence: High. | Partly | Consumers could fabricate native-origin error kinds and diagnostics or derive types that appear to originate at the ABI boundary. | Rejected |
-| Keep exception types public for catching while Runtime alone constructs native-origin instances | Runtime is already the single error projection and diagnostic owner. Confidence: High. | Yes | Consumers cannot directly instantiate or derive the native-origin exception types. | Selected |
+| Expose conventional public or protected exception constructors | This is familiar for ordinary application exceptions. Confidence: High. | Partly | Consumers could instantiate or derive the library-provided exception types with fabricated native diagnostics. | Rejected |
+| Keep exception types public for catching while Runtime alone constructs library-provided native-origin instances | Runtime is already the single error projection and diagnostic owner. Confidence: High. | Yes | Consumers cannot directly instantiate or derive the library-provided exception types. | Selected |
 
 ## Decision
 
@@ -101,9 +101,13 @@ The managed exception mapping is:
 The exception types are public for catching, but expose no public or protected instance
 constructors. `OcctException` has internal constructors so Runtime can throw it directly and derive
 the internal hierarchy; every mapped leaf exception is sealed and has internal constructors.
-External callers therefore cannot construct or derive an exception that claims native origin.
-These types add no legacy formatter-serialization constructors, attributes, or overrides; binary
-exception serialization is not a supported contract.
+External callers therefore cannot construct or derive the library-provided native-origin exception
+types. These types add no legacy formatter-serialization constructors, attributes, or overrides;
+binary exception serialization is not a supported contract.
+
+`IOcctException` remains an open diagnostic contract because consumers can implement a public C#
+interface. It does not authenticate native provenance. Runtime provenance applies only to the
+library-provided `Occt*Exception` instances constructed from the ABI error carrier.
 
 `OcctNullObjectException` does not derive from or project to `NullReferenceException`; that .NET
 type is reserved for managed null dereference and would misstate the failure origin. Likewise,
@@ -167,8 +171,9 @@ Reconsider the mapping if a category is shown not to satisfy the semantic contra
   `IOcctException`.
 - The enum and exception inheritance relationships become public compatibility contracts alongside
   generated method signatures.
-- Public exception construction remains Runtime-owned; consumers catch the types but cannot create
-  or derive values that claim native origin.
+- Construction of the library-provided exception types remains Runtime-owned; consumers catch those
+  types but cannot create or derive them. `IOcctException` itself remains open and does not prove
+  native provenance.
 - A reserved future ABI kind remains diagnosable through its numeric enum value and a generic
   `OcctException` without requiring a new managed package before the native call can fail safely.
 - Runtime owns one handwritten error projection and native diagnostic lifetime boundary; generated
