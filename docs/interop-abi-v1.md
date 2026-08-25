@@ -6,8 +6,9 @@ implementation text, P/Invoke declarations, and public C# names do not define th
 
 ## Current delivery state
 
-The generator materializes the canonical ABI-major-1 header and a CMake project for the versioned
-`ted_toolkit_occt_abi_v1` adapter library. The pre-version record-by-record C++ wrapper generator,
+The generator materializes the canonical ABI-major-1 header and a CMake project whose internal
+target is `ted_toolkit_occt_abi_v1`. Its artifact basename defaults to `ted_toolkit_occt` and may be
+configured independently. The pre-version record-by-record C++ wrapper generator,
 unversioned exception bridge, and managed raw-pointer prototypes have been removed. Raw C++
 references, templates, STL types, and OCCT handles cannot become active exports through an
 alternate generation path.
@@ -37,7 +38,8 @@ the source declaration, location, value, source type, direction, ownership, and 
 ## Canonical surface
 
 - Header: `ted_toolkit_occt_v1.h`
-- Reserved native library basename: `ted_toolkit_occt_abi_v1`
+- Default native library basename: `ted_toolkit_occt` (configurable)
+- Internal CMake target: `ted_toolkit_occt_abi_v1`
 - Identifier prefix: `ted_occt_v1_`
 - Macro prefix: `TED_OCCT_V1_`
 - Version encoding: `(major << 16) | minor`; version 1.0 is `0x00010000`
@@ -77,9 +79,9 @@ ctest --preset ted-occt-abi-v1-consumer --output-on-failure
 
 Ninja and `clang-cl` must be on `PATH`. The generated header is under the preset build directory at
 `generated/ted_toolkit_occt_v1.h`; the Windows library is
-`abi-v1/ted_toolkit_occt_abi_v1.dll`. The companion `ted_toolkit_occt_v1_test.h` and its fault hooks
-are compiled only when `TED_OCCT_V1_BUILD_TESTING` is enabled by the consumer proof and are not a
-production control surface.
+`abi-v1/ted_toolkit_occt.dll`. The boundary proof owns
+`tests/native/abi-v1-consumer/ted_toolkit_occt_v1_test.h` and explicitly enables its fault hooks;
+production generation emits neither that header nor those exports.
 
 Run the managed proof against the built artifact with:
 

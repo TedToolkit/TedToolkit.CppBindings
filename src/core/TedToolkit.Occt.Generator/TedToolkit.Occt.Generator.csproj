@@ -28,8 +28,6 @@
                       LogicalName="TedToolkit.Occt.Generator.Assets.cpp.abi-v1.CMakeLists.txt"/>
     <EmbeddedResource Include="..\TedToolkit.Occt.Cpp\abi-v1\ted_toolkit_occt_v1.cpp"
                       LogicalName="TedToolkit.Occt.Generator.Assets.cpp.abi-v1.ted_toolkit_occt_v1.cpp"/>
-    <EmbeddedResource Include="..\TedToolkit.Occt.Cpp\abi-v1\ted_toolkit_occt_v1_test.h"
-                      LogicalName="TedToolkit.Occt.Generator.Assets.cpp.abi-v1.ted_toolkit_occt_v1_test.h"/>
   </ItemGroup>
 
 </Project>

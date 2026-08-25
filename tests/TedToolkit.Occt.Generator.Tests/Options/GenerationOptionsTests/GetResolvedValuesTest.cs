@@ -75,6 +75,20 @@ internal sealed class GetResolvedValuesTest
         await Assert.That(version).IsEqualTo(17);
     }
 
+    /// <summary>
+    /// Verifies the clean native library basename is used when no name is configured.
+    /// </summary>
+    /// <returns>A task that completes when the default-name assertion has finished.</returns>
+    [Test]
+    public async Task Should_return_clean_native_library_basename_when_name_is_not_configured_Async()
+    {
+        var options = CreateOptions();
+
+        var baseName = options.GetNativeLibraryBaseName();
+
+        await Assert.That(baseName).IsEqualTo("ted_toolkit_occt");
+    }
+
     private static GenerationOptions CreateOptions()
     {
         return new()

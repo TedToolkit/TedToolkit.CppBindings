@@ -29,9 +29,15 @@ public static class PipelineBuilderExtension
     /// <param name="builder">The pipeline builder.</param>
     /// <param name="options">The generation options.</param>
     /// <returns>The configured pipeline builder.</returns>
+    /// <exception cref="ArgumentNullException"><paramref name="builder"/>, <paramref name="options"/>, or
+    /// <see cref="GenerationOptions.NativeLibraryBaseName"/> is null.</exception>
+    /// <exception cref="ArgumentException"><see cref="GenerationOptions.NativeLibraryBaseName"/> is not a
+    /// portable native library basename.</exception>
     public static PipelineBuilder AddOcctGenerators(this PipelineBuilder builder, GenerationOptions options)
     {
         ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(options);
+        _ = options.GetNativeLibraryBaseName();
         builder.Services
             .AddSingleton<IVcpkgDefaultTripletResolver, VcpkgDefaultTripletResolver>()
             .AddSingleton<IVcpkgEnvironment, VcpkgEnvironment>()

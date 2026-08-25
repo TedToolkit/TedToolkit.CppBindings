@@ -105,9 +105,11 @@ output/generated/
 └── cpp/
     ├── CMakeLists.txt               # versioned native adapter project
     ├── ted_toolkit_occt_v1.h       # canonical ABI-major-1 C header
-    ├── ted_toolkit_occt_v1.cpp     # OCCT adapters
-    └── ted_toolkit_occt_v1_test.h  # compiled only by the boundary proof
+    └── ted_toolkit_occt_v1.cpp     # OCCT adapters
 ```
+
+The generated native artifact defaults to `ted_toolkit_occt` plus the platform prefix and suffix.
+Configure `GenerationOptions.NativeLibraryBaseName` to use another portable basename.
 
 > ⚠️ This command remains a development entry point rather than a verified release example. Target-scoped parsing and generator ordering are enforced, but downstream model projection or native compilation can still reject unsupported OCCT surface.
 

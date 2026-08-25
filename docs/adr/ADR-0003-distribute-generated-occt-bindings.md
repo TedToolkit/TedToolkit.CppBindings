@@ -100,7 +100,8 @@ platforms?**
 
 - One `TedToolkit.Occt` NuGet package carries the managed assembly and native runtime closure.
 - Native libraries use NuGet's `runtimes/{rid}/native/` convention. The first support claim and
-  required proof are `win-x64`; its assets include `ted_toolkit_occt_abi_v1` and every runtime OCCT
+  required proof are `win-x64`; its assets include the default `ted_toolkit_occt` artifact governed
+  by [ADR-0002](ADR-0002-separate-abi-identity-from-library-basename.md) and every runtime OCCT
   dependency not otherwise guaranteed by the target system.
 - The managed API and ABI remain RID-neutral. A later `linux-x64` asset uses the same ABI major and
   managed contract, but Linux is not advertised or treated as supported until equivalent package,

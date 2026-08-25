@@ -47,6 +47,7 @@ The primary `GenerationOptions` values are:
 | `DeclOptions` | Entry records such as `Geom2d_BSplineCurve`. |
 | `CSharpFolder` | Generated C# source directory. |
 | `CppFolder` | C++ wrappers, CMake project, and native library directory. |
+| `NativeLibraryBaseName` | Portable native artifact basename; defaults to `ted_toolkit_occt`. The build system supplies the platform prefix and suffix. |
 | `Triplet` | Explicit vcpkg triplet; automatically selected when omitted. |
 | `CppVersion` | C++ standard passed to Clang and CMake; defaults to 17. |
 | `CommandLineArgs` | Additional Clang parse arguments. |
@@ -71,7 +72,7 @@ ParseModule ───────────────────┤        
 | `CleanGenerationOutputModule` | Removes previous C#, C++, CMake build, and binary output. |
 | `ParseModule` | Parses only selected public headers, validates diagnostics and every requested definition, then commits the complete target set to the shared model. |
 | `GenerateCSharpModule` | Writes `.g.cs` files for records and enums. |
-| `GenerateCppModule` | Materializes the canonical `ted_toolkit_occt_v1.h` plus the versioned `ted_toolkit_occt_abi_v1` CMake adapter project. |
+| `GenerateCppModule` | Materializes the canonical `ted_toolkit_occt_v1.h` and its CMake adapter project. The internal target remains `ted_toolkit_occt_abi_v1`; the artifact basename is configurable. |
 
 If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnostics fail Parse; Warning diagnostics remain non-fatal and are logged literally. Parse resolves every requested record definition before adding any target to the shared model, so an unresolved mixed target set cannot expose a partial model.
 
@@ -169,9 +170,11 @@ output/generated/
 └── cpp/
     ├── CMakeLists.txt
     ├── ted_toolkit_occt_v1.h
-    ├── ted_toolkit_occt_v1.cpp
-    └── ted_toolkit_occt_v1_test.h
+    └── ted_toolkit_occt_v1.cpp
 ```
+
+Test-only declarations are owned by the repository boundary fixtures and are never materialized
+into this production output directory.
 
 ## Known limitations
 

@@ -31,7 +31,9 @@
 
 namespace
 {
+#if defined(TED_OCCT_V1_BUILD_TESTING)
 thread_local int diagnostic_allocation_countdown = -1;
+#endif
 
 ted_occt_v1_error empty_error() noexcept
 {

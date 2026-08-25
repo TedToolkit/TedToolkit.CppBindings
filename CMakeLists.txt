@@ -20,8 +20,10 @@ if(NOT TED_OCCT_V1_MATERIALIZE_RESULT EQUAL 0)
     message(FATAL_ERROR "ABI-major-1 native project materialization failed: ${TED_OCCT_V1_MATERIALIZE_RESULT}")
 endif()
 
-set(TED_OCCT_V1_BUILD_TESTING ON CACHE BOOL "Build ABI-major-1 test hooks" FORCE)
 add_subdirectory("${TED_OCCT_V1_GENERATED_DIR}" abi-v1)
+target_compile_definitions(ted_toolkit_occt_abi_v1 PRIVATE TED_OCCT_V1_BUILD_TESTING)
+target_include_directories(ted_toolkit_occt_abi_v1
+    PRIVATE "${CMAKE_SOURCE_DIR}/tests/native/abi-v1-consumer")
 
 add_executable(ted_occt_v1_c_consumer tests/native/abi-v1-consumer/consumer.c)
 target_compile_features(ted_occt_v1_c_consumer PRIVATE c_std_11)

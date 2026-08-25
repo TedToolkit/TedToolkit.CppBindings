@@ -152,7 +152,7 @@ internal sealed class AbiV1ManagedBoundaryTests
         }
 
         return Path.Combine(directory.FullName, "out", "build", "ted-occt-abi-v1-consumer", "abi-v1",
-            "ted_toolkit_occt_abi_v1.dll");
+            "ted_toolkit_occt.dll");
     }
 
     [StructLayout(LayoutKind.Sequential)]
