@@ -5,10 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using Cysharp.Text;
-
 using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.Occt.Generator.Models;
 
@@ -77,83 +74,4 @@ internal class MethodModel
     /// Gets the normalized method parameters.
     /// </summary>
     public required IReadOnlyList<ParameterModel> Parameters { get; init; }
-
-    /// <summary>
-    /// Gets the managed invoke name for the method.
-    /// </summary>
-    /// <returns>The normalized invoke name.</returns>
-    public string GetInvokeName()
-    {
-        if (Type is not (MethodModelType.OPERATOR or MethodModelType.IMPLICIT or MethodModelType.EXPLICIT))
-        {
-            return MethodName;
-        }
-
-        using var builder = ZString.CreateStringBuilder();
-        var upperNext = false;
-
-        foreach (var c in MethodName)
-        {
-            if (char.IsLetterOrDigit(c) || c == '_')
-            {
-                builder.Append(upperNext ? char.ToUpperInvariant(c) : c);
-                upperNext = false;
-                continue;
-            }
-
-            upperNext = true;
-            builder.Append(c switch
-            {
-                ' ' => "",
-                '=' => "Equal",
-                '+' => "Plus",
-                '-' => "Minus",
-                '*' => "Star",
-                '/' => "Slash",
-                '%' => "Percent",
-                '!' => "Bang",
-                '<' => "Less",
-                '>' => "Greater",
-                '&' => "Ampersand",
-                '|' => "Pipe",
-                '^' => "Caret",
-                '~' => "Tilde",
-                '(' => "LeftParen",
-                ')' => "RightParen",
-                '[' => "LeftBracket",
-                ']' => "RightBracket",
-                ',' => "Comma",
-                _ => "Char",
-            });
-        }
-
-        return builder.ToString();
-    }
-
-    /// <summary>
-    /// Gets the generated interop entry-point name for the method.
-    /// </summary>
-    /// <param name="model">The owning record model.</param>
-    /// <returns>The generated interop name.</returns>
-    public string GetMethodInteropName(RecordModel model)
-    {
-        ArgumentNullException.ThrowIfNull(model);
-        using var builder = ZString.CreateStringBuilder();
-        builder.Append(model.Type.CppTypeName.ToValidCSharpName());
-        builder.Append("_");
-        builder.Append(GetInvokeName());
-        if (Type is MethodModelType.IMPLICIT or MethodModelType.EXPLICIT)
-        {
-            builder.Append('_');
-            builder.Append(ReturnType.CSharpPInvokeType.ToCode().ToValidCSharpName());
-        }
-
-        foreach (var parameterModel in Parameters)
-        {
-            builder.Append('_');
-            builder.Append(parameterModel.Type.CSharpPInvokeType.ToCode().ToValidCSharpName());
-        }
-
-        return builder.ToString();
-    }
 }

@@ -7,10 +7,10 @@ implementation text, P/Invoke declarations, and public C# names do not define th
 ## Current delivery state
 
 The generator materializes the canonical ABI-major-1 header and a CMake project for the versioned
-`ted_toolkit_occt_abi_v1` adapter library. The previous record-by-record `CppGenerator` remains as
-legacy test coverage but is no longer reachable from the production generation pipeline, so raw
-C++ references, templates, STL types, and OCCT handles cannot become active exports through that
-path.
+`ted_toolkit_occt_abi_v1` adapter library. The pre-version record-by-record C++ wrapper generator,
+unversioned exception bridge, and managed raw-pointer prototypes have been removed. Raw C++
+references, templates, STL types, and OCCT handles cannot become active exports through an
+alternate generation path.
 
 The `ted-occt-abi-v1-consumer` presets build the generated project with OCCT 8.0.1 and execute a
 plain C11 consumer. That consumer proves point values, transient ownership, UTF-8 storage, error

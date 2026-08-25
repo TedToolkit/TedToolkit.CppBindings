@@ -16,9 +16,9 @@ TedToolkit.Occt will expose OCCT through a versioned C11-compatible ABI made onl
 
 ## Context and decision question
 
-The generator currently stores a raw C++ spelling, a P/Invoke type, and a public C# type in one projection model. The fallback resolver copies `ClangSharp.Type.AsString` into `CppTypeName`, and the C++ generator writes that string directly into functions declared with `extern "C"`. As a result, generated exports can contain C++ references, rvalue references, classes, `std::*` templates, `NCollection_*` templates, and `opencascade::handle<T>`. C linkage controls symbol naming; it does not make those parameter and return representations a C ABI.
+At decision time, the generator stored a raw C++ spelling, a P/Invoke type, and a public C# type in one projection model. The fallback resolver copied `ClangSharp.Type.AsString` into `CppTypeName`, and the pre-version C++ generator wrote that string directly into functions declared with `extern "C"`. As a result, generated exports could contain C++ references, rvalue references, classes, `std::*` templates, `NCollection_*` templates, and `opencascade::handle<T>`. C linkage controls symbol naming; it does not make those parameter and return representations a C ABI.
 
-The current runtime already assumes a native boundary: it uses `CallingConvention.Cdecl`, models a native error structure, and intends to own native OCCT objects. However, the generated C# methods do not yet invoke the generated symbols, and the handwritten `gp_Pnt2d` import still uses the placeholder library name `Name`. The existing generated surface is therefore a prototype, not a compatibility baseline.
+The pre-version runtime assumed a native boundary through `CallingConvention.Cdecl`, an unversioned error structure, raw-pointer ownership helpers, and a handwritten `gp_Pnt2d` import with placeholder library name `Name`. Those prototypes were not a compatibility baseline and were removed after ABI version 1 was established.
 
 OCCT adds two distinct object-lifetime models that the ABI must preserve:
 
@@ -31,10 +31,10 @@ The decision question is: **what native protocol can represent the OCCT cases al
 
 | Type | Driver or constraint | Evidence or source | Priority |
 | --- | --- | --- | --- |
-| Hard constraint | A public export must be declarable and consumable as C11; C++ references, classes, templates, RTTI types, and standard-library types cannot appear in it. | [`TypeModel`](../../src/core/TedToolkit.Occt.Generator/Models/TypeModel.cs), [`Resolver`](../../src/core/TedToolkit.Occt.Generator/Services/Resolver.cs), and [`CppGenerator`](../../src/core/TedToolkit.Occt.Generator/Generators/CppGenerator.cs) show the current raw-type flow. | Must |
-| Hard constraint | No C++ exception may cross the ABI. Failure must be observable without relying on thread-local global state. | [`csharp_interop.h`](../../src/core/TedToolkit.Occt.Cpp/csharp_interop.h) and [`interop_error`](../../src/core/TedToolkit.Occt.Runtime/interop_error.cs) already establish an exception-translation intent. | Must |
-| Hard constraint | Allocation and release must occur in the same native library, including errors, strings, arrays, ordinary objects, and transient references. | The runtime currently calls native `free_error`; the existing header allocates error strings with `new[]`. | Must |
-| Hard constraint | Ownership, nullability, direction, and valid lifetime must be explicit for every pointer-shaped transport value. | [`Handle<TElement>`](../../src/core/TedToolkit.Occt.Runtime/Handle.cs) owns a raw pointer, while [`handle<TElement>`](../../src/core/TedToolkit.Occt.Runtime/HandleValue.cs) is a non-owning view; current native deletion does not yet distinguish OCCT lifetime models safely. | Must |
+| Hard constraint | A public export must be declarable and consumable as C11; C++ references, classes, templates, RTTI types, and standard-library types cannot appear in it. | [`TypeModel`](../../src/core/TedToolkit.Occt.Generator/Models/TypeModel.cs), [`Resolver`](../../src/core/TedToolkit.Occt.Generator/Services/Resolver.cs), and the removed pre-version generator showed the raw-type flow. | Must |
+| Hard constraint | No C++ exception may cross the ABI. Failure must be observable without relying on thread-local global state. | The removed pre-version exception bridge established the translation intent but had no stable error kind or version boundary. | Must |
+| Hard constraint | Allocation and release must occur in the same native library, including errors, strings, arrays, ordinary objects, and transient references. | The pre-version runtime called an unversioned `free_error`, while its native header allocated diagnostic strings with `new[]`. | Must |
+| Hard constraint | Ownership, nullability, direction, and valid lifetime must be explicit for every pointer-shaped transport value. | The removed managed prototypes exposed owning and borrowed raw pointers without a versioned native release contract. | Must |
 | Hard constraint | Unsupported types must be rejected before an export is emitted; recursive discovery must not turn STL, compiler internals, or arbitrary templates into wrapper targets. | [`RecordModelManager`](../../src/core/TedToolkit.Occt.Generator/Services/RecordModelManager.cs) recursively adds record declarations and unwraps `opencascade::handle<T>`. | Must |
 | Hard constraint | The native ABI is the authority. Managed P/Invoke and public C# projections consume it but cannot define or infer it. | Current `CSharpPInvokeType` and `CSharpPublicType` already represent different consumer concerns. | Must |
 | Decision driver | The first boundary must cover common OCCT geometry values, `Standard_Transient` hierarchies, enums, strings, arrays, in/out references, and errors without promising all OCCT types. | Current target generation reaches `gp_*`, `Geom2d_*`, `NCollection_Array1<T>`, handles, strings, and stream methods. | High |
@@ -269,7 +269,7 @@ does not duplicate ownership; clearing a stale copy is invalid.
 
 ### 11. Compatibility and versioning
 
-- ABI version 1 begins only after this decision is Accepted and its delivery passes the approved C consumer boundary proof. Current generated exports and handwritten runtime imports are pre-version prototypes.
+- ABI version 1 begins only after this decision is Accepted and its delivery passes the approved C consumer boundary proof. The pre-version generated exports and handwritten runtime imports were removed rather than carried into version 1.
 - Within ABI version 1, new symbols and new enum constants may be added. Existing symbols, transport layouts, numeric error-kind values, encodings, ownership rules, and release obligations may not be changed or removed.
 - A breaking change requires ABI version 2, its own header, library basename, C identifier namespace, symbol prefix, and an explicit transition decision. Version 1 remains loadable while supported; version 2 does not replace a version-1 library in place.
 - The initial conformance and release matrix is Windows x64, the MSVC x64 ABI, `cdecl`, and OCCT 8.0.1 from vcpkg triplet `x64-windows`. The portable C vocabulary is a design constraint, not evidence that another triplet is supported. A new triplet joins ABI version 1 only after its C layout, calling convention, ownership, error, and representative OCCT behavior pass the same boundary proof.
@@ -292,10 +292,9 @@ Repository evidence:
 - [`Helpers`](../../src/core/TedToolkit.Occt.Generator/Helpers.cs) maps Clang built-ins, pointers, references, and public managed types today.
 - [`Resolver`](../../src/core/TedToolkit.Occt.Generator/Services/Resolver.cs) currently falls back to raw C++ spelling and recursively exposes record declarations.
 - [`RecordModelManager`](../../src/core/TedToolkit.Occt.Generator/Services/RecordModelManager.cs) discovers records, fields, methods, inheritance, enums, templates, and OCCT handle specializations.
-- [`CppGenerator`](../../src/core/TedToolkit.Occt.Generator/Generators/CppGenerator.cs) currently writes C++ receiver/reference/result types into exported functions and directly increments or deletes transient instances.
+- The removed pre-version C++ generator wrote C++ receiver/reference/result types into exported functions and directly incremented or deleted transient instances; its implementation remains available in repository history.
 - [`CSharpGenerator`](../../src/core/TedToolkit.Occt.Generator/Generators/CSharpGenerator.cs) demonstrates the existing separation between public type intent and the still-incomplete invocation layer.
-- [`csharp_interop.h`](../../src/core/TedToolkit.Occt.Cpp/csharp_interop.h) and [`interop_error`](../../src/core/TedToolkit.Occt.Runtime/interop_error.cs) establish the existing error translation and same-library release intent.
-- [`Handle<TElement>`](../../src/core/TedToolkit.Occt.Runtime/Handle.cs), [`handle<TElement>`](../../src/core/TedToolkit.Occt.Runtime/HandleValue.cs), and [`IStandard_Transient`](../../src/core/TedToolkit.Occt.Runtime/IStandard_Transient.cs) show the current managed ownership/view model and the unresolved native release contract.
+- The removed pre-version exception and raw-pointer helpers established the original translation and ownership intent while exposing the unresolved release contract; their implementations remain available in repository history.
 
 External primary evidence:
 

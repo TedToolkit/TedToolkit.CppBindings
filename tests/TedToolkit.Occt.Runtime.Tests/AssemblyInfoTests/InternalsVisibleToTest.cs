@@ -23,7 +23,7 @@ internal sealed class InternalsVisibleToTest
     [Test]
     public async Task Should_expose_triplet_specific_friend_assemblies_Async()
     {
-        var names = typeof(IStandard_Transient).Assembly
+        var names = typeof(Attributes.NativeTypeNameAttribute).Assembly
             .GetCustomAttributes(typeof(InternalsVisibleToAttribute), false)
             .Cast<InternalsVisibleToAttribute>()
             .Select(static attribute => attribute.AssemblyName)

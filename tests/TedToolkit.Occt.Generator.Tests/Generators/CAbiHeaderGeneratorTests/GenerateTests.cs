@@ -90,7 +90,7 @@ internal sealed class GenerateTests
         }
     }
 
-    private static async Task<CppCommandResult> CompileAsync(
+    private static async Task<CompilationResult> CompileAsync(
         DirectoryInfo directory,
         string language,
         string standard,
@@ -135,6 +135,11 @@ internal sealed class GenerateTests
                + "static ted_occt_v1_pnt2d point = { 1.0, 2.0 };\n"
                + "int consume_header(void) { return point.x == 1.0 ? 0 : 1; }\n";
     }
+
+    private readonly record struct CompilationResult(
+        int ExitCode,
+        string StandardOutput,
+        string StandardError);
 
     private static AbiOperationModel CreatePointOperation()
     {

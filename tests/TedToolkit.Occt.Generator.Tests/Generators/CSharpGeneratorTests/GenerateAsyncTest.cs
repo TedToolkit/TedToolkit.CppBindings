@@ -41,7 +41,6 @@ internal sealed class GenerateAsyncTest
                 Base = null,
                 IsAbstract = true,
                 IsStandardTransient = false,
-                RequiresNew = false,
                 SourceHeader = "gp_Pnt2d.hxx",
                 Size = 16,
                 Type = new()

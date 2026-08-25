@@ -107,8 +107,7 @@ internal sealed class CSharpGenerator(
                 continue;
             }
 
-            AddMethod(structDeclaration, recordDeclMethodModel,
-                recordDeclMethodModel.GetMethodInteropName(recordModel));
+            AddMethod(structDeclaration, recordDeclMethodModel);
         }
     }
 
@@ -127,10 +126,8 @@ internal sealed class CSharpGenerator(
 
     private static void AddMethod(
         TypeDeclaration structDeclaration,
-        MethodModel methodModel,
-        string unusedPInvokeMethodName)
+        MethodModel methodModel)
     {
-        _ = unusedPInvokeMethodName;
         var method = Method(methodModel.MethodName, CreateReturnType(methodModel)).Public;
         AddRootDescriptions(method, methodModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
@@ -144,12 +141,6 @@ internal sealed class CSharpGenerator(
         if (methodModel.IsConst)
         {
             method = method.Readonly;
-        }
-
-        if (!methodModel.NoExceptions)
-        {
-            method.AddRootDescription(
-                new DescriptionInheritDoc(new DataType("global::TedToolkit.Occt.interop_error.ThrowIfError")));
         }
 
         foreach (var parameterModel in methodModel.Parameters)

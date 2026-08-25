@@ -37,7 +37,7 @@ canonical header           接口和公共 API 形状
 versioned native adapters      │
               └───────┬───────┘
                       ▼
-           Runtime 管理指针、生命周期与异常
+           未来 Runtime 调用层管理生命周期与异常
 ```
 
 ### 1. 从 vcpkg 获取真实 OCCT 环境
@@ -116,7 +116,7 @@ output/generated/
 | 组件 | 责任 | 文档 |
 | --- | --- | --- |
 | `TedToolkit.Occt.Generator` | 读取 vcpkg/OCCT、解析 AST、建立模型并生成两组代码 | [README](src/core/TedToolkit.Occt.Generator/README.md) |
-| `TedToolkit.Occt.Runtime` | 提供原生句柄、借用视图、异常桥和生成类型依赖的基础契约 | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
+| `TedToolkit.Occt.Runtime` | 提供生成类型当前使用的原生类型元数据；v1 调用和生命周期抽象尚待实现 | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
 | `TedToolkit.Occt.Analyzer` | 从已安装 OCCT 头文件生成可选择的头文件类型枚举 | `src/tools/TedToolkit.Occt.Analyzer` |
 | `TedToolkit.Occt.Console` | 运行 `Geom2d_BSplineCurve` 生成流程的开发样例 | `tests/TedToolkit.Occt.Console` |
 | `Build` | 仓库构建管线，并在准备阶段生成 triplet 友元程序集声明 | `Build` |

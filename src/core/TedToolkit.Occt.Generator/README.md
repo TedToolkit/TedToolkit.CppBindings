@@ -113,7 +113,7 @@ If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnos
 
 ```text
 Clang C++ 类型
-    ├── CppTypeName          → C++ wrapper 签名
+    ├── CppTypeName          → 源 C++ 语义与诊断
     ├── CSharpPInvokeType    → ABI、字段布局和原生调用签名
     └── CSharpPublicType     → 面向调用方的 C# API
 ```
@@ -128,9 +128,9 @@ Clang C++ 类型
 
 ## 4. Generate the canonical C ABI contract
 
-The production pipeline no longer invokes the legacy record-by-record `CppGenerator`. Instead,
 `GenerateCppModule` materializes `ted_toolkit_occt_v1.h` from the approved versioned semantic model
-and copies the matching C++ adapter and CMake project.
+and copies the matching C++ adapter and CMake project. There is no alternate unversioned native
+generation path.
 Every operation must have explicit source, C transport, C++ adapter, managed transport, and public
 managed projections. Incomplete operations fail closed before naming or emission.
 
@@ -139,9 +139,8 @@ the approved C11 transport vocabulary, and compiles as C11 and C++ without OCCT 
 [C interoperability ABI major 1](../../../docs/interop-abi-v1.md) for the current delivery state,
 supported matrix, ownership rules, and boundaries.
 
-The old `CppGenerator` and `csharp_interop` fixtures remain only as legacy characterization. They
-are not reachable from the active generation pipeline and do not define ABI major 1. The root
-`ted-occt-abi-v1-consumer` presets build the versioned project and run its real C11 boundary proof.
+The root `ted-occt-abi-v1-consumer` presets build the versioned project and run its real C11
+boundary proof.
 
 ## 5. 生成 C# 类型
 
@@ -195,7 +194,9 @@ $env:CMAKE_GENERATOR = 'Ninja'
 $env:CXX = 'clang-cl'
 ```
 
-This is the verification baseline, not an exclusive consumer toolchain requirement. The native integration fixture must execute without being skipped to prove multi-wrapper linking, library loading, exported `free_error` resolution, and same-library exception-payload release.
+This is the verification baseline, not an exclusive consumer toolchain requirement. The ABI v1 C
+consumer and managed boundary fixtures prove library loading, version gating, stable error cleanup,
+and same-library ownership release.
 
 从仓库根目录运行开发样例：
 

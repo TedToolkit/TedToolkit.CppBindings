@@ -111,36 +111,4 @@ public sealed class GenerateCppModule : Module<bool>
         var outputPath = Path.Combine(outputDirectory.FullName, fileName);
         await File.WriteAllTextAsync(outputPath, source, cancellationToken).ConfigureAwait(false);
     }
-
-    /// <summary>
-    /// Copies the shared native interop declaration and implementation into the transient project.
-    /// </summary>
-    /// <param name="compile">The transient native compilation context.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task that completes when both sources have been written.</returns>
-    internal static async Task CopyCppInteropSourcesAsync(
-        CppCompileCoontext compile,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(compile);
-        await Task.WhenAll(
-                CopyEmbeddedSourceAsync("csharp_interop.h", cancellationToken),
-                CopyEmbeddedSourceAsync("csharp_interop.cpp", cancellationToken))
-            .ConfigureAwait(false);
-
-        async Task CopyEmbeddedSourceAsync(string fileName, CancellationToken token)
-        {
-            var resourceName = ZString.Concat("TedToolkit.Occt.Generator.Assets.cpp.", fileName);
-            var sourceStream = typeof(GenerateCppModule).Assembly.GetManifestResourceStream(resourceName);
-            ArgumentNullException.ThrowIfNull(sourceStream);
-            await using var _ = sourceStream.ConfigureAwait(false);
-
-            using var reader = new StreamReader(sourceStream);
-            await compile.AddSourceAsync(
-                    fileName,
-                    await reader.ReadToEndAsync(token).ConfigureAwait(false),
-                    token)
-                .ConfigureAwait(false);
-        }
-    }
 }
