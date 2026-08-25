@@ -87,22 +87,27 @@ bootstrap export, compatibility range, or side-by-side major protocol.
 
 Instead, the complete canonical interop manifest has a deterministic contract fingerprint. The
 generated managed binding and generated native artifact carry the same fingerprint and require an
-exact match before any OCCT operation is resolved or invoked. The fingerprint detects mismatched
-artifacts; it is not a semantic version and defines no additive compatibility range.
+exact match before any OCCT operation is resolved or invoked. The fingerprint is the 32-byte
+SHA-256 digest of the length-delimited canonical UTF-8 manifest encoding. The fingerprint detects
+mismatched artifacts; it is not a semantic version and defines no additive compatibility range.
 
 The fingerprint domain includes every resolution- or layout-sensitive part of the generated
-boundary: emitted support and operation identifiers; calling convention; ordered parameter and
-result transports; direction, nullability, and ownership; transport declaration kinds, field order,
-field types, fixed layouts, and numeric constants; and error, lifetime, and cleanup contracts. Its
-canonical encoding remains a private generation choice, but no layer may omit a field that can
-change symbol resolution, memory interpretation, ownership, or cleanup.
+boundary except the immutable bootstrap described below: emitted support and operation identifiers;
+calling convention; ordered parameter and result transports; direction, nullability, and ownership;
+transport declaration kinds, field order, field types, fixed layouts, and numeric constants; and
+error, lifetime, and cleanup contracts. Its canonical encoding remains a private generation choice,
+but no layer may omit a field that can change symbol resolution, memory interpretation, ownership,
+or cleanup.
 
-Managed initialization resolves only the generated unversioned fingerprint support export before
-the match is established. A missing fingerprint export, including an old ABI-v1 native artifact,
-and a present but different fingerprint both produce `BadImageFormatException` and resolve no OCCT
-operation export. The missing case reports that no compatible contract identity is available; the
-different case may report both identities for diagnosis. Neither case falls through as an
-`EntryPointNotFoundException` from an operation call.
+The fingerprint bootstrap is deliberately outside the generated manifest and never varies with its
+contents. Its export name is exactly `ted_toolkit_occt_contract_fingerprint`, its calling convention
+is cdecl, and its C/C++ compatible transport is `void(uint8_t* out_fingerprint)`, where a non-null
+caller-owned buffer of exactly 32 bytes receives the binary digest. Managed initialization resolves
+and calls only this immutable export before the match is established. A missing fingerprint export,
+including an old ABI-v1 native artifact, and a present but different fingerprint both produce
+`BadImageFormatException` and resolve no OCCT operation export. The missing case reports that no
+compatible contract identity is available; the different case may report both identities for
+diagnosis. Neither case falls through as an `EntryPointNotFoundException` from an operation call.
 
 The native ABI is an internal generated boundary of one shipped artifact set, not an independently
 versioned compatibility product. A C consumer may compile against the generated header, but must be
@@ -159,7 +164,10 @@ upgrade native and managed artifacts independently.
 - Exact contract fingerprint validation completes before resolving or invoking generated OCCT
   operations. A missing or different fingerprint produces `BadImageFormatException`; only the
   fingerprint support export may be resolved before rejection.
-- The fingerprint domain contains every generated identifier, calling convention, ordered
+- The immutable fingerprint bootstrap has the exact symbol, cdecl convention, and 32-byte output
+  transport fixed by this ADR and is excluded from the generated fingerprint domain.
+- The fingerprint is SHA-256 over the length-delimited canonical UTF-8 manifest encoding, whose
+  domain contains every other generated identifier, calling convention, ordered
   transport signature, direction/nullability/ownership rule, transport layout and numeric
   constant, and error/lifetime/cleanup contract that can affect resolution or memory safety.
 - No active artifact or current interface exposes ABI major/minor numbers or version-decorated
