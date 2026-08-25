@@ -3,11 +3,13 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: approved -->
+<!-- change-status: draft -->
 
 - Priority: P1
-- Approval: User approval in the current Codex task on 2026-08-25 for the revised public handle,
-  managed exception, delivery, and proof contracts recorded here.
+- Approval: The approval recorded at
+  `bb7e1289e6ec56e3187eaae8de5e3a88553de4a9` is suspended because accepted ADR-0006 supersedes
+  this record's ABI-major-1 assumptions. Implementation is not authorized until the contract and
+  delivery map are reconciled with the unversioned generated boundary and explicitly re-approved.
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
