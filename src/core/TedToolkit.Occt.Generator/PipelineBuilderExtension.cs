@@ -62,7 +62,9 @@ public static class PipelineBuilderExtension
                     sp.GetRequiredService<IGeneratorService>()))
             .AddModule<GenerateCppModule>(sp =>
                 new GenerateCppModule(
-                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>()))
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>(),
+                    sp.GetRequiredService<IRecordModelManager>(),
+                    sp.GetRequiredService<IGeneratorService>()))
             .AddSingleton(
                 Microsoft.Extensions.Options.Options.Create(options));
 

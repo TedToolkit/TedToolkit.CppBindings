@@ -10,7 +10,8 @@ TedToolkit.Occt 是一个面向 .NET 的 OCCT 绑定代码生成项目：它从 
 
 - 只从指定的 OCCT 类型开始生成，并递归加入实际依赖，避免无条件包装整个 OCCT。
 - 保留 OCCT 的值类型、继承和 `Standard_Transient` 生命周期语义。
-- 通过 `extern "C"` 建立稳定的 C ABI，避免 C# 直接调用 C++ ABI。
+- The target boundary isolates the C++ ABI behind a generated `extern "C"` C11 transport; that
+  export layer is still under migration.
 - 分离 ABI 类型与公共 C# 类型，使内存布局正确性和 C# 易用性可以分别演进。
 - 在原生边界捕获 OCCT/C++ 异常，再转换成 .NET 异常。
 
@@ -30,14 +31,12 @@ GenerationOptions / DeclOptions
               │
               ├───────────────┐
               ▼               ▼
-生成 ABI-major-1 C11       生成 C# 类型、字段、
-canonical header           接口和公共 API 形状
+one internal C++ source    generated C# type, field,
+per RecordModel            interface, and API shapes
               │               │
-              ▼               │
-versioned native adapters      │
               └───────┬───────┘
                       ▼
-           未来 Runtime 调用层管理生命周期与异常
+     pending C11 exports, CMake, managed imports, and Runtime wiring
 ```
 
 ### 1. 从 vcpkg 获取真实 OCCT 环境
@@ -65,12 +64,13 @@ Each `DeclOptions.FileName` selects the exact public header `<FileName>.hxx`; un
 
 | 输出 | 责任 |
 | --- | --- |
-| C ABI header | Generates the canonical `ted_toolkit_occt_v1.h` from explicit semantic mappings; incomplete operations are omitted before naming or emission. |
+| C++ source | Traverses `RecordModel` directly and emits one internal `.cpp` per parsed record with required headers and real OCCT invocation expressions. |
 | C# 代码 | 根据原生大小和字段偏移生成托管类型形状，区分 P/Invoke 类型与公共 API 类型，并投影继承接口、枚举和 XML 文档。 |
 
-The production pipeline materializes the canonical header and versioned native adapter project.
-The root CMake presets build it and run a real C11 consumer; see
-[C interoperability ABI major 1](docs/interop-abi-v1.md).
+The production generation path no longer uses a handwritten operation catalog or
+`AbiOperationModel`. Per-type C++ files are still internal invocation helpers; the complete C11
+transport boundary, CMake/DLL, managed imports, and exact-match validation remain unimplemented.
+The ABI-v1 project remains only as an independent migration fixture.
 
 更详细的生成流程见 [TedToolkit.Occt.Generator](src/core/TedToolkit.Occt.Generator/README.md)，生命周期和异常模型见 [TedToolkit.Occt.Runtime](src/core/TedToolkit.Occt.Runtime/README.md)。
 
@@ -103,13 +103,9 @@ dotnet run --project tests/TedToolkit.Occt.Console/TedToolkit.Occt.Console.cspro
 output/generated/
 ├── csharp/                         # 生成的 C# 文件
 └── cpp/
-    ├── CMakeLists.txt               # versioned native adapter project
-    ├── ted_toolkit_occt_v1.h       # canonical ABI-major-1 C header
-    └── ted_toolkit_occt_v1.cpp     # OCCT adapters
+    ├── Geom2d_BSplineCurve.cpp     # one invocation source per RecordModel
+    └── <DependencyType>.cpp
 ```
-
-The generated native artifact defaults to `ted_toolkit_occt` plus the platform prefix and suffix.
-Configure `GenerationOptions.NativeLibraryBaseName` to use another portable basename.
 
 > ⚠️ This command remains a development entry point rather than a verified release example. Target-scoped parsing and generator ordering are enforced, but downstream model projection or native compilation can still reject unsupported OCCT surface.
 
@@ -126,10 +122,13 @@ Configure `GenerationOptions.NativeLibraryBaseName` to use another portable base
 ## 当前实现边界
 
 - `DeclOptions.FileName` must identify both a top-level OCCT record and its exact public header stem; direct enum targets, namespaced targets, and declaration/header name mismatches are unsupported.
-- Recursive managed-model discovery can still encounter STL and compiler implementation types,
-  but the canonical C ABI rejects them unless every projection layer has an approved mapping.
-- A minimal managed fixture proves P/Invoke layouts and version gating; generated public invocation
-  bodies and production lifetime abstractions remain incomplete.
+- Recursive model discovery can still encounter STL and compiler implementation types. Forward-only
+  handle targets are excluded, while other incomplete mappings still require the later fail-closed
+  projection.
+- Per-type C++ helpers do not yet have generated C11 exports, CMake/DLL materialization, managed
+  imports, public invocation bodies, or complete lifetime wiring.
+- The independent ABI-v1 fixture still proves legacy boundary behavior but is no longer a production
+  Generator input.
 - C# 生成器已经生成类型、字段、接口和方法形状，但实际 P/Invoke 声明与公共方法调用体尚未接通。
 - 当前记录类型的结构生成分支只在 `recordDecl.IsAbstract` 为 true 时执行；非抽象记录目前只生成继承接口，类型生成条件仍需调整。
 - 仓库没有 vcpkg manifest/baseline，OCCT 版本仍由本机全局安装决定。

@@ -395,6 +395,45 @@ internal sealed class AddTest
     }
 
     /// <summary>
+    /// Verifies fields whose handle target is only forward declared are excluded from record generation.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_handle_fields_with_incomplete_targets_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            namespace opencascade
+            {
+                template<typename T>
+                class handle
+                {
+                public:
+                    handle();
+                };
+            }
+
+            struct Holder
+            {
+                struct Base;
+                opencascade::handle<Base> Internal;
+                int Value;
+            };
+            """, "__occt__/test.cpp");
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Holder");
+        var manager = CreateManager();
+
+        var model = manager.Add(record);
+
+        await Assert.That(model.FieldModels.Select(static field => field.Name))
+            .IsEquivalentTo(["Value",]);
+        await Assert.That(manager.RecordModels.Select(static item => item.Type.CppTypeName))
+            .IsEquivalentTo(["Holder",]);
+    }
+
+    /// <summary>
     /// Verifies template specialization field types collect both the template and template-argument headers.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>

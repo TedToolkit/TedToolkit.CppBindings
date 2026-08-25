@@ -22,6 +22,12 @@ internal sealed class GeneratorService(
     IOptions<GenerationOptions> generationOptions) : IGeneratorService
 {
     /// <inheritdoc/>
+    public IGenerator GenerateCpp(RecordModel record)
+    {
+        return new CppGenerator(record);
+    }
+
+    /// <inheritdoc/>
     public IGenerator GenerateCSharp(RecordModel record)
     {
         return new CSharpGenerator(record, generationOptions);

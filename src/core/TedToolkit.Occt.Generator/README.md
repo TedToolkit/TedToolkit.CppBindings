@@ -1,7 +1,7 @@
 # TedToolkit.Occt.Generator
 
-`TedToolkit.Occt.Generator` parses selected OCCT C++ declarations from vcpkg into managed projection
-models and generates C# type shapes plus the canonical ABI-major-1 C header.
+`TedToolkit.Occt.Generator` parses selected OCCT C++ declarations from vcpkg into one shared model
+graph and currently generates C# type shapes plus one internal C++ invocation source per record.
 
 > ⚠️ 当前项目面向生成器开发和验证，尚不是已经验证发布的 NuGet 消费入口。
 
@@ -46,8 +46,8 @@ The primary `GenerationOptions` values are:
 | --- | --- |
 | `DeclOptions` | Entry records such as `Geom2d_BSplineCurve`. |
 | `CSharpFolder` | Generated C# source directory. |
-| `CppFolder` | C++ wrappers, CMake project, and native library directory. |
-| `NativeLibraryBaseName` | Portable native artifact basename; defaults to `ted_toolkit_occt`. The build system supplies the platform prefix and suffix. |
+| `CppFolder` | Generated per-record C++ invocation sources. |
+| `NativeLibraryBaseName` | Reserved portable native artifact basename for the incomplete generated native-project stage. |
 | `Triplet` | Explicit vcpkg triplet; automatically selected when omitted. |
 | `CppVersion` | C++ standard passed to Clang and CMake; defaults to 17. |
 | `CommandLineArgs` | Additional Clang parse arguments. |
@@ -72,7 +72,7 @@ ParseModule ───────────────────┤        
 | `CleanGenerationOutputModule` | Removes previous C#, C++, CMake build, and binary output. |
 | `ParseModule` | Parses only selected public headers, validates diagnostics and every requested definition, then commits the complete target set to the shared model. |
 | `GenerateCSharpModule` | Writes `.g.cs` files for records and enums. |
-| `GenerateCppModule` | Materializes the canonical `ted_toolkit_occt_v1.h` and its CMake adapter project. The internal target remains `ted_toolkit_occt_abi_v1`; the artifact basename is configurable. |
+| `GenerateCppModule` | Writes exactly one `<CSharpTypeName>.cpp` invocation source for every parsed `RecordModel`, rejecting case-insensitive filename collisions before writing. |
 
 If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnostics fail Parse; Warning diagnostics remain non-fatal and are logged literally. Parse resolves every requested record definition before adding any target to the shared model, so an unresolved mixed target set cannot expose a partial model.
 
@@ -106,7 +106,9 @@ If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnos
 - 抽象类型的构造/析构函数；
 - 需要按值复制、但复制构造不可用的参数。
 
-`opencascade::handle<T>` 和 `occ::handle<T>` 模板特化会展开到其目标 `T`，以便递归生成真实 OCCT 类型。
+`opencascade::handle<T>` and `occ::handle<T>` specializations are unwrapped to `T` so the real OCCT
+type can be generated recursively. A field or method whose handle target is only forward declared
+does not enter the current model.
 
 ## 3. 投影跨语言类型
 
@@ -127,21 +129,18 @@ Clang C++ 类型
 
 字段优先使用 `CSharpPInvokeType` 保持布局；方法参数和返回值面向调用方时使用 `CSharpPublicType`。
 
-## 4. Generate the canonical C ABI contract
+## 4. Generate per-record C++ invocation sources
 
-`GenerateCppModule` materializes `ted_toolkit_occt_v1.h` from the approved versioned semantic model
-and copies the matching C++ adapter and CMake project. There is no alternate unversioned native
-generation path.
-Every operation must have explicit source, C transport, C++ adapter, managed transport, and public
-managed projections. Incomplete operations fail closed before naming or emission.
+`CppGenerator` consumes one `RecordModel` directly. It derives sorted required includes and emits
+constructor, destructor, normal/static method, operator, and conversion invocation helpers from the
+record's ordered methods. `GenerateCppModule` deterministically writes one source per record; it does
+not use a handwritten operation catalog or a parallel ABI declaration graph.
 
-The header is order-independent, uses stable semantic SHA-256 operation identities, contains only
-the approved C11 transport vocabulary, and compiles as C11 and C++ without OCCT headers. See
-[C interoperability ABI major 1](../../../docs/interop-abi-v1.md) for the current delivery state,
-supported matrix, ownership rules, and boundaries.
-
-The root `ted-occt-abi-v1-consumer` presets build the versioned project and run its real C11
-boundary proof.
+These helpers deliberately have C++ linkage. They are not yet the public C11 transport boundary and
+cannot by themselves be called safely from generated C#. The active migration must still add the
+validated transport/conversion projection, matching C declarations and exports, manifest,
+fingerprint, CMake description, and managed imports. The independent ABI-v1 fixture remains only as
+replacement evidence until that complete generated boundary is proved.
 
 ## 5. 生成 C# 类型
 
@@ -168,20 +167,22 @@ output/generated/
 │   ├── <Type>.g.cs
 │   └── <Enum>.g.cs
 └── cpp/
-    ├── CMakeLists.txt
-    ├── ted_toolkit_occt_v1.h
-    └── ted_toolkit_occt_v1.cpp
+    ├── <TypeA>.cpp
+    └── <TypeB>.cpp
 ```
 
-Test-only declarations are owned by the repository boundary fixtures and are never materialized
-into this production output directory.
+Each filename is derived from `RecordModel.Type.CSharpTypeName`; distinct records that would map to
+the same case-insensitive path fail before materialization.
 
 ## Known limitations
 
-- Recursive managed-model discovery may still encounter STL and compiler implementation types, but
-  those types cannot enter the canonical C ABI without a complete approved mapping.
-- The minimal ABI-major-1 P/Invoke fixture is boundary proof only; final generated imports and
+- Recursive managed-model discovery may still encounter STL and compiler implementation types;
+  incomplete declarations are excluded, while supported interop projections still need explicit
+  transport and lifetime rules.
+- Generated C11 declarations/exports, CMake/native-library materialization, managed imports, and
   public invocation bodies remain incomplete.
+- The minimal ABI-major-1 native/PInvoke fixture is migration proof only and is not a production
+  generation input.
 - The C# record-generation condition still needs correction; non-abstract records currently do not generate structs.
 - The P/Invoke invocation layer is incomplete.
 - The repository has no vcpkg manifest, so builds depend on a machine-level OCCT installation.
@@ -197,9 +198,8 @@ $env:CMAKE_GENERATOR = 'Ninja'
 $env:CXX = 'clang-cl'
 ```
 
-This is the verification baseline, not an exclusive consumer toolchain requirement. The ABI v1 C
-consumer and managed boundary fixtures prove library loading, version gating, stable error cleanup,
-and same-library ownership release.
+This is the legacy boundary verification baseline, not an exclusive consumer toolchain requirement.
+It remains available until the generated unversioned C11/native/managed boundary replaces it.
 
 从仓库根目录运行开发样例：
 
@@ -208,11 +208,13 @@ $env:VCPKG_ROOT = 'C:\vcpkg'
 dotnet run --project tests/TedToolkit.Occt.Console/TedToolkit.Occt.Console.csproj -c Release
 ```
 
-该命令目前用于暴露完整链路问题，不应被视为绿色验收命令。仓库级构建与测试约定见[根 README](../../../README.md#开发)。
+This command verifies the development path from real-header parsing through C# and per-type C++
+source materialization. It does not verify the unimplemented C11 exports or final DLL. See the
+[root README](../../../README.md#开发) for repository build and test conventions.
 
 ## 相关文档
 
 - [仓库概览](../../../README.md)
 - [Binding model internals](Models/README.md)
-- [C ABI internals](Abi/README.md)
+- [Unversioned binding migration](../../../docs/changes/generate-unversioned-model-driven-bindings/change.md)
 - [Runtime 契约](../TedToolkit.Occt.Runtime/README.md)

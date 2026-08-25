@@ -12,21 +12,13 @@ using ModularPipelines;
 using Sourcy.DotNet;
 
 using TedToolkit.Occt.Generator;
-using TedToolkit.Occt.Generator.Modules;
 using TedToolkit.Occt.Generator.Options;
 
 Console.OutputEncoding = Encoding.UTF8;
 
-if (args.Length == 2 && string.Equals(args[0], "--materialize-abi-v1", StringComparison.Ordinal))
-{
-    _ = await GenerateCppModule.GenerateAbiProjectAsync(new(args[1]), CancellationToken.None)
-        .ConfigureAwait(false);
-    return;
-}
-
 if (args.Length != 0)
 {
-    throw new ArgumentException("Expected no arguments or --materialize-abi-v1 <output-directory>.", nameof(args));
+    throw new ArgumentException("Expected no arguments.", nameof(args));
 }
 
 var outputFolder = Solutions.TedToolkit_Occt.Directory

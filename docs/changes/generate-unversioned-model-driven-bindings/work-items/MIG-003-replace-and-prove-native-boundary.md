@@ -2,8 +2,8 @@
 
 <!-- work-item-format: 2 -->
 
-- Approval: User approval in the current Codex task on 2026-08-25 for Draft content SHA-256
-  `9564CF38343D7E097A1D5EF6F2DA1AD3A14F9BAAEDF40D541E7BCFDECC613654`.
+- Approval: Revised item approved by the user in the current Codex task on 2026-08-25 together with
+  the expanded parent contract and three-item delivery map.
 
 ## Outcome
 
@@ -47,6 +47,7 @@ the only active source/build/test/documentation path.
 | AC-02 | Owns | Prove the completed repository has no declaration-specific handwritten authority and consume MIG-001 proof that fixture changes propagate through every replacement layer. |
 | AC-05 | Owns | Prove real generated C11 and managed calls preserve OCCT values/mutations, errors, ownership, and exactly-once same-library cleanup without exposing C++. |
 | AC-07 | Owns | Prove configured selections determine exact required includes/adapters, exclude unsupported/unselected operations, and build the configured unversioned basename. |
+| AC-10 | Supports | Compile the exact sorted per-type source inventory supplied by MIG-001 and prove its definitions link without ODR or symbol collisions. |
 
 <!-- work-item: delivery-constraints -->
 ## Constraints
@@ -61,8 +62,9 @@ the only active source/build/test/documentation path.
   identity after replacement. Historical ADR/change records remain history.
 - Package records are reconciled as Draft delivery contracts and require separate explicit user
   approval; this item neither creates a package nor authorizes package delivery.
-- Translation-unit layout, build-directory layout, fixture organization, and edit order remain
-  private choices.
+- Build-directory layout, fixture organization, and edit order remain private choices. Adapter
+  translation units follow the parent's one-source-per-type layout and may use only the explicit
+  non-type common support source for shared ABI support.
 
 <!-- work-item: proof-plan -->
 ## Proof
@@ -71,7 +73,7 @@ the only active source/build/test/documentation path.
 | --- | --- | --- | --- | --- |
 | AC-02 | Acceptance and structural | Component evidence plus bounded repository inspection | MIG-001 fixture changes propagate through every replacement layer, and the completed production tree contains no per-operation catalog, copied adapter/import list, or literal final operation symbol. | Re-run or consume the pinned MIG-001 propagation proof, then inspect production source and embedded resources with bounded forbidden-pattern searches after removing the legacy proof. |
 | AC-05 | Acceptance, boundary, and regression | Contract plus Integration | The generated library compiles; strict C11 and generated managed consumers observe correct values/mutations and managed errors; every owned handle, diagnostic, and buffer is released exactly once through its allocating library; no public native declaration exposes C++. | Build the solution and generated native project, run the unversioned CTest consumer, then run Generator and Runtime TUnit projects in Release with TRX output. |
-| AC-07 | Acceptance and boundary | Component plus Integration | Distinct configured header selections emit only their exact required includes/adapters, omit unsupported/unselected operations, and each generated CMake project builds the configured `ted_toolkit_occt` basename. | Run Generator selection fixtures; configure with the migrated unversioned CMake preset using the pinned `VCPKG_ROOT`; run `cmake --build --preset <unversioned-preset>` and `ctest --preset <unversioned-preset>`. |
+| AC-07 / AC-10 support | Acceptance and boundary | Component plus Integration | Distinct configured header selections emit only their exact required includes/adapters; transitive dependencies do not enroll operations; per-type definitions match the C declarations, compile and link to real OCCT declarations without collisions, and representative generated managed calls execute successfully. | Run Generator selection/source-inventory fixtures; configure with the migrated unversioned CMake preset using the pinned `VCPKG_ROOT`; run `cmake --build --preset <unversioned-preset>` and `ctest --preset <unversioned-preset>`; then run representative generated managed calls. |
 | Migration and repository gates | Structural and broader regression | Release build plus bounded inspection | No active versioned scaffold or current-documentation claim remains; the full solution and both TUnit projects pass; package records accurately describe the replacement and remain Draft pending approval. | Run `dotnet build TedToolkit.Occt.slnx -c Release`; run both test projects with `dotnet run ... -c Release --no-build -- --report-trx`; inspect active source/build/fixtures/output/current docs with bounded version-pattern searches; validate both migration and reconciled package records. |
 
 <!-- work-item: definition-of-done -->

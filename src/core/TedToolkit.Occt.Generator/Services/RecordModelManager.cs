@@ -527,12 +527,7 @@ internal sealed class RecordModelManager(
             return true;
         }
 
-        var result = addingType.AsCXXRecordDecl?.Definition is not null;
-        if (!result)
-        {
-        }
-
-        return result;
+        return TryUnwrapRecord(addingType.AsCXXRecordDecl?.Definition) is not null;
     }
 
     private static bool ShouldIncludeMethod(CXXMethodDecl method, bool isAbstract)
@@ -685,6 +680,18 @@ internal sealed class RecordModelManager(
     {
         ArgumentNullException.ThrowIfNull(record);
 
+        return TryUnwrapRecord(record)
+               ?? throw new NotSupportedException(
+                   $"Can't unwrap handle specialization ({record.TypeForDecl.AsString})");
+    }
+
+    private static CXXRecordDecl? TryUnwrapRecord(CXXRecordDecl? record)
+    {
+        if (record is null)
+        {
+            return null;
+        }
+
         if ((record.Definition ?? record) is not ClassTemplateSpecializationDecl classTemplateSpecializationDecl)
         {
             return record;
@@ -708,7 +715,7 @@ internal sealed class RecordModelManager(
             }
         }
 
-        throw new NotSupportedException($"Can't unwrap handle specialization ({record.TypeForDecl.AsString})");
+        return null;
     }
 
     private static bool IsHandleSpecialization(ClassTemplateSpecializationDecl record)

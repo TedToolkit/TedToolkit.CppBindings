@@ -5,162 +5,89 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using Cysharp.Text;
-
 using Microsoft.Extensions.Options;
 
 using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
 
-using TedToolkit.Occt.Generator.Abi.Conformance;
-using TedToolkit.Occt.Generator.Abi.Generation;
+using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.Occt.Generator.Options;
+using TedToolkit.Occt.Generator.Services.Interfaces;
 
 namespace TedToolkit.Occt.Generator.Modules;
 
 /// <summary>
-/// Generates the canonical C interoperability declaration for ABI major 1.
+/// Generates exactly one C++ invocation source for each parsed record.
 /// </summary>
 [DependsOn<CleanGenerationOutputModule>]
 [DependsOn<ParseModule>]
 public sealed class GenerateCppModule : Module<bool>
 {
-    private const string NATIVE_LIBRARY_BASE_NAME_PLACEHOLDER = "@TED_OCCT_V1_NATIVE_LIBRARY_BASENAME@";
-
     private readonly IOptions<GenerationOptions> _generationOptions;
+
+    private readonly IRecordModelManager _recordManager;
+
+    private readonly IGeneratorService _generatorService;
 
     /// <summary>
     /// Initializes a new instance of the <see cref="GenerateCppModule"/> class.
     /// </summary>
     /// <param name="generationOptions">The generation options.</param>
-    internal GenerateCppModule(IOptions<GenerationOptions> generationOptions)
+    /// <param name="recordManager">The parsed record source.</param>
+    /// <param name="generatorService">The language generator factory.</param>
+    internal GenerateCppModule(
+        IOptions<GenerationOptions> generationOptions,
+        IRecordModelManager recordManager,
+        IGeneratorService generatorService)
     {
         _generationOptions = generationOptions;
+        _recordManager = recordManager;
+        _generatorService = generatorService;
     }
 
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        _ = await GenerateAbiProjectAsync(
-                _generationOptions.Value.CppFolder,
-                _generationOptions.Value.GetNativeLibraryBaseName(),
-                cancellationToken)
+        var outputs = _recordManager.RecordModels
+            .OrderBy(static record => record.Type.CSharpTypeName, StringComparer.Ordinal)
+            .Select(static record => new RecordOutput(record, record.Type.CSharpTypeName + ".cpp"))
+            .ToArray();
+        RejectFileNameCollisions(outputs);
+
+        _generationOptions.Value.CppFolder.Create();
+        await Task.WhenAll(outputs.Select(output => GenerateRecordAsync(output, cancellationToken)))
             .ConfigureAwait(false);
         return true;
     }
 
-    /// <summary>
-    /// Materializes the canonical ABI-major-1 header and its versioned native adapter project.
-    /// </summary>
-    /// <param name="outputDirectory">The native generation output directory.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The materialized native project directory.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="outputDirectory"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The approved conformance model or embedded project is incomplete.</exception>
-#pragma warning disable RCS1231 // Preserve the existing public method signature.
-    public static Task<DirectoryInfo> GenerateAbiProjectAsync(
-        DirectoryInfo outputDirectory,
-        CancellationToken cancellationToken = default)
+    private static void RejectFileNameCollisions(IReadOnlyList<RecordOutput> outputs)
     {
-        return GenerateAbiProjectAsync(
-            outputDirectory,
-            GenerationOptions.DefaultNativeLibraryBaseName,
-            cancellationToken);
-    }
-#pragma warning restore RCS1231
-
-    /// <summary>
-    /// Materializes the canonical ABI-major-1 project with an explicit native library basename.
-    /// </summary>
-    /// <param name="outputDirectory">The native generation output directory.</param>
-    /// <param name="nativeLibraryBaseName">The native library artifact basename.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The materialized native project directory.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="outputDirectory"/> or
-    /// <paramref name="nativeLibraryBaseName"/> is null.</exception>
-    /// <exception cref="ArgumentException"><paramref name="nativeLibraryBaseName"/> is not portable or safe.</exception>
-    /// <exception cref="InvalidOperationException">The approved conformance model or embedded project is incomplete.</exception>
-    internal static async Task<DirectoryInfo> GenerateAbiProjectAsync(
-        DirectoryInfo outputDirectory,
-        string nativeLibraryBaseName,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(outputDirectory);
-        _ = GenerationOptions.ValidateNativeLibraryBaseName(nativeLibraryBaseName);
-        _ = await GenerateAbiHeaderAsync(outputDirectory, cancellationToken).ConfigureAwait(false);
-        await Task.WhenAll(
-                CopyAbiProjectResourceAsync(
-                    outputDirectory,
-                    "CMakeLists.txt",
-                    nativeLibraryBaseName,
-                    cancellationToken),
-                CopyAbiProjectResourceAsync(
-                    outputDirectory,
-                    "ted_toolkit_occt_v1.cpp",
-                    nativeLibraryBaseName: null,
-                    cancellationToken))
-            .ConfigureAwait(false);
-        return outputDirectory;
-    }
-
-    /// <summary>
-    /// Materializes the canonical ABI-major-1 header without emitting legacy C++ wrapper sources.
-    /// </summary>
-    /// <param name="outputDirectory">The native generation output directory.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>The generated canonical header file.</returns>
-    /// <exception cref="ArgumentNullException"><paramref name="outputDirectory"/> is null.</exception>
-    /// <exception cref="InvalidOperationException">The approved conformance model is incomplete.</exception>
-    internal static async Task<FileInfo> GenerateAbiHeaderAsync(
-        DirectoryInfo outputDirectory,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(outputDirectory);
-        var generated = CAbiHeaderGenerator.Generate(AbiV1ConformanceCatalog.CreateOperations());
-        if (generated.Diagnostics.Count > 0)
+        var paths = new Dictionary<string, RecordModel>(StringComparer.OrdinalIgnoreCase);
+        foreach (var output in outputs)
         {
-            throw new InvalidOperationException(string.Join(Environment.NewLine, generated.Diagnostics));
-        }
-
-        outputDirectory.Create();
-        var header = new FileInfo(Path.Combine(outputDirectory.FullName, "ted_toolkit_occt_v1.h"));
-        await File.WriteAllTextAsync(header.FullName, generated.Header, cancellationToken).ConfigureAwait(false);
-        return header;
-    }
-
-    private static async Task CopyAbiProjectResourceAsync(
-        DirectoryInfo outputDirectory,
-        string fileName,
-        string? nativeLibraryBaseName,
-        CancellationToken cancellationToken)
-    {
-        var resourceName = ZString.Concat("TedToolkit.Occt.Generator.Assets.cpp.abi-v1.", fileName);
-        var sourceStream = typeof(GenerateCppModule).Assembly.GetManifestResourceStream(resourceName);
-        if (sourceStream is null)
-        {
-            throw new InvalidOperationException($"Embedded ABI-major-1 project resource '{resourceName}' is missing.");
-        }
-
-        await using var _ = sourceStream.ConfigureAwait(false);
-        using var reader = new StreamReader(sourceStream);
-        var source = await reader.ReadToEndAsync(cancellationToken).ConfigureAwait(false);
-        if (nativeLibraryBaseName is not null)
-        {
-            if (!source.Contains(NATIVE_LIBRARY_BASE_NAME_PLACEHOLDER, StringComparison.Ordinal))
+            if (paths.TryAdd(output.FileName, output.Record))
             {
-                throw new InvalidOperationException(
-                    $"Embedded ABI-major-1 project resource '{resourceName}' has no native library basename placeholder.");
+                continue;
             }
 
-            source = source.Replace(
-                NATIVE_LIBRARY_BASE_NAME_PLACEHOLDER,
-                nativeLibraryBaseName,
-                StringComparison.Ordinal);
+            throw new InvalidOperationException(
+                $"Generated C++ source path collision '{output.FileName}' between records "
+                + $"'{paths[output.FileName].Type.CppTypeName}' and '{output.Record.Type.CppTypeName}'.");
         }
-
-        var outputPath = Path.Combine(outputDirectory.FullName, fileName);
-        await File.WriteAllTextAsync(outputPath, source, cancellationToken).ConfigureAwait(false);
     }
+
+    private async Task GenerateRecordAsync(RecordOutput output, CancellationToken cancellationToken)
+    {
+        var source = await _generatorService.GenerateCpp(output.Record).GenerateAsync(cancellationToken)
+            .ConfigureAwait(false);
+        await File.WriteAllTextAsync(
+                Path.Combine(_generationOptions.Value.CppFolder.FullName, output.FileName),
+                source,
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private sealed record RecordOutput(RecordModel Record, string FileName);
 }
