@@ -8,7 +8,7 @@
 - Applicable product intent: None
 - Applicable principles: None
 - Supersedes: None
-- Superseded by: [ADR-0002](ADR-0002-separate-abi-identity-from-library-basename.md) for the native library basename decision only.
+- Superseded by: [ADR-0002](ADR-0002-separate-abi-identity-from-library-basename.md) for the native library basename decision, and [ADR-0006](ADR-0006-generate-an-unversioned-matched-interop-boundary.md) for generation authority, versioned identity, and major/minor compatibility. The C11 transport, ownership, error, same-library cleanup, and fail-closed decisions remain active.
 
 ## Decision at a glance
 

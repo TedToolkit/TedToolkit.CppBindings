@@ -8,7 +8,7 @@
 - Applicable product intent: None
 - Applicable principles: None
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [ADR-0006](ADR-0006-generate-an-unversioned-matched-interop-boundary.md) for version-coupled native-boundary wording. The managed exception and diagnostic decisions remain active.
 - Related decisions: [ADR-0001](ADR-0001-stable-c-interop-abi.md),
   [ADR-0003](ADR-0003-distribute-generated-occt-bindings.md), and
   [ADR-0004](ADR-0004-preserve-occt-managed-type-and-handle-semantics.md)

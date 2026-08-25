@@ -8,7 +8,7 @@
 - Applicable product intent: None
 - Applicable principles: None
 - Supersedes: The fixed native library basename decision in [ADR-0001](ADR-0001-stable-c-interop-abi.md); all other ADR-0001 decisions remain unchanged.
-- Superseded by: None
+- Superseded by: [ADR-0006](ADR-0006-generate-an-unversioned-matched-interop-boundary.md) for ABI-major assumptions. The clean configurable artifact-basename decision remains active.
 
 ## Decision at a glance
 

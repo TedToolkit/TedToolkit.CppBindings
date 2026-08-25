@@ -9,7 +9,7 @@
 - Applicable product intent: None
 - Applicable principles: None
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [ADR-0006](ADR-0006-generate-an-unversioned-matched-interop-boundary.md) for version-coupled native-boundary wording. The release-generation, package, platform, and dependency decisions remain active.
 
 ## Decision at a glance
 
