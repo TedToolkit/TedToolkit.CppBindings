@@ -8,7 +8,7 @@
 - Applicable product intent: None
 - Applicable principles: None
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [ADR-0002](ADR-0002-separate-abi-identity-from-library-basename.md) for the native library basename decision only.
 
 ## Decision at a glance
 
