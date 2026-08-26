@@ -1,6 +1,7 @@
 # TedToolkit.Occt.Runtime.Analyzers
 
-This package supplies compile-time guardrails for `TedToolkit.Occt.Runtime` consumers. It reports
+This internal build component supplies compile-time guardrails for `TedToolkit.Occt.Runtime`
+consumers. It reports
 `TTOCCT001` when handwritten code references a Runtime member marked with
 `GeneratedCodeOnlyAttribute` or a callable member declared by a marked Runtime type. Standard
 generated code is exempt.
@@ -10,5 +11,7 @@ generated code is exempt.
 disposal, routine operation receivers, and fixed pointer use without a following owner
 `GC.KeepAlive`. Ordinary scoped data access remains available.
 
-The package contains compiler assets only. It does not provide runtime authorization, complete
-ownership or alias proof, concurrency safety, or disposal rules for exact-layout structs.
+The component is not a standalone library or NuGet package. The Runtime project builds it, embeds
+its output under `analyzers/dotnet/cs` in the Runtime package, and does not load it while compiling
+Runtime itself. The analyzer provides no runtime authorization, complete ownership or alias proof,
+concurrency safety, or disposal rules for exact-layout structs.
