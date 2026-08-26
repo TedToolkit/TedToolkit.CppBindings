@@ -2,13 +2,13 @@
 
   <Import Project="..\..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
   <Import Project="..\..\..\externals\TedToolkit\props\NugetPackage.props"/>
-  <Import Project="..\..\..\externals\TedToolkit\props\AlmostAllFrameworks.props"/>
 
   <PropertyGroup>
     <Title>Occt</Title>
     <Description>The Occt basic runtime.</Description>
     <RootNamespace>TedToolkit.Occt</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
-    <NoWarn>$(NoWarn);CA1708;CS8981</NoWarn>
+    <NoWarn>$(NoWarn);CA1032;CA1040;CA1708;CA1711;CS8981;RCS1194</NoWarn>
   </PropertyGroup>
 </Project>
