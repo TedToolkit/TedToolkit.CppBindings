@@ -16,10 +16,13 @@
     <Project Path="src/core/TedToolkit.Occt.Generator/TedToolkit.Occt.Generator.csproj">
       <BuildDependency Project="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />
     </Project>
-    <Project Path="src/core/TedToolkit.Occt.Runtime/TedToolkit.Occt.Runtime.csproj" />
+    <Project Path="src/core/TedToolkit.Occt.Runtime/TedToolkit.Occt.Runtime.csproj">
+      <BuildDependency Project="src/tools/TedToolkit.Occt.Runtime.Analyzers/TedToolkit.Occt.Runtime.Analyzers.csproj" />
+    </Project>
   </Folder>
   <Folder Name="/src/tools/">
     <Project Path="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />
+    <Project Path="src/tools/TedToolkit.Occt.Runtime.Analyzers/TedToolkit.Occt.Runtime.Analyzers.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj" />
@@ -27,6 +30,7 @@
     <Project Path="tests/TedToolkit.Occt.Runtime.NativeIntegration/TedToolkit.Occt.Runtime.NativeIntegration.csproj" />
     <Project Path="tests/TedToolkit.Occt.Runtime.SecondWrapper/TedToolkit.Occt.Runtime.SecondWrapper.csproj" />
     <Project Path="tests/TedToolkit.Occt.Runtime.Tests/TedToolkit.Occt.Runtime.Tests.csproj" />
+    <Project Path="tests/TedToolkit.Occt.Runtime.Analyzers.Tests/TedToolkit.Occt.Runtime.Analyzers.Tests.csproj" />
     <Project Path="tests\TedToolkit.Occt.Console\TedToolkit.Occt.Console.csproj">
       <BuildDependency Project="src/tools/TedToolkit.Occt.Analyzer/TedToolkit.Occt.Analyzer.csproj" />
     </Project>

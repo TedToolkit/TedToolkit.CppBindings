@@ -8,6 +8,8 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 
+using TedToolkit.Occt.Runtime;
+
 namespace TedToolkit.Occt;
 
 /// <summary>
@@ -43,6 +45,7 @@ public sealed unsafe class Handle<T> : IDisposable
     /// The constructor does not retain <paramref name="value"/>. Ownership transfers to this Handle
     /// only after both arguments have been validated.
     /// </remarks>
+    [GeneratedCodeOnly]
     public Handle(T* value, delegate* unmanaged[Cdecl]<T*, void> release)
     {
         ArgumentNullException.ThrowIfNull(value);

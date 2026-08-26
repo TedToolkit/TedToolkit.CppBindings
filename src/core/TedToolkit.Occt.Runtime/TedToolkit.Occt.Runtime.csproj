@@ -11,4 +11,21 @@
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CA1032;CA1040;CA1708;CA1711;CS8981;RCS1194</NoWarn>
   </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\tools\TedToolkit.Occt.Runtime.Analyzers\TedToolkit.Occt.Runtime.Analyzers.csproj"
+                      BuildReference="false"
+                      ExcludeAssets="compile;runtime"
+                      PrivateAssets="none" />
+  </ItemGroup>
+
+  <Target Name="BuildRuntimeAnalyzer"
+          BeforeTargets="CoreCompile">
+    <MSBuild Projects="..\..\tools\TedToolkit.Occt.Runtime.Analyzers\TedToolkit.Occt.Runtime.Analyzers.csproj"
+             Targets="Build"
+             Properties="Configuration=$(Configuration)" />
+    <ItemGroup>
+      <Analyzer Include="..\..\tools\TedToolkit.Occt.Runtime.Analyzers\bin\$(Configuration)\netstandard2.0\TedToolkit.Occt.Runtime.Analyzers.dll" />
+    </ItemGroup>
+  </Target>
 </Project>
