@@ -33,7 +33,7 @@ public sealed class GeneratedCodeOnlyUsageAnalyzer : DiagnosticAnalyzer
         "Usage",
         DiagnosticSeverity.Error,
         isEnabledByDefault: true,
-        description: "Handwritten code must not call public Runtime implementation hooks reserved for generated OCCT bindings.");
+        description: "Handwritten code must not use public Runtime implementation hooks reserved for generated OCCT bindings.");
 
     /// <inheritdoc />
     public override ImmutableArray<DiagnosticDescriptor> SupportedDiagnostics
@@ -66,6 +66,7 @@ public sealed class GeneratedCodeOnlyUsageAnalyzer : DiagnosticAnalyzer
                 operationContext => AnalyzeOperation(operationContext, marker),
                 OperationKind.ObjectCreation,
                 OperationKind.Invocation,
+                OperationKind.FieldReference,
                 OperationKind.PropertyReference,
                 OperationKind.EventReference,
                 OperationKind.MethodReference);
@@ -83,6 +84,7 @@ public sealed class GeneratedCodeOnlyUsageAnalyzer : DiagnosticAnalyzer
         {
             IObjectCreationOperation objectCreation => objectCreation.Constructor,
             IInvocationOperation invocation => invocation.TargetMethod,
+            IFieldReferenceOperation fieldReference => fieldReference.Field,
             IPropertyReferenceOperation propertyReference => propertyReference.Property,
             IEventReferenceOperation eventReference => eventReference.Event,
             IMethodReferenceOperation methodReference => methodReference.Method,
@@ -103,7 +105,7 @@ public sealed class GeneratedCodeOnlyUsageAnalyzer : DiagnosticAnalyzer
     private static bool IsMarked(ISymbol symbol, INamedTypeSymbol marker)
     {
         if (HasMarker(symbol, marker)
-            || (HasMarker(symbol.ContainingType, marker) && IsExternallyCallable(symbol)))
+            || (HasMarker(symbol.ContainingType, marker) && IsExternallyAccessible(symbol)))
         {
             return true;
         }
@@ -150,7 +152,7 @@ public sealed class GeneratedCodeOnlyUsageAnalyzer : DiagnosticAnalyzer
         return false;
     }
 
-    private static bool IsExternallyCallable(ISymbol symbol)
+    private static bool IsExternallyAccessible(ISymbol symbol)
     {
         if (symbol.DeclaredAccessibility != Accessibility.Public)
         {

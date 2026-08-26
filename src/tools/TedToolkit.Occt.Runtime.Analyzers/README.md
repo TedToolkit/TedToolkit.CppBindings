@@ -3,8 +3,8 @@
 This internal build component supplies compile-time guardrails for `TedToolkit.Occt.Runtime`
 consumers. It reports
 `TTOCCT001` when handwritten code references a Runtime member marked with
-`GeneratedCodeOnlyAttribute` or a callable member declared by a marked Runtime type. Standard
-generated code is exempt.
+`GeneratedCodeOnlyAttribute` or a public field/callable member declared by a marked Runtime type.
+Standard generated code is exempt.
 
 `TTOCCT002` reports the supported locally demonstrable lifetime hazards around the non-owning
 `Handle<T>.Value` and `Owned<T>.Value` references: escape, suspension, temporary owners, known

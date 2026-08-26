@@ -17,11 +17,6 @@ namespace TedToolkit.Occt;
 public interface IOcctException
 {
     /// <summary>
-    /// Gets the exact native error category, including an undefined reserved value when reported.
-    /// </summary>
-    OcctErrorKind ErrorKind { get; }
-
-    /// <summary>
     /// Gets the copied native exception type name, or <see langword="null"/> when unavailable.
     /// </summary>
     string? NativeTypeName { get; }

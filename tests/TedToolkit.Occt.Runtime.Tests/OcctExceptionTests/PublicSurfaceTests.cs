@@ -18,32 +18,15 @@ namespace TedToolkit.Occt.Runtime.Tests.OcctExceptionTests;
 internal sealed class PublicSurfaceTests
 {
     /// <summary>
-    /// Verifies that the public error-kind values match the native contract exactly.
+    /// Verifies that the private native discriminator is not exposed as a public managed type.
     /// </summary>
-    /// <returns>A task that completes when the enum assertions finish.</returns>
+    /// <returns>A task that completes when the type assertion finishes.</returns>
     [Test]
-    public async Task Should_expose_the_approved_error_kind_values_Async()
+    public async Task Should_not_expose_a_public_native_error_kind_Async()
     {
-        var actual = Enum.GetValues<OcctErrorKind>()
-            .Select(static value => (value.ToString(), (int)value))
-            .ToArray();
-        var expected = new (string Name, int Value)[]
-        {
-            (nameof(OcctErrorKind.None), 0),
-            (nameof(OcctErrorKind.Argument), 1),
-            (nameof(OcctErrorKind.ArgumentOutOfRange), 2),
-            (nameof(OcctErrorKind.Arithmetic), 3),
-            (nameof(OcctErrorKind.InvalidOperation), 4),
-            (nameof(OcctErrorKind.NullObject), 5),
-            (nameof(OcctErrorKind.OutOfMemory), 6),
-            (nameof(OcctErrorKind.Overflow), 7),
-            (nameof(OcctErrorKind.OcctFailure), 8),
-            (nameof(OcctErrorKind.StandardException), 9),
-            (nameof(OcctErrorKind.Unknown), 255),
-        };
+        var runtimeAssembly = typeof(OcctException).Assembly;
 
-        await Assert.That(Enum.GetUnderlyingType(typeof(OcctErrorKind))).IsEqualTo(typeof(int));
-        await Assert.That(actual).IsEquivalentTo(expected);
+        await Assert.That(runtimeAssembly.GetType("TedToolkit.Occt.OcctErrorKind")).IsNull();
     }
 
     /// <summary>
@@ -63,6 +46,9 @@ internal sealed class PublicSurfaceTests
             (typeof(OcctNullObjectException), typeof(OcctException)),
             (typeof(OcctOutOfMemoryException), typeof(OutOfMemoryException)),
             (typeof(OcctOverflowException), typeof(OverflowException)),
+            (typeof(OcctFailureException), typeof(OcctException)),
+            (typeof(OcctStandardException), typeof(OcctException)),
+            (typeof(OcctUnknownException), typeof(OcctException)),
         };
 
         foreach (var testCase in cases)
@@ -89,6 +75,9 @@ internal sealed class PublicSurfaceTests
             typeof(OcctNullObjectException),
             typeof(OcctOutOfMemoryException),
             typeof(OcctOverflowException),
+            typeof(OcctFailureException),
+            typeof(OcctStandardException),
+            typeof(OcctUnknownException),
         };
 
         foreach (var exceptionType in exceptionTypes)
@@ -109,6 +98,7 @@ internal sealed class PublicSurfaceTests
         }
 
         await Assert.That(typeof(OcctException).IsSealed).IsFalse();
+        await Assert.That(typeof(OcctException).IsAbstract).IsTrue();
         foreach (var leafType in exceptionTypes.Skip(1))
         {
             await Assert.That(leafType.IsSealed).IsTrue();
@@ -125,10 +115,8 @@ internal sealed class PublicSurfaceTests
         var properties = typeof(IOcctException).GetProperties();
 
         await Assert.That(properties.Select(static property => property.Name))
-            .IsEquivalentTo(["ErrorKind", "NativeTypeName", "NativeStackTrace",]);
+            .IsEquivalentTo(["NativeTypeName", "NativeStackTrace",]);
         await Assert.That(properties.All(static property => property.CanRead && !property.CanWrite)).IsTrue();
-        await Assert.That(properties.Single(static property => property.Name == "ErrorKind").PropertyType)
-            .IsEqualTo(typeof(OcctErrorKind));
         await Assert.That(properties.Single(static property => property.Name == "NativeTypeName").PropertyType)
             .IsEqualTo(typeof(string));
         await Assert.That(properties.Single(static property => property.Name == "NativeStackTrace").PropertyType)

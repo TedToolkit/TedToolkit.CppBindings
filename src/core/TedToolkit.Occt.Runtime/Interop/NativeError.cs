@@ -5,101 +5,50 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Diagnostics.CodeAnalysis;
 using System.Runtime.InteropServices;
+
+using TedToolkit.Occt.Runtime;
 
 namespace TedToolkit.Occt;
 
 /// <summary>
-/// Represents the private sequential carrier returned by the generated native boundary.
+/// Represents the generated-only sequential carrier returned by the native binding boundary.
 /// </summary>
+/// <remarks>
+/// Public visibility allows independently generated wrapper assemblies to name the transport.
+/// Its fields directly reproduce the generated native boundary layout. Handwritten callers should
+/// use generated OCCT operations instead.
+/// </remarks>
+[GeneratedCodeOnly]
+[SuppressMessage(
+    "Design",
+    "CA1051:Do not declare visible instance fields",
+    Justification = "The public fields are the generated-only sequential ABI transport.")]
+[SuppressMessage(
+    "Performance",
+    "CA1815:Override equals and operator equals on value types",
+    Justification = "This generated-only transport is an owning ABI slot, not a comparable value.")]
 [StructLayout(LayoutKind.Sequential)]
-internal struct NativeError
+public struct NativeError
 {
-    private int kind;
-
-    private nint typeName;
-
-    private nint message;
-
-    private nint stackTrace;
+    /// <summary>
+    /// Stores the native error category.
+    /// </summary>
+    public int Kind;
 
     /// <summary>
-    /// Initializes a new instance of the <see cref="NativeError"/> struct.
+    /// Stores the native-owned null-terminated UTF-8 type-name pointer.
     /// </summary>
-    /// <param name="kind">The native error category.</param>
-    /// <param name="typeName">The borrowed null-terminated UTF-8 native type name.</param>
-    /// <param name="message">The borrowed null-terminated UTF-8 native message.</param>
-    /// <param name="stackTrace">The borrowed null-terminated UTF-8 native stack text.</param>
-    internal NativeError(
-        int kind,
-#if NET6_0_OR_GREATER || NETSTANDARD2_1
-        in nint typeName,
-        in nint message,
-        in nint stackTrace)
-#else
-        nint typeName,
-        nint message,
-        nint stackTrace)
-#endif
-    {
-        this.kind = kind;
-        this.typeName = typeName;
-        this.message = message;
-        this.stackTrace = stackTrace;
-    }
+    public nint TypeName;
 
     /// <summary>
-    /// Gets the native error category.
+    /// Stores the native-owned null-terminated UTF-8 message pointer.
     /// </summary>
-    internal readonly int Kind
-    {
-        get
-        {
-            return kind;
-        }
-    }
+    public nint Message;
 
     /// <summary>
-    /// Gets the borrowed null-terminated UTF-8 native type-name pointer.
+    /// Stores the native-owned null-terminated UTF-8 stack-text pointer.
     /// </summary>
-    internal readonly nint TypeName
-    {
-        get
-        {
-            return typeName;
-        }
-    }
-
-    /// <summary>
-    /// Gets the borrowed null-terminated UTF-8 native message pointer.
-    /// </summary>
-    internal readonly nint Message
-    {
-        get
-        {
-            return message;
-        }
-    }
-
-    /// <summary>
-    /// Gets the borrowed null-terminated UTF-8 native stack-text pointer.
-    /// </summary>
-    internal readonly nint StackTrace
-    {
-        get
-        {
-            return stackTrace;
-        }
-    }
-
-    /// <summary>
-    /// Resets every field after the owning native storage has been consumed.
-    /// </summary>
-    internal void Clear()
-    {
-        kind = 0;
-        typeName = 0;
-        message = 0;
-        stackTrace = 0;
-    }
+    public nint StackTrace;
 }

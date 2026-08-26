@@ -109,6 +109,8 @@ internal sealed class AnalyzeTests
             [GeneratedCodeOnly]
             public sealed class Hooks
             {
+                public int Value;
+
                 public void Call() { }
             }
 
@@ -118,6 +120,8 @@ internal sealed class AnalyzeTests
                 {
                     var hooks = new Hooks();
                     hooks.Call();
+                    _ = hooks.Value;
+                    hooks.Value = 1;
                 }
             }
             """;
@@ -125,7 +129,40 @@ internal sealed class AnalyzeTests
         var diagnostics = await AnalyzerTestHost.AnalyzeAsync(Source).ConfigureAwait(false);
 
         await Assert.That(diagnostics.Select(static diagnostic => diagnostic.Id))
-            .IsEquivalentTo(["TTOCCT001", "TTOCCT001",]);
+            .IsEquivalentTo(["TTOCCT001", "TTOCCT001", "TTOCCT001", "TTOCCT001",]);
+    }
+
+    /// <summary>
+    /// Verifies that generated source can call the public Runtime native-error projection bridge.
+    /// </summary>
+    /// <returns>A task that completes when the assertions finish.</returns>
+    [Test]
+    public async Task Should_allow_generated_native_error_projection_Async()
+    {
+        const string Source = """
+            using System.Runtime.CompilerServices;
+            using System.Runtime.InteropServices;
+            using TedToolkit.Occt;
+
+            public static unsafe class Wrapper
+            {
+                [UnmanagedCallersOnly(CallConvs = new[] { typeof(CallConvCdecl) })]
+                private static void Clear(NativeError* error) { }
+
+                public static void Project(ref NativeError error)
+                {
+                    error.Kind = 0;
+                    _ = error.Message;
+                    NativeErrorProjection.ThrowIfFailed(ref error, &Clear);
+                }
+            }
+            """;
+
+        var diagnostics = await AnalyzerTestHost
+            .AnalyzeGeneratorOutputAsync(Source)
+            .ConfigureAwait(false);
+
+        await Assert.That(diagnostics).IsEmpty();
     }
 
     /// <summary>

@@ -15,24 +15,18 @@ public sealed class OcctArgumentOutOfRangeException : ArgumentOutOfRangeExceptio
     /// <summary>
     /// Initializes a new instance of the <see cref="OcctArgumentOutOfRangeException"/> class from copied native diagnostics.
     /// </summary>
-    /// <param name="errorKind">The exact native error category.</param>
     /// <param name="message">The native message or deterministic Runtime fallback.</param>
     /// <param name="nativeTypeName">The copied native exception type name, if available.</param>
     /// <param name="nativeStackTrace">The copied native stack text, if available.</param>
     internal OcctArgumentOutOfRangeException(
-        OcctErrorKind errorKind,
         string message,
         string? nativeTypeName,
         string? nativeStackTrace)
         : base(null, null, message)
     {
-        ErrorKind = errorKind;
         NativeTypeName = nativeTypeName;
         NativeStackTrace = nativeStackTrace;
     }
-
-    /// <inheritdoc/>
-    public OcctErrorKind ErrorKind { get; }
 
     /// <inheritdoc/>
     public string? NativeTypeName { get; }

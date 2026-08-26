@@ -5,7 +5,9 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Threading;
 
 using TedToolkit.Occt;
 
@@ -16,6 +18,10 @@ namespace TedToolkit.Occt.Runtime.Tests.NativeErrorProjectionTests;
 /// </summary>
 internal sealed class ThrowIfFailedTests
 {
+    private static int diagnosticsClearCount;
+
+    private static int successClearCount;
+
     /// <summary>
     /// Verifies that every defined nonzero kind maps to the approved managed exception type.
     /// </summary>
@@ -23,45 +29,43 @@ internal sealed class ThrowIfFailedTests
     [Test]
     public async Task Should_map_every_defined_nonzero_kind_to_the_approved_exception_Async()
     {
-        var cases = new (OcctErrorKind Kind, Type ExceptionType)[]
+        var cases = new (int Kind, Type ExceptionType)[]
         {
-            (OcctErrorKind.Argument, typeof(OcctArgumentException)),
-            (OcctErrorKind.ArgumentOutOfRange, typeof(OcctArgumentOutOfRangeException)),
-            (OcctErrorKind.Arithmetic, typeof(OcctArithmeticException)),
-            (OcctErrorKind.InvalidOperation, typeof(OcctInvalidOperationException)),
-            (OcctErrorKind.NullObject, typeof(OcctNullObjectException)),
-            (OcctErrorKind.OutOfMemory, typeof(OcctOutOfMemoryException)),
-            (OcctErrorKind.Overflow, typeof(OcctOverflowException)),
-            (OcctErrorKind.OcctFailure, typeof(OcctException)),
-            (OcctErrorKind.StandardException, typeof(OcctException)),
-            (OcctErrorKind.Unknown, typeof(OcctException)),
+            (1, typeof(OcctArgumentException)),
+            (2, typeof(OcctArgumentOutOfRangeException)),
+            (3, typeof(OcctArithmeticException)),
+            (4, typeof(OcctInvalidOperationException)),
+            (5, typeof(OcctNullObjectException)),
+            (6, typeof(OcctOutOfMemoryException)),
+            (7, typeof(OcctOverflowException)),
+            (8, typeof(OcctFailureException)),
+            (9, typeof(OcctStandardException)),
+            (255, typeof(OcctUnknownException)),
         };
 
         foreach (var testCase in cases)
         {
-            var exception = Project(new((int)testCase.Kind, 0, 0, 0));
+            var exception = Project(CreateError(testCase.Kind));
 
             await Assert.That(exception.GetType()).IsEqualTo(testCase.ExceptionType);
             await Assert.That(exception).IsAssignableTo<IOcctException>();
-            await Assert.That(((IOcctException)exception).ErrorKind).IsEqualTo(testCase.Kind);
             await Assert.That(exception.InnerException).IsNull();
         }
     }
 
     /// <summary>
-    /// Verifies that a reserved value and absent diagnostics retain the failure identity and fallback contract.
+    /// Verifies that a reserved value and absent diagnostics use the unknown-failure contract.
     /// </summary>
     /// <returns>A task that completes when the fallback assertions finish.</returns>
     [Test]
-    public async Task Should_preserve_a_reserved_kind_when_diagnostics_are_absent_Async()
+    public async Task Should_project_a_reserved_kind_as_an_unknown_failure_Async()
     {
         const int reservedKind = 42;
 
-        var exception = Project(new(reservedKind, 0, 0, 0));
+        var exception = Project(CreateError(reservedKind));
         var occtException = (IOcctException)exception;
 
-        await Assert.That(exception.GetType()).IsEqualTo(typeof(OcctException));
-        await Assert.That((int)occtException.ErrorKind).IsEqualTo(reservedKind);
+        await Assert.That(exception.GetType()).IsEqualTo(typeof(OcctUnknownException));
         await Assert.That(exception.Message)
             .IsEqualTo("Native OCCT operation failed with error kind 42.");
         await Assert.That(occtException.NativeTypeName).IsNull();
@@ -76,13 +80,9 @@ internal sealed class ThrowIfFailedTests
     [Test]
     public async Task Should_use_the_fallback_message_when_the_native_message_is_empty_Async()
     {
-        var error = new NativeError(
-            (int)OcctErrorKind.StandardException,
-            0,
-            Marshal.StringToCoTaskMemUTF8(""),
-            0);
+        var error = CreateError(9, 0, Marshal.StringToCoTaskMemUTF8(""), 0);
 
-        var exception = Project(error, Free);
+        var exception = ProjectWithFree(error);
 
         await Assert.That(exception.Message)
             .IsEqualTo("Native OCCT operation failed with error kind 9.");
@@ -95,9 +95,8 @@ internal sealed class ThrowIfFailedTests
     [Test]
     public async Task Should_not_invent_managed_argument_metadata_Async()
     {
-        var argument = (ArgumentException)Project(new((int)OcctErrorKind.Argument, 0, 0, 0));
-        var range = (ArgumentOutOfRangeException)Project(
-            new((int)OcctErrorKind.ArgumentOutOfRange, 0, 0, 0));
+        var argument = (ArgumentException)Project(CreateError(1));
+        var range = (ArgumentOutOfRangeException)Project(CreateError(2));
 
         await Assert.That(argument.ParamName).IsNull();
         await Assert.That(range.ParamName).IsNull();
@@ -111,23 +110,17 @@ internal sealed class ThrowIfFailedTests
     [Test]
     public async Task Should_copy_diagnostics_before_clearing_the_native_owner_once_Async()
     {
-        var error = new NativeError(
-            (int)OcctErrorKind.OcctFailure,
+        var error = CreateError(
+            8,
             Marshal.StringToCoTaskMemUTF8("Standard_Failure"),
             Marshal.StringToCoTaskMemUTF8("Native failure"),
             Marshal.StringToCoTaskMemUTF8("native-frame-1"));
-        var clearCount = 0;
-
-        void Clear(ref NativeError value)
-        {
-            clearCount++;
-            Free(ref value);
-        }
+        Volatile.Write(ref diagnosticsClearCount, 0);
 
         OcctException? exception = null;
         try
         {
-            NativeErrorProjection.ThrowIfFailed(ref error, Clear);
+            ThrowWithCountingFree(ref error);
         }
         catch (OcctException caught)
         {
@@ -135,10 +128,10 @@ internal sealed class ThrowIfFailedTests
         }
         finally
         {
-            Free(ref error);
+            FreeManaged(ref error);
         }
 
-        await Assert.That(clearCount).IsEqualTo(1);
+        await Assert.That(Volatile.Read(ref diagnosticsClearCount)).IsEqualTo(1);
         await Assert.That(error.Kind).IsEqualTo(0);
         await Assert.That(exception!.Message).IsEqualTo("Native failure");
         await Assert.That(exception.NativeTypeName).IsEqualTo("Standard_Failure");
@@ -153,12 +146,36 @@ internal sealed class ThrowIfFailedTests
     [Test]
     public async Task Should_return_without_cleanup_when_the_error_kind_is_none_Async()
     {
-        var error = new NativeError(0, 0, 0, 0);
-        var clearCount = 0;
+        var error = CreateError(0);
+        Volatile.Write(ref successClearCount, 0);
 
-        NativeErrorProjection.ThrowIfFailed(ref error, (ref NativeError _) => clearCount++);
+        ThrowWithCountingClear(ref error);
 
-        await Assert.That(clearCount).IsEqualTo(0);
+        await Assert.That(Volatile.Read(ref successClearCount)).IsEqualTo(0);
+    }
+
+    /// <summary>
+    /// Verifies that a failing carrier requires an explicit native cleanup entry point.
+    /// </summary>
+    /// <returns>A task that completes when the null-entry-point assertions finish.</returns>
+    [Test]
+    public async Task Should_reject_a_null_clear_entry_point_for_a_failure_Async()
+    {
+        var error = CreateError(1);
+        ArgumentNullException? caught = null;
+
+        try
+        {
+            ThrowWithNullClear(ref error);
+        }
+        catch (ArgumentNullException exception)
+        {
+            caught = exception;
+        }
+
+        await Assert.That(caught).IsNotNull();
+        await Assert.That(caught!.ParamName).IsEqualTo("clear");
+        await Assert.That(error.Kind).IsEqualTo(1);
     }
 
     /// <summary>
@@ -170,19 +187,46 @@ internal sealed class ThrowIfFailedTests
     {
         var pointerOffset = IntPtr.Size;
 
-        await Assert.That(Marshal.OffsetOf<NativeError>("kind").ToInt32()).IsEqualTo(0);
-        await Assert.That(Marshal.OffsetOf<NativeError>("typeName").ToInt32()).IsEqualTo(pointerOffset);
-        await Assert.That(Marshal.OffsetOf<NativeError>("message").ToInt32()).IsEqualTo(pointerOffset * 2);
-        await Assert.That(Marshal.OffsetOf<NativeError>("stackTrace").ToInt32()).IsEqualTo(pointerOffset * 3);
+        await Assert.That(Marshal.OffsetOf<NativeError>("Kind").ToInt32()).IsEqualTo(0);
+        await Assert.That(Marshal.OffsetOf<NativeError>("TypeName").ToInt32()).IsEqualTo(pointerOffset);
+        await Assert.That(Marshal.OffsetOf<NativeError>("Message").ToInt32()).IsEqualTo(pointerOffset * 2);
+        await Assert.That(Marshal.OffsetOf<NativeError>("StackTrace").ToInt32()).IsEqualTo(pointerOffset * 3);
         await Assert.That(Marshal.SizeOf<NativeError>()).IsEqualTo(pointerOffset * 4);
     }
 
-    private static Exception Project(NativeError error)
+    private static unsafe Exception Project(NativeError error)
     {
-        return Project(error, static (ref NativeError value) => value.Clear());
+        return Project(error, &ClearNative);
     }
 
-    private static Exception Project(NativeError error, NativeErrorClear clear)
+    private static NativeError CreateError(
+        int kind,
+        in nint typeName,
+        in nint message,
+        in nint stackTrace)
+    {
+        return new()
+        {
+            Kind = kind,
+            TypeName = typeName,
+            Message = message,
+            StackTrace = stackTrace,
+        };
+    }
+
+    private static NativeError CreateError(int kind)
+    {
+        return CreateError(kind, 0, 0, 0);
+    }
+
+    private static unsafe Exception ProjectWithFree(NativeError error)
+    {
+        return Project(error, &FreeNative);
+    }
+
+    private static unsafe Exception Project(
+        NativeError error,
+        delegate* unmanaged[Cdecl]<NativeError*, void> clear)
     {
         try
         {
@@ -211,23 +255,89 @@ internal sealed class ThrowIfFailedTests
         }
     }
 
-    private static void Free(ref NativeError error)
+    private static unsafe void ThrowWithCountingFree(ref NativeError error)
     {
-        if (error.TypeName != 0)
+        NativeErrorProjection.ThrowIfFailed(ref error, &CountingFreeNative);
+    }
+
+    private static unsafe void ThrowWithCountingClear(ref NativeError error)
+    {
+        NativeErrorProjection.ThrowIfFailed(ref error, &CountingClearNative);
+    }
+
+    private static unsafe void ThrowWithNullClear(ref NativeError error)
+    {
+        NativeErrorProjection.ThrowIfFailed(
+            ref error,
+            (delegate* unmanaged[Cdecl]<NativeError*, void>)0);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl),])]
+    private static unsafe void ClearNative(NativeError* error)
+    {
+        if ((nint)error == 0)
         {
-            Marshal.FreeCoTaskMem(error.TypeName);
+            return;
         }
 
-        if (error.Message != 0)
+        *error = default;
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl),])]
+    private static unsafe void FreeNative(NativeError* error)
+    {
+        FreeCore(error);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl),])]
+    private static unsafe void CountingFreeNative(NativeError* error)
+    {
+        Interlocked.Increment(ref diagnosticsClearCount);
+        FreeCore(error);
+    }
+
+    [UnmanagedCallersOnly(CallConvs = [typeof(CallConvCdecl),])]
+    private static unsafe void CountingClearNative(NativeError* error)
+    {
+        Interlocked.Increment(ref successClearCount);
+        if ((nint)error == 0)
         {
-            Marshal.FreeCoTaskMem(error.Message);
+            return;
         }
 
-        if (error.StackTrace != 0)
+        *error = default;
+    }
+
+    private static unsafe void FreeManaged(ref NativeError error)
+    {
+        fixed (NativeError* errorPointer = &error)
         {
-            Marshal.FreeCoTaskMem(error.StackTrace);
+            FreeCore(errorPointer);
+        }
+    }
+
+    private static unsafe void FreeCore(NativeError* error)
+    {
+        if ((nint)error == 0)
+        {
+            return;
         }
 
-        error.Clear();
+        if (error->TypeName != 0)
+        {
+            Marshal.FreeCoTaskMem(error->TypeName);
+        }
+
+        if (error->Message != 0)
+        {
+            Marshal.FreeCoTaskMem(error->Message);
+        }
+
+        if (error->StackTrace != 0)
+        {
+            Marshal.FreeCoTaskMem(error->StackTrace);
+        }
+
+        *error = default;
     }
 }

@@ -15,24 +15,18 @@ public sealed class OcctInvalidOperationException : InvalidOperationException, I
     /// <summary>
     /// Initializes a new instance of the <see cref="OcctInvalidOperationException"/> class from copied native diagnostics.
     /// </summary>
-    /// <param name="errorKind">The exact native error category.</param>
     /// <param name="message">The native message or deterministic Runtime fallback.</param>
     /// <param name="nativeTypeName">The copied native exception type name, if available.</param>
     /// <param name="nativeStackTrace">The copied native stack text, if available.</param>
     internal OcctInvalidOperationException(
-        OcctErrorKind errorKind,
         string message,
         string? nativeTypeName,
         string? nativeStackTrace)
         : base(message)
     {
-        ErrorKind = errorKind;
         NativeTypeName = nativeTypeName;
         NativeStackTrace = nativeStackTrace;
     }
-
-    /// <inheritdoc/>
-    public OcctErrorKind ErrorKind { get; }
 
     /// <inheritdoc/>
     public string? NativeTypeName { get; }
