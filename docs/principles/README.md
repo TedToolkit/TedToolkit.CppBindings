@@ -179,7 +179,8 @@ generated layout proof.
 - Review trigger: A supported type does not fit the trivial-value, `Standard_Transient`, or owned
   non-transient categories; an operation requires ownership transfer not expressible by the
   selected owner; routine use requires a caller to reach through an owner to its native-layout
-  value; or a native-layout value would gain managed lifetime behavior.
+  value; a non-owning native reference would gain a managed wrapper or owner-retaining lifetime
+  abstraction; or a native-layout value would gain managed lifetime behavior.
 
 #### Default
 
@@ -211,6 +212,15 @@ view as `Handle<T>.Value`; it does not change the object's ownership or lifetime
 `Owned<T>` have no public inheritance relationship or common public owner base; their different
 native lifetime semantics remain visible in the managed type system.
 
+Borrowing is an operation-level lifetime fact, not another ownership or public representation
+category. A non-owning native reference remains a direct, C++-like `ref T` view or an exact native
+pointer at an already-approved low-level boundary. The binding does not introduce `Borrowed<T>`, a
+per-declaration borrowed reference class, an owner-retaining facade, or a lease solely to prevent
+use-after-free. Such wrappers add managed allocation, identity, and state to a native relationship
+that remains non-owning and still cannot be made safe against explicit disposal or native
+invalidation. Supported suspicious uses belong to suppressible Runtime Analyzer guidance; the
+caller remains responsible for the referenced owner's lifetime.
+
 The completed Model classifies every supported C++ object into exactly one representation and
 ownership category before emission:
 
@@ -237,7 +247,10 @@ C# struct assignment is a bitwise value copy and cannot run an OCCT handle retai
 copy constructor, or a native destructor. Keeping native memory views separate from reference-type
 owners preserves exact layout while giving aliasing, disposal, and cleanup one managed identity.
 Extension methods then retain familiar OCCT call syntax without putting behavior or ownership into
-the generated storage struct.
+the generated storage struct. Keeping non-owning access as a direct native-memory view preserves
+the lightweight C++ lifetime model instead of allocating a managed object for every borrowed
+reference; analyzers can identify bounded suspicious patterns without pretending to own or prove
+the lifetime.
 
 #### Practical implications
 
@@ -302,6 +315,10 @@ the generated storage struct.
   operations, lifetime tokens, or second owners. A returned reference cannot be revoked, does not
   keep its owner alive, and must not be used after or concurrently with disposal. The caller owns
   these low-level lifetime obligations and any resulting use-after-free risk.
+- Generated bindings do not allocate a managed `Borrowed<T>` object, declaration-specific borrowed
+  class, owner-retaining facade, lease, or equivalent lifetime token for a native pointer,
+  reference, iterator, or subobject that remains non-owning. Borrowing stays in the operation model
+  and direct access surface; it does not become a fourth owner category.
 - A generated operation obtains each owner address only inside a lexical `fixed` scope over that
   owner's `Value`; the resulting pointer does not escape the scope. This one call shape pins
   `Owned<T>` managed storage when required and also works for the already-stable native address
@@ -323,10 +340,11 @@ the generated storage struct.
 
 Putting ownership or disposal directly on an exact-layout struct, using `Handle<T>` for a
 non-`Standard_Transient` type, treating `.Value` as an ownership token or the routine receiver for
-generated handle operations, or copying an owning native object through C# struct assignment
-requires an explicitly approved update to the current architecture before implementation. The
-update must define copy, aliasing, construction, destruction, exception, and same-library cleanup
-behavior.
+generated handle operations, introducing a managed borrowed-reference wrapper or owner-retaining
+lifetime abstraction, or copying an owning native object through C# struct assignment requires an
+explicitly approved update to the current architecture before implementation. The update must
+define copy, aliasing, construction, destruction, exception, same-library cleanup, and the measured
+cost and safety boundary of any added wrapper.
 
 ### GEN-04: Keep the shared Runtime minimal and declaration-agnostic
 

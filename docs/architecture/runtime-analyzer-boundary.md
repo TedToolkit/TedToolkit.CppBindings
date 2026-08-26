@@ -75,6 +75,13 @@ Runtime contracts. `TTOCCT002` diagnoses supported unsafe usage shapes around `V
 prohibit the property or convert it into an ownership token. Exact-layout structs remain non-owning,
 and the analyzer does not require them to implement `IDisposable`.
 
+This diagnostic boundary deliberately preserves lightweight, C++-like non-owning access instead of
+requiring `Borrowed<T>`, a declaration-specific borrowed class, an owner-retaining facade, a lease,
+or one managed allocation per native reference. The analyzer may report only the suspicious
+lifetime patterns it can establish locally. It does not make the reference owning, keep the native
+owner alive, prevent explicit disposal or native invalidation, or remove the caller's
+use-after-free responsibility.
+
 The analyzer project is an internal, non-packable build component. The Runtime project builds it
 without loading it into Runtime's own compilation and embeds its DLL directly in the Runtime NuGet
 package under `analyzers/dotnet/cs`. Direct and indirect Runtime consumers therefore receive one
@@ -101,6 +108,10 @@ liveness and use-after-free risk.
 - `TTOCCT002` is an error by default, identifies the supported unsafe `Value` lifetime pattern, and
   remains normally suppressible. Keep its analysis bounded to locally demonstrable patterns and do
   not describe it as proof against use-after-free.
+- Do not require a managed borrowed-reference wrapper, owner-retaining facade, lease, or
+  per-reference allocation as the remedy for a lifetime diagnostic. Preserve the direct
+  non-owning access contract and leave suppressed, bypassed, or unrecognized use-after-free risk
+  with the caller.
 - Generator structural and integration proof, not Runtime analyzer diagnostics, verifies that each
   generated owner pointer remains inside a `fixed` scope and that `GC.KeepAlive(owner)` follows each
   finalizable owner's last unmanaged use before error projection. Generated code remains excluded

@@ -169,6 +169,14 @@ default category. The complete operation model additionally records receiver, pa
 borrowing, transfer, construction, and cleanup semantics. Missing or contradictory lifetime flow
 rejects the whole operation before any callable layer is emitted.
 
+Borrowing remains an operation-level fact and does not create a fourth public object category.
+Generated bindings preserve direct C++-like non-owning access through the applicable exact-layout
+value, `ref T` view, or already-approved low-level native-pointer boundary. They do not generate
+`Borrowed<T>`, a per-declaration borrowed reference class, an owner-retaining facade, a lease, or a
+managed object per native pointer, iterator, or subobject. The Runtime Analyzer reports supported
+suspicious lifetime patterns, but it is suppressible and incomplete; callers remain responsible
+for keeping the native owner live and for avoiding use-after-free or native invalidation.
+
 `Owned<T>` has no public construction-completion state or method. Its only declared public members
 are the generated-only
 `Owned(delegate* unmanaged[Cdecl]<T*, void> destroy)` constructor, `ref T Value`, and `Dispose()`.
@@ -300,6 +308,11 @@ generated and proved platform binding artifact; replacing only the native asset 
 - Expose only a simple non-owning `ref T Value` data view from each owner. Do not add a callback,
   invocation lease, `DangerousValue`, or a second address-access API to make direct access appear
   lifetime-safe.
+- Keep borrowing as an operation-level contract, not a public owner category. Do not generate
+  `Borrowed<T>`, declaration-specific borrowed classes, owner-retaining facades, leases, or managed
+  wrapper allocation solely to guard native pointers, references, iterators, or subobjects against
+  use-after-free. Preserve the applicable direct C++-like value, `ref T`, or approved low-level
+  pointer surface and leave its lifetime obligations with the caller.
 - Generate owner pointer use with a lexical `fixed` scope over `owner.Value`. Keep every derived
   pointer inside that scope; do not call `Unsafe.AsPointer` or introduce a generated-only pointer
   method, static pointer gateway, or common owner interface.
@@ -331,6 +344,8 @@ Reassess this architecture when any of the following occurs:
 - native and managed artifacts need independent versioning or upgrade compatibility;
 - an exact native layout cannot be represented or proved with the selected CLR strategy;
 - a new ownership category, public pointer surface, callback, or module-unloading model is needed;
+- a managed borrowed-reference wrapper, owner-retaining facade, lease, or per-borrow allocation is
+  proposed;
 - owner finalization is removed, generated calls cannot place `GC.KeepAlive` after their last
   unmanaged use, or direct `Value` access is expected to become safe during concurrent disposal;
 - a generated module must unload or replace its published function table while any operation or
