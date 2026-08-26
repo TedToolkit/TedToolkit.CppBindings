@@ -21,7 +21,18 @@ if (args.Length != 0)
     throw new ArgumentException("Expected no arguments.", nameof(args));
 }
 
-var outputFolder = Solutions.TedToolkit_Occt.Directory
+var rootSolution = typeof(Solutions)
+                       .GetProperties()
+                       .Select(static property => property.GetValue(null))
+                       .OfType<FileInfo>()
+                       .Where(static solution => string.Equals(
+                           solution.Name,
+                           "TedToolkit.Occt.slnx",
+                           StringComparison.Ordinal))
+                       .MinBy(static solution => solution.FullName.Length)
+                   ?? throw new InvalidOperationException("Root solution not found");
+
+var outputFolder = rootSolution.Directory
                        ?.CreateSubdirectory("output")
                        .CreateSubdirectory("generated")
                    ?? throw new InvalidOperationException("Output folder not found");
