@@ -1,14 +1,16 @@
 # MIG-005: Replace and prove the exact-layout native boundary
 
 <!-- work-item-format: 2 -->
+<!-- work-item-id: MIG-005 -->
 
-- Approval: None while Draft. Start requires the verified MIG-001 through MIG-004 inputs.
+<!-- approval-source: Explicit maintainer approval of the complete MIG-001 through MIG-005 map in the Codex task on 2026-08-26. -->
 
 ## Outcome
 
 When optional native compilation is selected, the generated unversioned project builds against the
-pinned OCCT closure and passes strict C11 and generated managed consumers. The passing replacement
-becomes the only active source, build, fixture, output, and current-documentation path.
+pinned OCCT closure and passes strict C11 and generated managed consumers without consuming ABI-v1
+as input, oracle, fallback, compatibility target, build dependency, or test fixture. The passing
+replacement becomes the only active source, build, fixture, output, and current-documentation path.
 
 <!-- work-item: scope -->
 ## Scope and non-goals
@@ -18,6 +20,9 @@ becomes the only active source, build, fixture, output, and current-documentatio
   emitted object and registered closed generic; representative trivial, inherited transient,
   generic, non-transient RAII, mutation, exception, and cleanup calls; same-library release;
   removal of ABI-v1 and obsolete descriptor/explicit-offset active paths; verified package input.
+- In scope: structural and instrumented proof that generation, compilation, expected results, and
+  acceptance tests consume only Model-derived artifacts. ABI-v1 may remain physically present only
+  as inactive recovery material until replacement proof passes.
 - In scope: preserving source-only generation while proving that selected compilation consumes the
   exact emitted project without reparsing or changing Model semantics.
 - Non-goals: changing contracts owned by MIG-001 through MIG-004, increasing declaration coverage,
@@ -40,18 +45,21 @@ becomes the only active source, build, fixture, output, and current-documentatio
 <!-- work-item: contract-coverage -->
 ## Contract responsibilities
 
-- Own parent AC-06 and supply real-boundary evidence supporting AC-01 through AC-05.
+- Own parent AC-06 and supply real-boundary evidence supporting AC-01 through AC-05 and AC-08.
 - Prove source-only generation does not invoke the compiler and selected compilation begins only
   after complete C# and C++ source materialization.
+- Prove the replacement generator, build graph, strict-C consumer, managed consumer, expected
+  outputs, and acceptance assertions do not read, link, compare against, or fall back to ABI-v1.
 - Execute the exhaustive native/managed size, alignment, packing, and physical-segment matrix for
   every emitted object and registered closed generic; no representative sample substitutes for this
   layout contract.
 - Use representative real calls to prove construction, value mutation, interface pointer
   adjustment, transient lifetime, RAII placement/clone/destruction, errors, active-call lifetime,
-  and same-library cleanup.
-- Remove active ABI-major/version scaffolding, descriptor assumptions, explicit-offset projections,
-  handwritten adapters/imports, and current guides describing them only after replacement proof
-  passes.
+  and matching-library Handle release, Owned destruction, and diagnostic cleanup. Owned destruction
+  must not invoke intrusive release or native storage free.
+- Remove ABI-v1 source/build/test paths, active ABI-major/version scaffolding, descriptor
+  assumptions, explicit-offset projections, handwritten adapters/imports, and current guides
+  describing them only after replacement proof passes.
 
 <!-- work-item: delivery-constraints -->
 ## Constraints and escalation
@@ -61,33 +69,33 @@ becomes the only active source, build, fixture, output, and current-documentatio
 - Strict C11 proof validates export syntax and pointer transports; it does not claim that C
   consumers can interpret C++ object layouts outside the pinned contract.
 - Escalate any layout mismatch, dependency loaded outside the candidate closure, cleanup through
-  another module, public contract change, or requirement to retain ABI-v1 compatibility.
+  another module, public contract change, use of ABI-v1 as proof or fallback, or requirement to
+  retain ABI-v1 compatibility.
 
 <!-- work-item: proof-plan -->
 ## Proof
 
-| Parent contract | Evidence purpose and shape | Observable proof |
-| --- | --- | --- |
-| AC-06 | Acceptance/boundary Integration | Generated native build and strict C11 and managed consumers pass; active legacy paths are absent |
-| AC-02 / AC-03 | Boundary/compatibility Integration | Exhaustive native/managed probes agree for every emitted layout and registered generic specialization; unsupported `T` fails before native access |
-| AC-04 | Acceptance/regression Integration | Representative value, Handle, Owned, inheritance-extension, clone, dispose, finalizer, error, and cleanup journeys match OCCT and release once |
-| AC-05 | Boundary regression | Matching artifact initializes; changed layout/lifetime and missing-bootstrap fixtures fail before operation resolution |
+<!-- primary-proof: AC-06 purpose=acceptance shape=integration -->
 
-Build the generated native project in Release, run its CTest strict-C consumer, run exhaustive layout
-probes, then run Generator and Runtime TUnit projects in Release with TRX output. Run structural
-searches proving obsolete active identifiers and projections are absent outside historical records.
+| Contract or gate | Role | Observable assertion | Command or bounded procedure |
+| --- | --- | --- | --- |
+| AC-06 | Primary | The generated native project, strict C11 consumer, and managed consumer pass against pinned OCCT without consuming ABI-v1, every owned resource cleans up through its producing module, and no active legacy path remains | Build the generated native project in Release, run its CTest strict-C consumer and exhaustive layout probes, run the Generator and Runtime Release TUnit integration suites with TRX, and inspect active source/build/output/documentation for legacy paths |
 
 <!-- work-item: definition-of-done -->
 ## Done
 
-The replacement passes on the pinned candidate; every emitted layout and registered generic is
-proved; the exact generated boundary is the only active path; every required dependency and cleanup
-origin is recorded; the Draft `TedToolkit.Occt.Windows` package receives the verified candidate;
-and no NuGet publication or additional platform work occurs.
+The replacement passes on the pinned candidate without ABI-v1 input, oracle, fallback,
+compatibility target, build dependency, or fixture; every emitted layout, ownership classification,
+operation lifetime flow, and registered generic is proved; the exact generated boundary is the only
+active path; every required dependency and cleanup origin is recorded; the Draft
+`TedToolkit.Occt.Windows` package receives the verified candidate; and no NuGet publication or
+additional platform work occurs.
 
 <!-- work-item: completion-evidence -->
 ## Completion evidence requirements
 
 Record the integrated candidate revision, generated/native artifacts, commands, exhaustive layout
-counts/assertions, strict-C and managed results, representative lifecycle/error journeys, module and
-cleanup origins, removed active paths, documentation state, and verified package inputs.
+and classification counts/assertions, operation-flow coverage, strict-C and managed results,
+evidence that no generation/build/proof input consumed ABI-v1, representative lifecycle/error
+journeys, module and cleanup origins, removed active paths, documentation state, and verified package
+inputs.

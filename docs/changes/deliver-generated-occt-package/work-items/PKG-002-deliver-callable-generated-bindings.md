@@ -18,10 +18,11 @@ baseline.
 
 - In scope: release generation over the PKG-001 eligible set; full managed/native materialization;
   exhaustive layout and registered-generic contract probes; public API baseline; package-default
-  namespace propagation; native compile/link; exact-match validation; Runtime admission inspection;
+  namespace propagation; native compile/link; exact-match validation; complete generated static
+  function-table publication and typed dispatch; Runtime admission inspection;
   and representative real operation, ownership, error, and cleanup journeys.
 - Non-goals: changing PKG-001 coverage identity; changing Generator models, emitters, manifests,
-  Runtime owners/loaders/exceptions, or any completed public contract; adding a layout/lifetime
+  generated loaders, Runtime owners/exceptions, or any completed public contract; adding a layout/lifetime
   category; package/RID composition; Linux; an unsuffixed binding assembly; or publication.
 - Likely touchpoints (non-binding): release-generation configuration, generated public/native
   candidate materialization, exhaustive layout probes, public API baselines, integration fixtures,
@@ -50,13 +51,22 @@ baseline.
 - `NCollection_Array1<T>` and another selected template prove generic reuse over several registered
   closed `T` values; unsupported closed types fail before native memory access.
 - Trivial values use ordinary C# construction and no disposal. `Handle<T>` owns only transient
-  targets. `Owned<T>` placement-constructs, clones explicitly, destructs, and frees non-transient
-  RAII values through the matching native library. The two owners expose no public hierarchy.
+  intrusive references and stores no object memory. Eligible non-transient RAII structs, including
+  eligible `TCollection_*` types, implement Runtime's `IOcctRaii`; `Owned<T>` is constrained by
+  `unmanaged, IOcctRaii`, placement-constructs, and explicitly
+  clones non-transient RAII values in managed storage stabilized by `fixed` during native use, then
+  destructs them through the matching native library without intrusive release or native storage
+  free. The two owners expose
+  no public hierarchy.
 - Instance operations use extension syntax and expose no routine public `.Value`, raw pointer,
   `IntPtr`, public retain, or bitwise-copy ownership path.
 - `TedToolkit.Occt.Windows` references the single Handle/Owned definitions in Runtime and uses only
-  their ordinary public construction and scoped-invocation contracts. It emits no Runtime source
+  their ordinary public construction and `Value` contracts. It emits no Runtime source
   and receives no `InternalsVisibleTo`, reflection, private-member, or assembly-name privilege.
+- After exact-match equality, the generated wrapper resolves every required operation and cleanup
+  export into one private static managed table and publishes it only when complete. Ordinary calls
+  use exact typed slots; Handle and Owned factories copy matching cleanup pointers into Runtime
+  owners, which retain no generated table or index.
 - Every generated C# artifact uses the package-default `TedToolkit.Occt` root namespace. Concrete
   declarations, imports, native symbols, closed-generic registrations, layouts, expected
   fingerprints, and target-specific adapters remain in generated output rather than Runtime.
@@ -81,7 +91,7 @@ baseline.
 | Parent contract | Evidence purpose and shape | Observable proof |
 | --- | --- | --- |
 | AC-02 | Acceptance/compatibility Contract plus Integration | Exhaustive probes prove every shipped object and registered generic layout; public and assembly baselines prove the `TedToolkit.Occt.Windows` identity, exact structs, interfaces, `in`/`ref` extensions, static factories, ordinary Runtime owner use, no friend access, `TedToolkit.Occt` namespace, minimal Runtime surface, and absence of prohibited projections |
-| AC-03 | Acceptance/boundary Integration | Representative value copying, Handle alias/lease/dispose/finalize, Owned placement/clone/destruction, and same-library cleanup match native behavior and run exactly once |
+| AC-03 | Acceptance/boundary Integration | Representative value copying, typed table dispatch, Handle alias/dispose/finalize, and Owned placement/clone/destruction prove that Handle release and Owned destruction each use the producing module address exactly once while owners retain no table/index and Owned performs no intrusive release or native storage free |
 | Generic boundary | Acceptance/regression Contract plus Integration | Registered generic specializations share one type and pass layout/lifecycle probes; unknown `T` fails before native access |
 | Error boundary | Boundary regression Integration | Representative `Standard_Failure`, ordinary, and unknown errors preserve accepted managed diagnostics and clear native storage once |
 | Determinism | Structural regression | Identical pinned inputs reproduce public source, native source, manifest, fingerprint, and API baseline byte-for-byte |

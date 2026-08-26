@@ -4,8 +4,11 @@
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
 <!-- change-status: draft -->
+<!-- delivery-shape: multi-item -->
 
 - Priority: P1
+<!-- approval-source: none -->
+<!-- candidate-binding: none -->
 - Approval: The current architecture changes the public package and managed assembly identity from
   `TedToolkit.Occt` to `TedToolkit.Occt.Windows` and rejects the former platform-neutral package
   direction. This revised contract and delivery map require explicit reapproval before
@@ -57,7 +60,7 @@ and the current generated binding architecture.
 | OB-01 | Coverage | No consumable package has a complete pinned declaration inventory | Every in-scope declaration has one deterministic disposition | Unsupported declarations do not block supported siblings |
 | OB-02 | Public object model | Prior drafts assume semantic values, descriptor classes, and explicit offsets | Supported C++ objects are exact sequential structs with interface inheritance and extension behavior | Legal OCCT names remain source-faithful |
 | OB-03 | Generic templates | No public generic layout contract exists | Proved specializations share one generic struct; unknown specializations fail before native access | Closed native operations remain generated and exact-match |
-| OB-04 | Lifetime | Prior drafts assume `Handle<out T>` and do not define non-transient RAII ownership | `Handle<T>` owns only transient structs; trivial values need no disposal; `Owned<T>` owns non-transient RAII storage without a public owner hierarchy | Exactly-once and same-library cleanup remain |
+| OB-04 | Lifetime | Prior drafts assume `Handle<out T>` and do not define non-transient RAII ownership | `Handle<T>` owns only a transient intrusive reference; trivial values need no disposal; eligible non-transient RAII structs implement `IOcctRaii`, and `Owned<T> where T : unmanaged, IOcctRaii` directly contains one in managed storage without a public owner hierarchy | Handle release and Owned destruction each occur exactly once |
 | OB-05 | Consumption | Consumers need repository tooling and native installation | `TedToolkit.Occt.Windows` restores and runs with its matched Windows managed/native closure | Unsupported RIDs fail before native probing |
 | OB-06 | Namespace and Runtime boundary | Package, assembly, namespace, and Runtime admission are not yet a complete contract | Package and assembly use `TedToolkit.Occt.Windows`; generated APIs retain the `TedToolkit.Occt` namespace; Runtime alone defines shared owners and Windows uses their ordinary public API | Other wrappers can use the same Runtime contract without Windows privilege |
 
@@ -95,7 +98,8 @@ Scenario: Construct, copy, call, and release representative objects
   When the consumer exercises their generated APIs
   Then the value copies without disposal
   And Handle<T> aliases and releases one intrusive reference exactly once
-  And Owned<T> placement-constructs, explicitly clones when requested, destructs, and frees through the matching library
+  And the non-transient RAII target implements IOcctRaii while the trivial and Standard_Transient targets do not
+  And Owned<T> placement-constructs in managed storage, explicitly clones when requested, and destructs through the matching library without intrusive Release or native storage free
 ```
 
 <!-- acceptance-case: AC-04 -->
@@ -107,6 +111,8 @@ Scenario: Consume the packed artifact from a clean supported application
   When the consumer references TedToolkit.Occt.Windows, restores, builds, and runs representative generated operations
   Then native loading resolves only packaged assets
   And the exact fingerprint matches before any OCCT operation resolves
+  And every required operation and cleanup export resolves into one complete generated static managed function table before it is published
+  And generated calls use exact typed table slots while Handle<T> and Owned<T> retain their matching cleanup pointers
   And the package ID and managed assembly name are TedToolkit.Occt.Windows
   And the public generated API uses the TedToolkit.Occt root namespace
   And Runtime contains no declaration-specific layout, import, symbol, specialization, or expected fingerprint
@@ -132,13 +138,17 @@ Scenario: Inspect the package and try an unsupported RID
 - [Repository design principles](../../principles/README.md) and the
   [generated binding architecture](../../architecture/generated-binding-system.md) govern the
   package.
+- The accepted [ADR-001 native loader and function-table decision](../../adr/ADR-001-native-release-binding/README.md),
+  pinned by the generator change to its approved content, is a supplied Generator contract rather
+  than package-owned behavior.
 - The package cannot build a candidate until the Handle, Owned, and generator changes supply
   verified inputs. Its exact native build identity must be approved before the revised package and
   map can be approved.
 - Public managed compatibility begins with the first package; native and managed internals remain
   an inseparable exact-match set.
 - `TedToolkit.Occt.Windows` is a reference wrapper built against Runtime's ordinary public owner and
-  loading contracts. It receives no Runtime access unavailable to an independently named wrapper.
+  exception contracts while owning its generated Windows loader and function table. It receives no
+  Runtime access unavailable to an independently named wrapper.
 - `TedToolkit.Occt.Windows` does not imply support for every Windows architecture. The initial and
   only approved matrix is `win-x64`; adding another Windows RID requires separate complete layout
   proof and renewed architecture review.
@@ -146,6 +156,15 @@ Scenario: Inspect the package and try an unsupported RID
   blockers, not documentation caveats.
 - Escalate if another platform, independently upgradeable native ABI, public raw pointer, unproved
   layout, ownership in a struct, or remote publication enters scope.
+
+<!-- section: start-conditions -->
+## Start conditions
+
+<!-- change-prerequisite: PRE-01 source=../generate-unversioned-model-driven-bindings/change.md contract=AC-06 -->
+
+| ID | Required input or guarantee | Source change outcome | Required readiness evidence |
+| --- | --- | --- | --- |
+| PRE-01 | The generated exact-layout managed/native replacement builds and runs against real pinned OCCT without an active ABI-v1 path, with every resource cleaned up by its producing library | `../generate-unversioned-model-driven-bindings/change.md`, AC-06 | Source contract is Completed on the exact Git baseline selected for package implementation |
 
 <!-- section: delivery-brief -->
 ## Delivery disposition
@@ -159,12 +178,19 @@ parent and map are explicitly approved.
 <!-- section: proof-plan -->
 ## Proof
 
-| Contract | Evidence purpose | Execution shape | Primary proof | Command or bounded procedure |
-| --- | --- | --- | --- | --- |
-| AC-01 | Acceptance and structural | Component over real headers | Complete deterministic disposition inventory with mixed supported/unsupported regression cases | Run Generator coverage cases against the pinned installed OCCT headers |
-| AC-02 / AC-03 | Acceptance, compatibility, boundary | Contract plus Integration | Exhaustive layout contracts cover every shipped object and registered generic; public API inspection and representative real native calls prove interfaces, receivers, public Runtime owner use, construction, copying, lifetime, errors, cleanup, and absence of friend access | Build the full generated candidate, run its exhaustive layout matrix, then run representative Generator and Runtime TUnit integration journeys |
-| AC-04 | Acceptance and journey | End-to-end isolated consumer | Clean `TedToolkit.Occt.Windows` PackageReference restore, build, and execution on `net8.0` uses only packed managed/native assets, exposes the default namespace, keeps Runtime declaration-agnostic, and passes exact-match initialization | Pack to an isolated feed and run a clean `net8.0` win-x64 consumer |
-| AC-05 | Acceptance and boundary | Contract plus Component | Package/assembly identity, absence of an unsuffixed binding package, native dependency closure, notices, support documentation, module origin, and unsupported-RID failure are exact | Inspect the nupkg and run dependency/license/RID fixtures |
+<!-- primary-proof: AC-01 purpose=acceptance shape=component -->
+<!-- primary-proof: AC-02 purpose=acceptance shape=contract -->
+<!-- primary-proof: AC-03 purpose=acceptance shape=integration -->
+<!-- primary-proof: AC-04 purpose=journey shape=end-to-end -->
+<!-- primary-proof: AC-05 purpose=boundary shape=contract -->
+
+| Contract | Role | Observable assertion | Command or bounded procedure |
+| --- | --- | --- | --- |
+| AC-01 | Primary | Every pinned declaration has one deterministic generated, unsupported, or excluded disposition, and unsupported cases identify the missing proof | Run Generator coverage cases against the pinned installed OCCT headers |
+| AC-02 | Primary | Exhaustive layout and public API contracts prove every shipped object, generic, interface, receiver, namespace, and Runtime boundary | Build the full generated candidate and run its exhaustive layout and public API contract matrix |
+| AC-03 | Primary | Representative real native journeys prove value, Handle, and Owned construction, copying, invocation, and same-library cleanup exactly once | Run the Generator and Runtime TUnit integration journeys against the full native candidate |
+| AC-04 | Primary | A clean `net8.0` win-x64 consumer uses only packaged assets, passes exact match, publishes one complete function table, invokes typed slots, and retains matching owner cleanup pointers | Pack to an isolated feed and run a clean `net8.0` win-x64 consumer |
+| AC-05 | Primary | Package identity, native dependency closure, notices, support claims, module origin, and unsupported-RID failure match the approved boundary | Inspect the nupkg and run dependency, license, and RID contract fixtures |
 
 <!-- section: completion-criteria -->
 ## Completion

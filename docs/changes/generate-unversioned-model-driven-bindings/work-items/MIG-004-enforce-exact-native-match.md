@@ -1,30 +1,33 @@
 # MIG-004: Enforce exact managed/native contract matching
 
 <!-- work-item-format: 2 -->
+<!-- work-item-id: MIG-004 -->
 
-- Approval: None while Draft. Start requires MIG-002's managed boundary and MIG-003's verified
-  exact-match inputs.
+<!-- approval-source: Explicit maintainer approval of the complete MIG-001 through MIG-005 map in the Codex task on 2026-08-26. -->
 
 ## Outcome
 
 Generated managed initialization resolves and calls only the immutable fingerprint bootstrap until
-the native SHA-256 digest exactly matches the generated managed digest; only then may generated
-operation exports resolve. Missing or different contracts fail deterministically as
-`BadImageFormatException`.
+the native SHA-256 digest exactly matches the generated managed digest, including every ownership
+classification and operation lifetime flow. Only then does it resolve every required operation and
+cleanup export into a private managed `IntPtr[]`, validate completeness, and publish the table once.
+Missing or different contracts and missing required exports fail deterministically as
+`BadImageFormatException` before publication or operation invocation.
 
 <!-- work-item: scope -->
 ## Scope and non-goals
 
-- In scope: declaration-agnostic Runtime loading and initialization mechanisms; generated expected
+- In scope: generated Win32 loader imports and initialization mechanisms; generated expected
   contract data; native bootstrap invocation; digest comparison; generated operation export
-  resolution; one-time/thread-safe initialization; mismatch diagnostics; instrumentation seams and
-  native fixtures proving pre-match behavior.
+  resolution; static managed table construction and atomic publication; classification- and
+  lifetime-flow-complete digest inputs; one-time/thread-safe initialization; mismatch diagnostics;
+  instrumentation seams and native fixtures proving pre-match and partial-failure behavior.
 - Non-goals: defining the canonical manifest/fingerprint domain; defining operation, layout,
   closed-generic, or ownership identities; compiling the real OCCT adapter; changing owner or
-  exception semantics; storing generated-set identities, imports, or expected digests in Runtime;
-  package/RID asset resolution.
-- Likely touchpoints (non-binding): Runtime loading boundary, generated managed invocation glue,
-  Runtime and Generator tests, and bounded native loader fixtures.
+  exception semantics; adding module loading, generated-set identities, imports, expected digests,
+  function-table storage, or Windows-specific behavior to Runtime; package/RID asset resolution.
+- Likely touchpoints (non-binding): generated managed loader and invocation glue, Generator tests,
+  and bounded native loader fixtures.
 
 <!-- work-item: start-conditions -->
 ## Start conditions
@@ -43,40 +46,55 @@ operation exports resolve. Missing or different contracts fail deterministically
   buffer.
 - Missing bootstrap and digest mismatch throw `BadImageFormatException`; neither surfaces later as
   an operation `EntryPointNotFoundException`.
-- No generated operation export resolves or invokes before equality. Generated wrapper code passes
-  the expected constants through Runtime's public declaration-agnostic loading contract; Runtime
-  does not become a manifest parser or generated-set registry.
+- After equality, every required export must resolve before the static table is published. A missing
+  required export throws `BadImageFormatException`; no generated call can observe a null, stale, or
+  partially initialized slot.
+- A category change, ambiguous-category disposition, or operation borrowing, transfer,
+  construction, copy, destruction, or cleanup change alters the canonical digest.
+- No generated operation export resolves or invokes before equality. The generated wrapper owns the
+  concrete Win32 loader boundary, expected constants, comparison, synchronization, module handle,
+  and process-lifetime registration; Runtime does not become a loader, manifest parser, or
+  generated-set registry.
+- The generated wrapper owns the managed table and deterministic slots. Ordinary calls use exact
+  typed unmanaged Cdecl pointers from the table. Owner factories copy cleanup pointers into
+  `Handle<T>` and `Owned<T>`; Runtime owners never retain the table or an index.
 
 <!-- work-item: delivery-constraints -->
 ## Constraints and escalation
 
 - Governed by GEN-04 and the active generated binding architecture.
-- Concrete bootstrap binding, expected digest, operation imports, and contract data remain generated
-  output; Runtime owns only public declaration-agnostic loading, synchronization, comparison, and
-  module-lifetime mechanisms usable by any wrapper assembly without friend access.
-- Escalate any pre-match call whose signature depends on generated contract data or any need to put
-  a generated identity in Runtime.
+- Concrete loader imports, bootstrap binding, expected digest, operation imports, contract data,
+  table storage, synchronization, and process-lifetime module state remain generated output.
+  Runtime supplies only its existing declaration-agnostic owner and exception contracts through
+  ordinary public API.
+- Canonical managed and native digest inputs come only from MIG-003 Model-derived output. ABI-v1 and
+  handwritten fixtures do not supply expected identities or matching behavior.
+- A successfully matched generated native module remains loaded until process termination. Neither
+  it nor its published table is replaced or released. Neither Runtime owners nor generated
+  operations acquire per-owner leases or expose module unloading.
+- Escalate any pre-match call whose signature depends on generated contract data, any need to put a
+  generated identity in Runtime, or any ABI-v1 or handwritten expected-contract dependency.
 
 <!-- work-item: proof-plan -->
 ## Proof
 
-| Contract | Evidence purpose | Execution shape | Observable proof |
-| --- | --- | --- | --- |
-| AC-05 digest domain | Acceptance/regression | Contract | Mutating one field at a time across build/layout identity, closed generics, operations, signatures, ownership, errors, lifetime, and cleanup changes the 32-byte digest |
-| AC-05 load boundary | Acceptance/boundary | Integration | A matching fixture initializes and resolves a representative operation; differing and missing-bootstrap fixtures throw `BadImageFormatException` after resolving at most the bootstrap and never invoke an operation |
+<!-- primary-proof: AC-05 purpose=boundary shape=integration -->
 
-Run the Generator canonical-manifest mutation matrix and Runtime loader fixtures with real
-export-resolution and invocation instrumentation.
+| Contract or gate | Role | Observable assertion | Command or bounded procedure |
+| --- | --- | --- | --- |
+| AC-05 | Primary | A matching fixture publishes one complete table and invokes exact typed slots; digest mismatch, missing bootstrap, and missing required export fail with `BadImageFormatException` before partial publication or operation invocation | Run the Generator manifest mutation contract suite and generated-wrapper loader integration fixtures with export-resolution and invocation instrumentation |
 
 <!-- work-item: definition-of-done -->
 ## Done
 
-AC-05 passes for matching, differing, and missing-bootstrap artifacts; MIG-005 receives a managed
-boundary that cannot resolve or invoke an OCCT operation before exact contract equality.
+AC-05 passes for matching, differing, missing-bootstrap, and missing-required-export artifacts;
+MIG-005 receives a managed boundary that cannot resolve an operation before equality, cannot
+publish a partial table, and cannot invoke an operation before complete table publication.
 
 <!-- work-item: completion-evidence -->
 ## Completion evidence requirements
 
-Record the candidate revision, fixture contracts, owned contract IDs, mutation categories, commands,
-resolution/invocation assertions, results/counts, platform prerequisites, and verified loader output
-supplied to MIG-005.
+Record the candidate revision, fixture contracts, owned contract IDs, commands, mutation categories
+including ownership-category and operation-flow mutations, resolution/invocation assertions,
+absence of ABI-v1 expected identities, results/counts, platform prerequisites, and verified loader
+output supplied to MIG-005.
