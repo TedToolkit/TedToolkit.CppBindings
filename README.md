@@ -21,6 +21,10 @@ assembly 名为 `TedToolkit.Occt.Windows`，当前只面向经过证明的 `win-
   independently inside one supported artifact set.
 - C++ inheritance is projected through C# interfaces, while instance behavior and native lifetime
   remain in extension methods and separate reference-type owners.
+- `Handle<T>` stores only the address of a C++-owned transient object and releases one intrusive
+  reference. `Owned<T>` directly contains a non-transient RAII object in address-stable managed
+  storage; disposal calls its C++ destructor but never intrusive `Release` or native storage free,
+  and the GC reclaims the backing memory.
 - 在原生边界捕获 OCCT/C++ 异常，再转换成 .NET 异常。
 
 ## 工作原理

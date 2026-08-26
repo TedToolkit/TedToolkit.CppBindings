@@ -37,6 +37,12 @@ The parsed and normalized semantic model is the single source for every supporte
 operation. Generic validation, mapping, naming, and emission rules transform that model into all
 native and managed artifacts in one coherent pipeline.
 
+Every declaration-specific artifact is derived from that Model: managed representation and public
+API, managed imports and invocation glue, C declarations, C++ adapters, layout and ownership
+metadata, construction and cleanup paths, manifests, fingerprints, and native build descriptions.
+Legacy ABI source, generated text, handwritten conformance fixtures, and emitted artifacts are not
+semantic inputs, comparison authorities, fallbacks, or compatibility targets for generation.
+
 The architectural stage direction is fixed: configured native inputs are parsed and normalized
 into the Model; C# and C++ emitters consume only that Model; and an optional post-emission build
 stage may compile the emitted C++ project into the native library. Emitters do not read each
@@ -75,6 +81,10 @@ reproducible.
   mapping policy, validator, or emitter and is then regenerated.
 - Tests prove cross-layer identity and completeness from generated outputs rather than comparing
   them with separately handwritten operation lists.
+- Migration may keep a legacy boundary physically present only as an inactive recovery artifact
+  until the generated replacement passes. No generator, replacement build, or acceptance proof may
+  consume that boundary; the completed migration removes it from active source, build, fixtures,
+  output, and current documentation.
 
 #### Exception route
 
@@ -181,8 +191,10 @@ syntax without extracting native storage or duplicating a native object.
 Every `Standard_Transient` descendant remains an exact-layout struct and is owned only through the
 reference-type `Handle<T>`. `Handle<T>` carries the stable native address and OCCT
 intrusive-reference lifetime; it is never valid for a type that does not derive from
-`Standard_Transient`. Logical inheritance constraints and conversions are expressed through the
-generated interfaces from GEN-02, not managed class inheritance between native object projections.
+`Standard_Transient`. It owns one reference, not the C++ object storage: C++ reference counting
+continues to govern the object's final destruction and memory. Logical inheritance constraints and
+conversions are expressed through the generated interfaces from GEN-02, not managed class
+inheritance between native object projections.
 `Handle<T>.Value` is a public, non-owning `ref T` view of the exact-layout value for explicit
 low-level data access. It does not transfer ownership, acquire an independent lifetime, or make the
 value a disposable object. Its validity remains bounded by the live, undisposed handle that owns the
@@ -190,12 +202,34 @@ native object.
 
 A non-`Standard_Transient` type uses one of two categories. A trivial value such as a `gp_*` value
 is created and copied as an ordinary C# struct and exposes no disposal capability. A type with a
-native destructor, owned allocation, or other RAII state is held in stable native storage through
-the reference-type `Owned<T>`, which performs deterministic same-library destruction and storage
-release. `Owned<T>.Value` provides the same kind of public, non-owning `ref T` view as
-`Handle<T>.Value`; it does not change the object's ownership or lifetime. `Handle<T>` and
+native destructor or other RAII state is contained directly in correctly aligned managed storage
+through the reference-type `Owned<T>`. Native code receives its address only while that storage is
+stabilized by `fixed`. `Owned<T>` invokes deterministic
+same-library destruction but does not use intrusive `Release` and does not ask native code to free
+its managed backing storage. `Owned<T>.Value` provides the same kind of public, non-owning `ref T`
+view as `Handle<T>.Value`; it does not change the object's ownership or lifetime. `Handle<T>` and
 `Owned<T>` have no public inheritance relationship or common public owner base; their different
 native lifetime semantics remain visible in the managed type system.
+
+The completed Model classifies every supported C++ object into exactly one representation and
+ownership category before emission:
+
+- a proved `Standard_Transient` descendant with a complete intrusive-reference lifecycle uses
+  `Handle<T>`;
+- a proved non-transient object that is safely copyable as a value and requires no native lifetime
+  cleanup is an ordinary value struct; and
+- any other supported non-transient object uses `Owned<T>` only when construction, copying,
+  destruction, alignment, and same-library cleanup are complete and representable.
+
+The classification and its compiler-backed evidence belong to the Model. Emitters do not infer,
+override, or repair it. A declaration that cannot be classified uniquely, or whose selected
+category lacks complete layout, transport, construction, copy, destruction, or cleanup evidence,
+is unsupported and produces no callable partial binding.
+
+Type category alone is not sufficient to generate an operation. The completed Model also records
+the receiver, parameter, result, ownership-transfer, borrowing, construction, and cleanup semantics
+needed for the complete cross-language call. An operation with an ambiguous or incomplete
+lifetime flow is unsupported as a whole.
 
 #### Rationale
 
@@ -209,19 +243,48 @@ the generated storage struct.
 
 - A generated exact-layout struct never implements `IDisposable` merely because its native type has
   a destructor and never exposes managed ownership or disposal operations. Disposal belongs to the
-  reference-type owner of the native storage, so `Handle<T>.Dispose()` is valid while
+  reference-type owner of the object lifetime, so `Handle<T>.Dispose()` is valid while
   `handle.Value.Dispose()` is not.
 - `Handle<T>` owns only `Standard_Transient` objects and releases them through the matching OCCT
-  intrusive-reference operation. Non-transient values and owners cannot be converted to or wrapped
-  by `Handle<T>`.
-- `Owned<T>` owns only approved non-transient RAII objects. It placement-constructs the object in
-  stable, correctly aligned native
-  storage; its generated construction path does not heap-allocate the object through C++
-  `new T`. Disposal invokes the matching C++ destructor and frees storage through the same native
-  library that allocated it.
-- Runtime may share one internal declaration-agnostic address, module-liveness, and disposed-state
-  core between `Handle<T>` and `Owned<T>`. That reuse is not exposed as public inheritance,
-  conversion, or a common public owner abstraction.
+  intrusive-reference operation. It stores only the native address and owns no object storage.
+  Non-transient values and owners cannot be converted to or wrapped by `Handle<T>`.
+- `Owned<T>` owns only approved non-transient RAII objects. The owner object directly contains one
+  private `T` field as the native object's managed storage; it does not allocate a second storage
+  object. Generated construction, invocation, and destruction stabilize that field with `fixed`
+  whenever native code receives its address. Its generated construction path placement-constructs
+  the object there and does not heap-allocate it through C++ `new T`. Disposal
+  invokes the matching C++ destructor exactly once. It never calls the OCCT intrusive-reference
+  `Release` operation or a native storage-free function; the GC reclaims the managed backing
+  storage.
+- Runtime defines the empty representation-category marker `IOcctRaii`. `Owned<T>` requires
+  `where T : unmanaged, IOcctRaii`. Every generated exact-layout struct classified as supported
+  non-`Standard_Transient` RAII, including eligible `TCollection_*` types, implements this marker.
+  Proved trivial values and `Standard_Transient` projections do not implement it.
+- `Owned<T>` construction has no public completion phase. A generated factory creates the owner
+  through `Owned(delegate* unmanaged[Cdecl]<T*, void> destroy)`, using its matching non-throwing
+  `cdecl void(T*)` destructor,
+  placement-constructs the private `T` field through `Value`, and returns the owner only when the
+  native constructor succeeds. A local success flag and `finally` suppress finalization on every
+  managed exit before native success is established. Native construction failure is projected only
+  after suppression, so no destructor runs for an object whose C++ construction did not complete.
+- Direct-field `Owned<T>` generation is allowed only when the pinned CLR target proves that the
+  field representation satisfies the native `alignof(T)` requirement. This is a generator
+  admission decision: a type whose direct-field alignment cannot be proved is unsupported rather
+  than moved to another storage form. Runtime neither receives an alignment value nor treats one
+  observed managed address as proof across later GC relocation.
+- The `Owned<T>` constructor is public only so independently generated wrapper assemblies can call
+  it without friend access. It is marked `GeneratedCodeOnly`, and the Runtime Analyzer reports
+  handwritten `new Owned<T>(...)` as an error. Consumers obtain owners only from generated C++
+  factory projections; suppressing the diagnostic crosses the supported construction boundary.
+- A generated binding loads its exact-match native module for the process lifetime and does not
+  support unloading it. Its generated static function table centralizes resolved export addresses,
+  while each `Handle<T>` or `Owned<T>` receives and retains the exact matching release or destructor
+  pointer needed by its own finalization. Owners never retain a generated table or table index.
+  They therefore hold no per-owner module lease and do not participate in module unloading. Runtime
+  validates cleanup pointers and owner state but does not authenticate a function pointer's module
+  origin; that guarantee belongs to generated exact-match initialization and factory emission.
+  Runtime may share declaration-agnostic disposed-state and cleanup machinery internally; that
+  reuse is not exposed as public inheritance, conversion, or a common public owner abstraction.
 - Assigning a reference-type owner aliases one owner and one disposed state. A distinct native
   object is produced only by an explicit generated clone or copy operation that invokes the mapped
   C++ copy semantics.
@@ -239,16 +302,18 @@ the generated storage struct.
   operations, lifetime tokens, or second owners. A returned reference cannot be revoked, does not
   keep its owner alive, and must not be used after or concurrently with disposal. The caller owns
   these low-level lifetime obligations and any resulting use-after-free risk.
-- A generated operation may internally obtain native access through its owner receiver's `Value`.
-  After the last unmanaged use, it calls `GC.KeepAlive(owner)` for every finalizable owner whose
-  native address or reference participated in that use. This prevents premature finalization during
-  the unmanaged call without adding a lease, callback, allocation, or public API. It does not protect
-  against explicit concurrent disposal.
+- A generated operation obtains each owner address only inside a lexical `fixed` scope over that
+  owner's `Value`; the resulting pointer does not escape the scope. This one call shape pins
+  `Owned<T>` managed storage when required and also works for the already-stable native address
+  referenced by `Handle<T>`. After each finalizable owner's last unmanaged use, generated code calls
+  `GC.KeepAlive(owner)` before error projection. `fixed` does not itself extend the owner lifetime or
+  protect against explicit concurrent disposal.
 - Generated API shape and receiver types keep ownership behavior off exact-layout structs and keep
-  routine owner operations off `.Value`. The Runtime analyzer also reports supported suspicious
-  uses of a `Value` reference, including known escape, suspension, temporary-owner, post-disposal,
-  and missing-owner-keepalive patterns. This analysis is intentionally suppressible and incomplete;
-  it does not prove aliasing, concurrency safety, or absence of use-after-free.
+  routine owner operations off `.Value`. The Runtime analyzer rejects handwritten use of explicitly
+  marked generated-only Runtime hooks and reports supported suspicious `Value` lifetime patterns,
+  including known escape, suspension, temporary-owner, post-disposal, alias-disposal, and missing
+  owner-keepalive forms. This analysis is suppressible and incomplete; it does not prove aliasing,
+  concurrency safety, or absence of use-after-free.
 - Generated APIs reject unsupported owner implementations, closed generic types, disposed owners,
   and invalid inheritance projections before obtaining native memory. A `Value` getter rejects an
   owner already known to be disposed, but Runtime cannot revoke a reference already returned or
@@ -281,7 +346,7 @@ small declaration-agnostic mechanisms required to implement their shared managed
 no dependency on the Generator, a generated binding assembly, or an OCCT declaration set.
 
 Declaration-specific types, layouts, inheritance interfaces, extension operations, imports,
-native symbols, closed-generic registrations, expected contract fingerprints, and per-type
+native symbols, function-table slots and storage, closed-generic registrations, expected contract fingerprints, and per-type
 construction or cleanup adapters belong to generated output. Runtime may own shared metadata,
 exception, loading, invocation-lifetime, and ownership mechanisms only when their contracts are
 independent of any particular OCCT declaration or generated artifact set.
