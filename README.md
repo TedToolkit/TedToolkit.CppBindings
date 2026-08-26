@@ -2,6 +2,10 @@
 
 TedToolkit.Occt 是一个面向 .NET 的 OCCT 绑定代码生成项目：它从 vcpkg 安装的 Open CASCADE Technology（OCCT）头文件中解析用户选择的 C++ 类型，并生成配套的 C++ ABI 包装代码与 C# 类型代码。
 
+`TedToolkit.Occt` 是仓库和产品家族名称。计划中的首个即用绑定 package 与 managed
+assembly 名为 `TedToolkit.Occt.Windows`，当前只面向经过证明的 `win-x64` 布局矩阵；生成
+类型的默认 C# namespace 仍为 `TedToolkit.Occt`。
+
 > ⚠️ 项目目前处于开发阶段。核心解析与 C++ 生成链路已经建立，但尚未形成可直接消费的完整 C# 绑定包；请先阅读[当前实现边界](#当前实现边界)。
 
 ## 项目解决什么问题
@@ -10,12 +14,20 @@ TedToolkit.Occt 是一个面向 .NET 的 OCCT 绑定代码生成项目：它从 
 
 - 只从指定的 OCCT 类型开始生成，并递归加入实际依赖，避免无条件包装整个 OCCT。
 - 保留 OCCT 的值类型、继承和 `Standard_Transient` 生命周期语义。
-- The target boundary isolates the C++ ABI behind a generated `extern "C"` C11 transport; that
-  export layer is still under migration.
-- 分离 ABI 类型与公共 C# 类型，使内存布局正确性和 C# 易用性可以分别演进。
+- The target boundary keeps exported declarations C11-compatible while passing pointers to
+  compiler-matched native object storage; that generated export layer is still under migration.
+- Every supported C++ object has one exact-layout unmanaged C# struct generated from native size,
+  alignment, fields, hidden storage, and padding. Managed and native layout cannot evolve
+  independently inside one supported artifact set.
+- C++ inheritance is projected through C# interfaces, while instance behavior and native lifetime
+  remain in extension methods and separate reference-type owners.
 - 在原生边界捕获 OCCT/C++ 异常，再转换成 .NET 异常。
 
 ## 工作原理
+
+接受的生成架构固定为 Model-first：先完成解析和规范化，再由同一个 Model 分别生成 C# 与
+C++ 源码；源码生成完成后才可以选择编译 native DLL。即用包会启用并验证这个编译阶段，普通
+Generator 调用可以停在源码输出。Model 的内容可以随受支持语义演进，但 emitter 不得绕过它。
 
 ```text
 GenerationOptions / DeclOptions
@@ -27,16 +39,21 @@ GenerationOptions / DeclOptions
        ClangSharp / libclang 解析 C++ AST
               │
               ▼
-构造 RecordModel、MethodModel、FieldModel、TypeModel
+      完成 normalized Model
               │
               ├───────────────┐
               ▼               ▼
-one internal C++ source    generated C# type, field,
-per RecordModel            interface, and API shapes
+generated C++ project      generated C# binding set
               │               │
               └───────┬───────┘
                       ▼
-     pending C11 exports, CMake, managed imports, and Runtime wiring
+           complete generated source set
+                      │
+                      ▼ optional
+             compile native DLL
+                      │
+                      ▼ package only
+       assemble and verify ready-to-use package
 ```
 
 ### 1. 从 vcpkg 获取真实 OCCT 环境
@@ -58,14 +75,25 @@ Each `DeclOptions.FileName` selects the exact public header `<FileName>.hxx`; un
 - `opencascade::handle<T>` 指向的实际记录类型；
 - 生成 C++ 签名需要包含的头文件。
 
-记录模型还保存对象大小、字段偏移、抽象性、是否含有虚函数，以及是否继承 `Standard_Transient`。这些信息决定生成类型的内存布局和生命周期策略。
+当前记录模型保存对象大小、字段偏移、抽象性、是否含有虚函数，以及是否继承
+`Standard_Transient`。接受的目标还要求编译器对齐、packing、完整 base/hidden physical
+segments、模板特化和 construction/destruction 语义；这些信息共同决定精确布局和独立生命周期策略。
 
 ### 3. 生成两组代码
 
 | 输出 | 责任 |
 | --- | --- |
 | C++ source | Traverses `RecordModel` directly and emits one internal `.cpp` per parsed record with required headers and real OCCT invocation expressions. |
-| C# 代码 | 根据原生大小和字段偏移生成托管类型形状，区分 P/Invoke 类型与公共 API 类型，并投影继承接口、枚举和 XML 文档。 |
+| C# 代码 | 当前根据原生大小和字段偏移生成类型形状；目标是精确的 Sequential struct、padding/opaque storage、继承接口、extension API、泛型特化和所有权 glue。 |
+
+生成的 C# 根命名空间由经过验证的 `CSharpNamespace` 选项控制，包默认使用
+`TedToolkit.Occt`。自定义命名空间只改变托管 API 身份，不改变 C++ canonical identity、
+native export 命名或原生布局身份。
+
+Package/assembly 名称与 namespace 是两个契约：Windows 即用产物使用
+`TedToolkit.Occt.Windows`，但普通调用代码仍使用 `TedToolkit.Occt` namespace。新的
+platform、architecture 或 compiler ABI 不能只替换 native asset；必须重新证明 managed
+exact layout，并交付对应的平台绑定产物。
 
 The production generation path no longer uses a handwritten operation catalog or
 `AbiOperationModel`. Per-type C++ files are still internal invocation helpers; the complete C11
@@ -113,11 +141,12 @@ output/generated/
 
 | 组件 | 责任 | 文档 |
 | --- | --- | --- |
+| `TedToolkit.Occt.Windows` | 计划中的 Windows 平台生成绑定 package/assembly；首个支持矩阵仅为 `win-x64` | [Package change](docs/changes/deliver-generated-occt-package/change.md) |
 | `TedToolkit.Occt.Generator` | 读取 vcpkg/OCCT、解析 AST、建立模型并生成两组代码 | [README](src/core/TedToolkit.Occt.Generator/README.md) |
-| `TedToolkit.Occt.Runtime` | 提供生成类型当前使用的原生类型元数据；v1 调用和生命周期抽象尚待实现 | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
+| `TedToolkit.Occt.Runtime` | 生成库依赖的最小、声明无关托管机制；当前提供原生类型元数据、异常投影和 transient `Handle<T>`，RAII `Owned<T>` 仍是独立 Draft change | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
 | `TedToolkit.Occt.Analyzer` | 从已安装 OCCT 头文件生成可选择的头文件类型枚举 | `src/tools/TedToolkit.Occt.Analyzer` |
 | `TedToolkit.Occt.Console` | 运行 `Geom2d_BSplineCurve` 生成流程的开发样例 | `tests/TedToolkit.Occt.Console` |
-| `Build` | 仓库构建管线，并在准备阶段生成 triplet 友元程序集声明 | `Build` |
+| `Build` | 仓库构建管线；不会为平台 wrapper 生成 Runtime 友元权限 | `Build` |
 
 ## 当前实现边界
 
@@ -127,12 +156,19 @@ output/generated/
   projection.
 - Per-type C++ helpers do not yet have generated C11 exports, CMake/DLL materialization, managed
   imports, public invocation bodies, or complete lifetime wiring.
+- Configurable generated C# root namespace and the optional post-emission native-build stage are
+  accepted requirements but are not yet implemented end to end.
 - The independent ABI-v1 fixture still proves legacy boundary behavior but is no longer a production
   Generator input.
 - C# 生成器已经生成类型、字段、接口和方法形状，但实际 P/Invoke 声明与公共方法调用体尚未接通。
+- 当前 C# 生成器仍使用 `LayoutKind.Explicit` 和 `[FieldOffset]`。这是待迁移实现，不是接受的
+  类型策略；目标由 GEN-02 和当前架构定义为 `LayoutKind.Sequential` 加生成的 typed、padding
+  和 aligned opaque physical segments，并且不生成 managed `BaseType`。
 - 当前记录类型的结构生成分支只在 `recordDecl.IsAbstract` 为 true 时执行；非抽象记录目前只生成继承接口，类型生成条件仍需调整。
 - 仓库没有 vcpkg manifest/baseline，OCCT 版本仍由本机全局安装决定。
 - 当前没有证据表明 NuGet 包已经发布；不要把项目文件中的打包配置视为可用发布渠道。
+- `TedToolkit.Occt.Windows` package/assembly 仍是已接受的目标架构和 Draft delivery contract，
+  不是当前已存在或已发布的项目。
 
 ## 开发
 
@@ -156,6 +192,11 @@ dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Gener
 ```
 
 Set `VCPKG_ROOT` to a usable vcpkg installation to run the real OCCT boundary test. When it is unset or the selected OCCT header is unavailable, only that environment-dependent test is reported as skipped.
+
+The accepted object model is governed by the
+[repository principles](docs/principles/README.md) and the
+[generated binding architecture](docs/architecture/generated-binding-system.md). Current
+implementation facts in this README do not override those records.
 
 ## 许可证
 

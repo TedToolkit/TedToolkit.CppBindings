@@ -1,31 +1,37 @@
 <!-- delivery-map -->
 ## Delivery map
 
-- Parent change: approved reviewed Draft content SHA-256
-  `E1E0F502E8D8473D50946B5EF80C95823784F474EB7D4A285AD63938BA5BEACD`.
-- Planning status: RecordModel-centered three-item map approved by the user in the current Codex task
-  on 2026-08-25 for Draft content SHA-256
-  `7D8393C40EF7BE3691CED4C4AFFD872519BC3A223E2A49C66CE1E5F4AD09E56F`.
+- Parent change: Revised Draft governed by GEN-01 through GEN-04 and the active generated binding
+  architecture.
+- Planning status: Draft. This revised five-item migration map requires explicit approval before
+  implementation.
 
-This file is the only mutable work-item status source. Prerequisites name concrete verified outputs,
-not preferred scheduling.
+This file is the only mutable work-item status source. Prerequisites name verified inputs rather
+than preferred scheduling.
 
 | ID | Outcome | Contract ownership | Real prerequisites and supplied input | Primary proof | Status | Document |
 | --- | --- | --- | --- | --- | --- | --- |
-| MIG-001 | Configured `RecordModel` instances and lightweight interop projections produce every replacement binding artifact directly, including exactly one C++ adapter source per supported record | Owns AC-01 / Owns AC-04 / Owns AC-06 / Owns AC-08 / Owns AC-09 / Owns AC-10 / Supports AC-02 / Supports AC-03 / Supports AC-05 / Supports AC-07 | Approved parent and revised map | Acceptance and regression Component/Contract proof over controlled parsed records, generated source inventories, structural absence of `Abi`/Catalog production models, and byte comparisons | Implementing | `work-items/MIG-001-generate-complete-binding-set.md` |
-| MIG-002 | Generated managed initialization accepts only the native artifact with the exact generated fingerprint | Owns AC-03 / Supports AC-05 | MIG-001: canonical manifest encoding, SHA-256 fingerprint, invariant native bootstrap, generated managed expected digest, and complete generated operation identities | Acceptance and boundary Contract/Integration proof with matching, differing, and missing-bootstrap native fixtures plus export-resolution instrumentation | Approved | `work-items/MIG-002-enforce-exact-native-match.md` |
-| MIG-003 | The generated unversioned project replaces the ABI-v1 scaffold and passes real C11 and managed OCCT boundary proof | Owns AC-02 / Owns AC-05 / Owns AC-07 / Supports AC-10 | MIG-001: complete deterministic per-record generated source/build set, projection and fixture-propagation proof; MIG-002: verified exact-match initialization and operation-resolution gate | Acceptance and boundary Integration proof by building the generated native library and running strict C11 and generated managed consumers, plus structural replacement inspection | Approved | `work-items/MIG-003-replace-and-prove-native-boundary.md` |
+| MIG-001 | One pinned native build identity and one RecordModel-centered semantic/physical model produce exact sequential managed storage projections and proved generic layout graphs | Owns AC-02 / Owns AC-03 / Supports AC-01 / Supports AC-04 through AC-06 | Approved revised parent/map; machine-readable pinned OCCT/compiler/build identity | Component plus native/managed Contract proof for model completeness, every emitted layout, generic closure, determinism, and fail-closed eligibility | Draft | `work-items/MIG-001-compile-exact-physical-model.md` |
+| MIG-002 | Generated managed source exposes exact structs, inheritance interfaces, validated namespaces, `in`/`ref` value extensions, and separate Handle/Owned ownership APIs | Owns AC-04 / Supports AC-01 / Supports AC-05 / Supports AC-06 | MIG-001 model and layout projections; completed approved `net8.0` Handle and Owned Runtime public integration contracts | Public API Contract plus controlled Component proof for namespace, receiver, interface, factory, ownership, independent wrapper use, and prohibited-surface rules | Draft | `work-items/MIG-002-emit-managed-binding-api.md` |
+| MIG-003 | The same completed Model emits the C11 declarations, C++ adapters, managed imports, manifest, fingerprint input, and native build description for every supported operation | Owns AC-01 / Supports AC-05 / Supports AC-06 | MIG-001 canonical model/layout identities; MIG-002 managed public/import identities; completed exception projection | Cross-layer Component/Contract proof for identity completeness, source-only generation, C11 syntax, deterministic artifacts, and no second catalog | Draft | `work-items/MIG-003-emit-native-binding-contract.md` |
+| MIG-004 | Generated initialization accepts only a native artifact with the exact layout- and lifetime-complete fingerprint while Runtime remains declaration-agnostic | Owns AC-05 / Supports AC-06 | MIG-002 generated managed boundary; MIG-003 canonical manifest, fingerprint, bootstrap, imports, and operation identities | Contract/Integration proof with matching, differing, and missing-bootstrap fixtures plus export-resolution instrumentation | Draft | `work-items/MIG-004-enforce-exact-native-match.md` |
+| MIG-005 | The optional native-build stage compiles the generated unversioned project, replaces ABI-v1, and passes strict C11 and managed real-OCCT proof | Owns AC-06 / Supports AC-01 through AC-05 | MIG-001 through MIG-004 complete; pinned native build identity and dependencies available | Native/managed Integration proof plus structural replacement inspection | Draft | `work-items/MIG-005-replace-and-prove-native-boundary.md` |
 
 ## Plan constraints
 
-- MIG-001 owns RecordModel-centered interop projection, removal of the parallel `Abi`/Catalog graph,
-  per-type C++ source ownership, and emitted artifact contracts. MIG-002 may add loading and
-  resolution orchestration but cannot define a second manifest, fingerprint, import list, or
-  operation identity.
-- MIG-003 consumes the emitters and loader proved by MIG-001 and MIG-002. Integration-driven fixes
-  may remain within their approved contracts; a changed generated contract returns to its owning
-  item.
-- The ABI-v1 proof remains available until MIG-003 has a passing replacement boundary, then MIG-003
-  removes active versioned source, build, fixtures, generated output, and current documentation.
-- After MIG-003 supplies reconciled Draft package records, explicit package-change/map reapproval is
-  still required before this migration can be marked complete or package delivery can resume.
+- MIG-001 is the only declaration and physical-layout authority. Later items consume its identities
+  and dispositions rather than rebuilding or filtering the model.
+- MIG-002 owns managed public compatibility, including namespace validation and owner/receiver
+  signatures. MIG-003 cannot change those signatures while completing the cross-language chain.
+- MIG-003 is the only source of the canonical manifest, fingerprint domain, native symbols, C11
+  declarations, C++ adapters, and generated build description. MIG-004 only consumes the resulting
+  fixed bootstrap and expected digest.
+- C# and C++ source generation completes without MIG-005. MIG-005 consumes completed emitted source
+  and never reparses headers or changes Model semantics during compilation.
+- Every emitted object and registered closed generic receives exhaustive layout proof before the
+  migration can complete. Representative real calls supplement that exhaustive contract proof;
+  they do not replace it.
+- ABI-v1 proof remains available only until MIG-005 supplies a passing replacement. MIG-005 then
+  removes active legacy source, build, fixtures, generated output, and current documentation.
+- The Draft `TedToolkit.Occt.Windows` package change consumes the verified MIG-005 candidate and
+  cannot redefine Generator or Runtime contracts.

@@ -5,6 +5,20 @@ graph and currently generates C# type shapes plus one internal C++ invocation so
 
 > ⚠️ 当前项目面向生成器开发和验证，尚不是已经验证发布的 NuGet 消费入口。
 
+The accepted target architecture is defined by
+[GEN-02 and GEN-03](../../../docs/principles/README.md) and the
+[generated binding architecture](../../../docs/architecture/generated-binding-system.md): every
+supported C++ object becomes an exact unmanaged `LayoutKind.Sequential` struct with generated
+typed, padding, and aligned opaque physical segments; interfaces express inheritance without a
+managed `BaseType`; instance behavior is emitted as extensions; native lifetime belongs to
+separate reference-type owners. The explicit-offset implementation described below is current
+migration state, not the target contract.
+
+[GEN-01](../../../docs/principles/README.md#gen-01-generate-every-binding-layer-from-one-semantic-source)
+fixes the stage direction: parse and normalize a complete Model, emit C# and C++ from that Model,
+and only then optionally compile the emitted native project. The Model schema may evolve, but
+emitters must not reparse native input or consume each other's output.
+
 ## 使用入口
 
 生成器通过 ModularPipelines 注册：
@@ -55,7 +69,28 @@ The primary `GenerationOptions` values are:
 | `IsInternal` | Selects internal visibility for generated C# types. |
 | `GetFieldOffsetByRunning` | Exposed layout option; the current model still reads size and offsets from libclang. |
 
+The accepted target also adds the validated `CSharpNamespace` option, with `TedToolkit.Occt` as the
+default namespace of the planned `TedToolkit.Occt.Windows` package. That option is not yet
+implemented end to end. It must apply to every generated C# artifact without changing package,
+assembly, canonical C++, or native export identity.
+
 ## Generation pipeline
+
+The accepted pipeline boundary is:
+
+```text
+configured native inputs and options
+  -> parse and normalize complete Model
+    -> GenerateCSharpModule
+    -> GenerateCppModule and native build description
+      -> optional native compilation
+```
+
+C# and C++ emission must be independently runnable from the completed Model. Native compilation is
+optional for source-generation use and mandatory for the ready-to-use
+`TedToolkit.Occt.Windows` package.
+
+The current ModularPipelines dependency graph is:
 
 Clean and Parse are independent prerequisites of both generators:
 
@@ -71,8 +106,8 @@ ParseModule ───────────────────┤        
 | --- | --- |
 | `CleanGenerationOutputModule` | Removes previous C#, C++, CMake build, and binary output. |
 | `ParseModule` | Parses only selected public headers, validates diagnostics and every requested definition, then commits the complete target set to the shared model. |
-| `GenerateCSharpModule` | Writes `.g.cs` files for records and enums. |
-| `GenerateCppModule` | Writes exactly one `<CSharpTypeName>.cpp` invocation source for every parsed `RecordModel`, rejecting case-insensitive filename collisions before writing. |
+| `GenerateCSharpModule` | Writes `.g.cs` files for records and enums from the shared model. |
+| `GenerateCppModule` | Writes exactly one `<CSharpTypeName>.cpp` invocation source for every parsed `RecordModel` from the shared model, rejecting case-insensitive filename collisions before writing. |
 
 If Clean or Parse fails, neither generator starts. Clang Error and Fatal diagnostics fail Parse; Warning diagnostics remain non-fatal and are logged literally. Parse resolves every requested record definition before adding any target to the shared model, so an unresolved mixed target set cannot expose a partial model.
 
@@ -112,22 +147,27 @@ does not enter the current model.
 
 ## 3. 投影跨语言类型
 
-同一个 C++ 类型在不同边界具有不同表达：
+The model currently carries several type spellings, but a supported C++ object has only one managed
+physical identity in the accepted architecture:
 
 ```text
 Clang C++ 类型
-    ├── CppTypeName          → 源 C++ 语义与诊断
-    ├── CSharpPInvokeType    → ABI、字段布局和原生调用签名
-    └── CSharpPublicType     → 面向调用方的 C# API
+    ├── CppTypeName          → source C++ semantics and diagnostics
+    ├── NativePhysicalLayout → exact size, alignment, packing, and physical segments
+    ├── C pointer transport  → C11-compatible pointer to the same native storage
+    └── CSharpPublicType     → exact-layout struct plus separate owner/extension API
 ```
 
-默认 Resolver 从 canonical Clang 类型推导三个投影。特殊规则可以覆盖结果；当前内置规则把 `const char*` 一类 UTF-8 输入投影为：
+The current Resolver still derives the legacy spelling properties. Special transport rules may
+adapt non-object call data; for example, the built-in UTF-8 rule projects `const char*` input as:
 
 - C++：原始 `const char*`；
 - P/Invoke：`byte*`；
 - Public：`ReadOnlySpan<byte>`。
 
-字段优先使用 `CSharpPInvokeType` 保持布局；方法参数和返回值面向调用方时使用 `CSharpPublicType`。
+Object storage cannot use a semantic transport in place of its C++ representation. The migration
+will derive its C# fields and padding from the native physical model, while operation parameters
+may still use approved public conveniences that do not change object storage identity.
 
 ## 4. Generate per-record C++ invocation sources
 
@@ -142,7 +182,7 @@ validated transport/conversion projection, matching C declarations and exports, 
 fingerprint, CMake description, and managed imports. The independent ABI-v1 fixture remains only as
 replacement evidence until that complete generated boundary is proved.
 
-## 5. 生成 C# 类型
+## 5. Current C# type generation
 
 记录进入当前结构生成分支时，C# 生成器负责：
 
@@ -156,6 +196,12 @@ replacement evidence until that complete generated boundary is proved.
 当前实现尚未生成完整的 `DllImport`/`LibraryImport` 声明，也没有把公共方法体连接到 C++ 导出函数。因此这部分目前表达的是托管 API 形状，而不是可以独立调用原生 DLL 的完整绑定。
 
 当前代码只在 `recordDecl.IsAbstract` 为 true 时进入结构生成分支；非抽象记录目前只尝试生成继承接口。这是当前实现事实，不是最终类型策略。
+
+The accepted replacement must instead generate every supported object as an unmanaged sequential
+struct, calculate explicit private padding and aligned opaque storage from compiler layout data,
+emit no `FieldOffsetAttribute` or managed `BaseType`, prove managed/native size and alignment, and
+fail closed when the pinned CLR cannot reproduce a native layout. C++ templates use one C# generic
+struct only when one physical graph proves every registered closed specialization.
 
 ## 输出目录
 
@@ -181,9 +227,12 @@ the same case-insensitive path fail before materialization.
   transport and lifetime rules.
 - Generated C11 declarations/exports, CMake/native-library materialization, managed imports, and
   public invocation bodies remain incomplete.
+- Configurable C# root namespace and optional post-emission native compilation remain incomplete.
 - The minimal ABI-major-1 native/PInvoke fixture is migration proof only and is not a production
   generation input.
 - The C# record-generation condition still needs correction; non-abstract records currently do not generate structs.
+- Explicit-layout `[FieldOffset]` output remains migration debt and must be replaced by the
+  sequential physical-segment generator before a supported package baseline.
 - The P/Invoke invocation layer is incomplete.
 - The repository has no vcpkg manifest, so builds depend on a machine-level OCCT installation.
 - `GetFieldOffsetByRunning` does not yet replace the current libclang-based layout lookup.
@@ -191,6 +240,10 @@ the same case-insensitive path fail before materialization.
 ## 开发与验证
 
 The verified native boundary baseline is Windows x64 with CMake 3.28 or newer, Ninja, `clang-cl` targeting the MSVC ABI, and vcpkg `x64-windows` with OCCT 8.0.1. Supply the following environment and ensure Ninja and `clang-cl` are available on `PATH`:
+
+This matrix is the initial target of the planned `TedToolkit.Occt.Windows` package. The Windows
+family name does not imply `win-arm64` or another compiler ABI; each additional matrix requires
+independent exact-layout proof and package architecture review.
 
 ```powershell
 $env:VCPKG_ROOT = 'C:\vcpkg'
@@ -216,5 +269,7 @@ source materialization. It does not verify the unimplemented C11 exports or fina
 
 - [仓库概览](../../../README.md)
 - [Binding model internals](Models/README.md)
+- [Repository design principles](../../../docs/principles/README.md)
+- [Generated binding architecture](../../../docs/architecture/generated-binding-system.md)
 - [Unversioned binding migration](../../../docs/changes/generate-unversioned-model-driven-bindings/change.md)
 - [Runtime 契约](../TedToolkit.Occt.Runtime/README.md)

@@ -15,6 +15,9 @@
 | ID | Title | Strength | Status | Owner | Review trigger | Document |
 | --- | --- | --- | --- | --- | --- | --- |
 | GEN-01 | Generate every binding layer from one semantic source | Required | Active | TedToolkit.Occt maintainers | A binding artifact cannot be derived without declaration-specific code or a generated output requires a manual patch | This file |
+| GEN-02 | Reproduce every supported native object layout exactly | Required | Active | TedToolkit.Occt maintainers | A generated type cannot prove native size, alignment, or physical segment placement for the supported toolchain | This file |
+| GEN-03 | Separate native representation from ownership and behavior | Required | Active | TedToolkit.Occt maintainers | A generated API would place lifetime behavior in a native-layout struct, use a transient handle for a non-transient type, require routine handle operations through `.Value`, or expose instance behavior through a copied native value | This file |
+| GEN-04 | Keep the shared Runtime minimal and declaration-agnostic | Required | Active | TedToolkit.Occt maintainers | Runtime would gain a declaration-specific type, symbol, import, layout, specialization, or generated-set constant | This file |
 
 ## Principles
 
@@ -33,6 +36,12 @@
 The parsed and normalized semantic model is the single source for every supported binding
 operation. Generic validation, mapping, naming, and emission rules transform that model into all
 native and managed artifacts in one coherent pipeline.
+
+The architectural stage direction is fixed: configured native inputs are parsed and normalized
+into the Model; C# and C++ emitters consume only that Model; and an optional post-emission build
+stage may compile the emitted C++ project into the native library. Emitters do not read each
+other's output, recover semantics from emitted text, or bypass the Model. The Model schema may
+evolve as new semantics are required, but it remains the only emitter input boundary.
 
 The Generator must not embed knowledge of a specific OCCT header, declaration, type, source
 location, operation, final export symbol, adapter body, managed import, or public wrapper. It must
@@ -56,6 +65,12 @@ reproducible.
 - One supported operation produces its complete native and managed chain from one model. If any
   required projection or implementation cannot be derived, the complete operation is reported as
   unsupported and no partial artifact is emitted.
+- C# and C++ source emission completes before native compilation begins. Source-only generation
+  may omit compilation; a ready-to-use package must compile and verify the emitted native project.
+- The generated C# root namespace is a validated generation input. It has a deterministic default,
+  applies coherently to every generated C# artifact, and does not change canonical C++ identity or
+  native export naming. Changing the default after a public package baseline is a breaking managed
+  API decision.
 - Generated artifacts are never edited by hand. A required correction changes the source model,
   mapping policy, validator, or emitter and is then regenerated.
 - Tests prove cross-layer identity and completeness from generated outputs rather than comparing
@@ -64,18 +79,252 @@ reproducible.
 #### Exception route
 
 Any declaration-specific executable binding, manually assigned final symbol, handwritten generated
-artifact, or second operation authority requires an Accepted ADR before implementation. The ADR
-must identify why the common semantic pipeline cannot represent the case, how cross-layer drift is
-prevented, and the objective condition for removing the exception.
+artifact, or second operation authority requires an explicitly approved update to the current
+architecture before implementation. That update must identify why the common semantic pipeline
+cannot represent the case, how cross-layer drift is prevented, and the objective condition for
+removing the exception.
+
+### GEN-02: Reproduce every supported native object layout exactly
+
+- Status: Active
+- Strength: Required
+- Scope: Every generated C# type that corresponds to a C++ object type, including values,
+  `Standard_Transient` descendants, non-transient RAII objects, template specializations, base
+  subobjects, and compiler-generated object state.
+- Owner: TedToolkit.Occt maintainers
+- Review trigger: The supported OCCT version, compiler ABI, architecture, runtime layout behavior,
+  native packing, or generated package platform matrix changes; a layout requires an
+  unrepresentable alignment or `T`-dependent physical segment; or managed and native layout proof
+  disagrees.
+
+#### Default
+
+Every supported C++ object type is projected as an unmanaged C# `struct` whose complete physical
+representation matches the pinned native build exactly. Equality is required for total size,
+alignment, ordered physical segments, field and base-subobject positions, padding, tail padding,
+and compiler-generated state.
+
+The generated representation uses `LayoutKind.Sequential` with typed fields, explicit private
+padding, and alignment-preserving opaque storage. It does not generate `FieldOffsetAttribute`.
+Native unions, bit fields, virtual-table pointers, reused base tail padding, and other hidden or
+overlapping state are represented by physical storage segments and typed accessors rather than by
+overlapping managed fields.
+
+C++ inheritance is a semantic relationship expressed through generated C# interfaces. A generated
+struct does not contain or expose a managed `BaseType` field. Its storage is derived from the
+compiler-reported layout of the complete C++ object, not by nesting the complete managed projection
+of a base type.
+
+#### Rationale
+
+An exact in-memory projection permits generated interop to inspect and pass native objects directly
+through pointers without translation objects or per-call field copying. Treating padding, hidden
+state, and base storage as first-class generated segments also prevents a managed type from looking
+source-equivalent while being ABI-incompatible.
+
+#### Practical implications
+
+- The Generator continues to acquire native size, alignment, field offsets, base-subobject offsets,
+  and hidden-layout evidence from the pinned native compiler. Removing generated field-offset
+  attributes does not remove native offset analysis.
+- The Generator computes one ordered physical-segment model, inserts every required padding or
+  opaque-storage segment, simulates the resulting CLR sequential layout, and fails closed when the
+  complete representation cannot be proved.
+- Packing is selected from the supported native ABI. A universal `Pack = 1` projection is forbidden
+  because matching offsets and size does not compensate for a mismatched type alignment.
+- Native fields that overlap, occupy bits, or participate in reused storage are accessed through
+  generated typed operations over one physical storage segment. Duplicate overlapping managed
+  fields are not emitted.
+- Compiler-generated state such as a virtual-table pointer is represented as native storage even
+  when no corresponding field appears in the C++ source declaration.
+- A C++ class template is projected as one C# generic struct only when one generic physical-segment
+  graph exactly represents every supported closed specialization. Each allowed closed
+  specialization still requires native size, alignment, layout, identity, and lifecycle proof.
+  Otherwise the Generator emits separately proved closed projections or reports the type as
+  unsupported.
+- Layout identity participates in the generated exact-match contract. A managed assembly must not
+  operate with a native artifact produced for a different OCCT, compiler, ABI, architecture, or
+  layout configuration.
+- Each generated binding assembly and package is bound to one proved native layout matrix. A
+  platform-neutral binding package must not carry one exact-layout managed assembly across OS,
+  architecture, compiler ABI, or packing variants unless complete layout equality is independently
+  proved for every advertised variant.
+
+#### Exception route
+
+Any supported C++ object projection that is not an exact unmanaged struct, uses explicit managed
+field offsets, embeds a managed base-type projection, accepts an unproved layout, or shares one
+managed binding assembly across unproved native layout matrices requires an explicitly approved
+update to the current architecture before implementation. The update must preserve pointer safety,
+define the constrained toolchain and type scope, and provide an objective path back to exact
+generated layout proof.
+
+### GEN-03: Separate native representation from ownership and behavior
+
+- Status: Active
+- Strength: Required
+- Scope: Construction, ownership, copying, disposal, low-level storage access,
+  inheritance-facing behavior, and generated method syntax for every projected OCCT object type.
+- Owner: TedToolkit.Occt maintainers
+- Review trigger: A supported type does not fit the trivial-value, `Standard_Transient`, or owned
+  non-transient categories; an operation requires ownership transfer not expressible by the
+  selected owner; routine use requires a caller to reach through an owner to its native-layout
+  value; or a native-layout value would gain managed lifetime behavior.
+
+#### Default
+
+An exact-layout struct describes native object memory; it does not by itself own an external native
+lifetime or implement managed lifetime control. Generated OCCT instance operations are extension
+methods over the appropriate value, handle, or non-transient owner so callers use instance-like
+syntax without extracting native storage or duplicating a native object.
+
+Every `Standard_Transient` descendant remains an exact-layout struct and is owned only through the
+reference-type `Handle<T>`. `Handle<T>` carries the stable native address and OCCT
+intrusive-reference lifetime; it is never valid for a type that does not derive from
+`Standard_Transient`. Logical inheritance constraints and conversions are expressed through the
+generated interfaces from GEN-02, not managed class inheritance between native object projections.
+`Handle<T>.Value` is a public, non-owning `ref T` view of the exact-layout value for explicit
+low-level data access. It does not transfer ownership, acquire an independent lifetime, or make the
+value a disposable object. Its validity remains bounded by the live, undisposed handle that owns the
+native object.
+
+A non-`Standard_Transient` type uses one of two categories. A trivial value such as a `gp_*` value
+is created and copied as an ordinary C# struct and exposes no disposal capability. A type with a
+native destructor, owned allocation, or other RAII state is held in stable native storage through
+the reference-type `Owned<T>`, which performs deterministic same-library destruction and storage
+release. `Owned<T>.Value` provides the same kind of public, non-owning `ref T` view as
+`Handle<T>.Value`; it does not change the object's ownership or lifetime. `Handle<T>` and
+`Owned<T>` have no public inheritance relationship or common public owner base; their different
+native lifetime semantics remain visible in the managed type system.
+
+#### Rationale
+
+C# struct assignment is a bitwise value copy and cannot run an OCCT handle retain operation, a C++
+copy constructor, or a native destructor. Keeping native memory views separate from reference-type
+owners preserves exact layout while giving aliasing, disposal, and cleanup one managed identity.
+Extension methods then retain familiar OCCT call syntax without putting behavior or ownership into
+the generated storage struct.
+
+#### Practical implications
+
+- A generated exact-layout struct never implements `IDisposable` merely because its native type has
+  a destructor and never exposes managed ownership or disposal operations. Disposal belongs to the
+  reference-type owner of the native storage, so `Handle<T>.Dispose()` is valid while
+  `handle.Value.Dispose()` is not.
+- `Handle<T>` owns only `Standard_Transient` objects and releases them through the matching OCCT
+  intrusive-reference operation. Non-transient values and owners cannot be converted to or wrapped
+  by `Handle<T>`.
+- `Owned<T>` owns only approved non-transient RAII objects. It placement-constructs the object in
+  stable, correctly aligned native
+  storage; its generated construction path does not heap-allocate the object through C++
+  `new T`. Disposal invokes the matching C++ destructor and frees storage through the same native
+  library that allocated it.
+- Runtime may share one internal declaration-agnostic address, module-liveness, and disposed-state
+  core between `Handle<T>` and `Owned<T>`. That reuse is not exposed as public inheritance,
+  conversion, or a common public owner abstraction.
+- Assigning a reference-type owner aliases one owner and one disposed state. A distinct native
+  object is produced only by an explicit generated clone or copy operation that invokes the mapped
+  C++ copy semantics.
+- Factory-style creation is used when an operation produces owned native identity, including
+  `Standard_Transient` handles. Ordinary C# value construction is reserved for proved trivial
+  value types.
+- Generated instance operations are extension methods on the semantic receiver. A C++ `const`
+  value operation receives `this in T`; a mutating value operation receives `this ref T` so the
+  exact-layout struct is neither boxed nor silently copied. Handle operations receive
+  `Handle<T>`, RAII operations receive `Owned<T>`, and static operations and factories remain
+  static. Consumers call `value.Operation()`, `handle.Operation()`, or `owned.Operation()` without
+  reaching through an owner to invoke routine operations on its native-layout value.
+- `Handle<T>.Value` and `Owned<T>.Value` are simple escape hatches for direct field or property data
+  access and explicit low-level interop. They are not normal receivers for generated OCCT
+  operations, lifetime tokens, or second owners. A returned reference cannot be revoked, does not
+  keep its owner alive, and must not be used after or concurrently with disposal. The caller owns
+  these low-level lifetime obligations and any resulting use-after-free risk.
+- A generated operation may internally obtain native access through its owner receiver's `Value`.
+  After the last unmanaged use, it calls `GC.KeepAlive(owner)` for every finalizable owner whose
+  native address or reference participated in that use. This prevents premature finalization during
+  the unmanaged call without adding a lease, callback, allocation, or public API. It does not protect
+  against explicit concurrent disposal.
+- Generated API shape and receiver types keep ownership behavior off exact-layout structs and keep
+  routine owner operations off `.Value`. The Runtime analyzer also reports supported suspicious
+  uses of a `Value` reference, including known escape, suspension, temporary-owner, post-disposal,
+  and missing-owner-keepalive patterns. This analysis is intentionally suppressible and incomplete;
+  it does not prove aliasing, concurrency safety, or absence of use-after-free.
+- Generated APIs reject unsupported owner implementations, closed generic types, disposed owners,
+  and invalid inheritance projections before obtaining native memory. A `Value` getter rejects an
+  owner already known to be disposed, but Runtime cannot revoke a reference already returned or
+  prevent a later concurrent `Dispose()`.
+
+#### Exception route
+
+Putting ownership or disposal directly on an exact-layout struct, using `Handle<T>` for a
+non-`Standard_Transient` type, treating `.Value` as an ownership token or the routine receiver for
+generated handle operations, or copying an owning native object through C# struct assignment
+requires an explicitly approved update to the current architecture before implementation. The
+update must define copy, aliasing, construction, destruction, exception, and same-library cleanup
+behavior.
+
+### GEN-04: Keep the shared Runtime minimal and declaration-agnostic
+
+- Status: Active
+- Strength: Required
+- Scope: The handwritten `TedToolkit.Occt.Runtime` package and every dependency introduced into it
+  for generated managed libraries.
+- Owner: TedToolkit.Occt maintainers
+- Review trigger: Runtime would gain a type-specific layout, operation import, native symbol,
+  template specialization, manifest value, generated-set registry, or dependency that is not
+  required by all relevant generated consumers.
+
+#### Default
+
+Generated managed libraries may depend on `TedToolkit.Occt.Runtime`, but Runtime contains only the
+small declaration-agnostic mechanisms required to implement their shared managed contracts. It has
+no dependency on the Generator, a generated binding assembly, or an OCCT declaration set.
+
+Declaration-specific types, layouts, inheritance interfaces, extension operations, imports,
+native symbols, closed-generic registrations, expected contract fingerprints, and per-type
+construction or cleanup adapters belong to generated output. Runtime may own shared metadata,
+exception, loading, invocation-lifetime, and ownership mechanisms only when their contracts are
+independent of any particular OCCT declaration or generated artifact set.
+
+#### Rationale
+
+A broad Runtime becomes a second handwritten authority for facts already known by the Model,
+couples unrelated generated packages to one declaration set, and makes regeneration incomplete.
+A narrow dependency keeps generated assemblies self-describing while centralizing only lifecycle
+and safety mechanisms that must behave consistently across them.
+
+#### Practical implications
+
+- A Runtime addition must be necessary for a shared correctness or public contract, reusable across
+  generated declaration sets, independent of concrete OCCT symbols and layouts, and materially more
+  appropriate to centralize than to emit. Failing any condition keeps it in generated output.
+- Runtime may define stable abstractions such as native-name metadata, managed exception contracts,
+  owner-state machinery, and declaration-agnostic native-module loading capabilities.
+- Generated code supplies the concrete type identities, imports, exports, layout evidence,
+  specialization registry, expected fingerprint, and target-specific construction, release, or
+  pointer-adjustment functions consumed through those mechanisms.
+- Runtime dependencies are reviewed as part of its public and transitive surface. Convenience alone
+  is not sufficient reason to add a package or a declaration-specific helper.
+
+#### Exception route
+
+Adding declaration-specific or generated-set-specific authority to Runtime, or making Runtime
+depend on the Generator or a generated binding assembly, requires an explicitly approved update to
+the current architecture before implementation. The update must explain why the Model cannot emit
+the information, how regeneration and version isolation remain complete, and when the exception
+can be removed.
 
 ## Exception route
 
-A proposed deviation from a Required principle needs an Accepted ADR before implementation.
-Emergency changes that cannot satisfy this gate are not shipped as supported generated bindings.
+A proposed deviation from a Required principle must first update the affected principle and current
+architecture and receive explicit maintainer approval. Emergency changes that cannot satisfy this
+gate are not shipped as supported generated bindings.
 
 ## Maintenance
 
 - Principle-set owner: TedToolkit.Occt maintainers
 - Review cadence or objective review triggers: Review whenever the Generator adds an output layer,
-  a declaration-specific mapping, or a manual generated-source step.
-- Last reviewed: 2026-08-25
+  a declaration-specific mapping, a manual generated-source step, a native layout category, or an
+  ownership category; a generated binding package changes its platform matrix; or Runtime gains a
+  new public mechanism or dependency.
+- Last reviewed: 2026-08-26

@@ -1,5 +1,11 @@
 # C interoperability ABI major 1
 
+> Historical migration fixture: the current architecture replaced this versioned protocol with one
+> unversioned exact-match generated boundary and replaced its semantic-value and opaque-object
+> projection with exact native-layout structs and separate owners. This document describes the
+> retained ABI-v1 verification fixture only; it is not current product architecture or a public
+> compatibility commitment.
+
 TedToolkit.Occt defines its native interoperability boundary through the generated
 `ted_toolkit_occt_v1.h` header. The header is the ABI authority; source C++ spellings, generated C++
 implementation text, P/Invoke declarations, and public C# names do not define the protocol.
@@ -63,8 +69,8 @@ same ABI library that allocated or retained them. `Standard_Transient` handles u
 retain/release and must never be directly deleted. Unsupported types are omitted as one complete
 operation; the generator never emits a partial declaration or substitutes a C++ or C# spelling.
 
-The complete frozen contract and compatibility rules are recorded in
-[ADR-0001](adr/ADR-0001-stable-c-interop-abi.md).
+The current production direction is defined by the
+[generated binding architecture](architecture/generated-binding-system.md).
 
 ## Native consumer proof
 

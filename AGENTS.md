@@ -14,4 +14,12 @@ dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Gener
 
 ## Documentation language
 
-- Write repository documentation, ADRs, change records, and new code comments in English.
+- Write repository documentation, architecture records, change records, and new code comments in
+  English.
+
+## Change record retention
+
+- Keep `docs/changes/` for active delivery records only.
+- After a change is genuinely completed and its enduring decisions, current documentation, and
+  verification coverage remain elsewhere in the repository, delete its completed change record;
+  Git history provides delivery-record recovery only when that record was previously committed.

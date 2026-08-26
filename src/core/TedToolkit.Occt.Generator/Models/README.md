@@ -1,14 +1,17 @@
 # `Models`
 
-This directory owns the normalized internal representation used to generate managed OCCT bindings.
-It separates declaration structure from type projection and does not define the stable C ABI.
+This directory owns the normalized internal representation used by every binding emitter. It
+separates declaration structure from physical and public type projection and remains the only
+semantic boundary between native parsing and generated C# or C++ source.
 
 ## Responsibilities
 
 - Represent parsed records, methods, fields, parameters, and enums after Clang-specific details have
   been normalized for generation.
 - Carry the source, P/Invoke, and public managed type projections used by declaration models.
-- Keep ABI contracts, validation, naming, and header generation in [`../Abi`](../Abi/README.md).
+- Grow to carry the complete layout, transport, ownership, conversion, error, cleanup, manifest,
+  and build-description facts required by both C# and C++ emitters.
+- Remain passive data: it does not emit source, invoke a compiler, or depend on generated text.
 
 ## Organization
 
@@ -19,20 +22,24 @@ It separates declaration structure from type projection and does not define the 
 
 ## Dependencies and boundaries
 
-The processing direction is:
+The accepted processing direction is:
 
 ```text
-Clang AST -> Resolver -> Types -> RecordModelManager -> Declarations -> C# generators
+native inputs -> parse and normalize -> complete Model
+                                      -> C# emitter
+                                      -> C++ and native-build-description emitter
+                                                              -> optional native compiler
 ```
 
-Declaration models may depend on `Types`. Neither area may depend on `Abi`, generator implementations,
-modules, or services. Resolution behavior belongs in `Services`; emission behavior belongs in
-`Generators`.
+Declaration models may depend on `Types`. Neither area may depend on generator implementations,
+modules, services, emitted source, or compiler output. Resolution behavior belongs in `Services`;
+emission behavior belongs in `Generators`. An emitter must not traverse Clang or reconstruct Model
+semantics from another emitter's output.
 
-A new type belongs here only when it is stable data passed between parsing/resolution and managed
-generation. Put declaration-shaped data in `Declarations` and reusable type-projection data in
+A new type belongs here only when it is stable data passed between parsing/resolution and one or
+more emitters. Put declaration-shaped data in `Declarations` and reusable type-projection data in
 `Types`. Do not place diagnostics, service results unrelated to this flow, generators, validators,
-or version-specific ABI catalogs here.
+compiler execution, or a second operation catalog here.
 
 ## Change impact
 
@@ -52,5 +59,5 @@ dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Gener
 ## Related documentation
 
 - [Generator overview](../README.md)
-- [ABI internals](../Abi/README.md)
-
+- [Repository design principles](../../../../docs/principles/README.md)
+- [Generated binding architecture](../../../../docs/architecture/generated-binding-system.md)
