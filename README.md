@@ -145,34 +145,19 @@ output/generated/
 
 | 组件 | 责任 | 文档 |
 | --- | --- | --- |
-| `TedToolkit.Occt.Windows` | 计划中的 Windows 平台生成绑定 package/assembly；首个支持矩阵仅为 `win-x64` | [Package change](docs/changes/deliver-generated-occt-package/change.md) |
+| `TedToolkit.Occt.Windows` | Windows 平台生成绑定 package/assembly；当前支持矩阵仅为 `win-x64` | [README](src/core/TedToolkit.Occt.Windows/README.md) |
 | `TedToolkit.Occt.Generator` | 读取 vcpkg/OCCT、解析 AST、建立模型并生成两组代码 | [README](src/core/TedToolkit.Occt.Generator/README.md) |
-| `TedToolkit.Occt.Runtime` | 生成库依赖的最小、声明无关托管机制；当前提供原生类型元数据、异常投影和 transient `Handle<T>`，RAII `Owned<T>` 仍是独立 Draft change | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
+| `TedToolkit.Occt.Runtime` | 生成库依赖的最小、声明无关托管机制；提供异常投影、`handle<T>`、`Handle<T>` 和 `Owned<T>` | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
 | `TedToolkit.Occt.Analyzer` | 从已安装 OCCT 头文件生成可选择的头文件类型枚举 | `src/tools/TedToolkit.Occt.Analyzer` |
 | `TedToolkit.Occt.Console` | 运行 `Geom2d_BSplineCurve` 生成流程的开发样例 | `tests/TedToolkit.Occt.Console` |
 | `Build` | 仓库构建管线；不会为平台 wrapper 生成 Runtime 友元权限 | `Build` |
 
 ## 当前实现边界
 
-- `DeclOptions.FileName` must identify both a top-level OCCT record and its exact public header stem; direct enum targets, namespaced targets, and declaration/header name mismatches are unsupported.
-- Recursive model discovery can still encounter STL and compiler implementation types. Forward-only
-  handle targets are excluded, while other incomplete mappings still require the later fail-closed
-  projection.
-- Per-type C++ helpers do not yet have generated C11 exports, CMake/DLL materialization, managed
-  imports, public invocation bodies, or complete lifetime wiring.
-- Configurable generated C# root namespace and the optional post-emission native-build stage are
-  accepted requirements but are not yet implemented end to end.
-- The independent ABI-v1 fixture still proves legacy boundary behavior but is no longer a production
-  Generator input.
-- C# 生成器已经生成类型、字段、接口和方法形状，但实际 P/Invoke 声明与公共方法调用体尚未接通。
-- 当前 C# 生成器仍使用 `LayoutKind.Explicit` 和 `[FieldOffset]`。这是待迁移实现，不是接受的
-  类型策略；目标由 GEN-02 和当前架构定义为 `LayoutKind.Sequential` 加生成的 typed、padding
-  和 aligned opaque physical segments，并且不生成 managed `BaseType`。
-- 当前记录类型的结构生成分支只在 `recordDecl.IsAbstract` 为 true 时执行；非抽象记录目前只生成继承接口，类型生成条件仍需调整。
-- 仓库没有 vcpkg manifest/baseline，OCCT 版本仍由本机全局安装决定。
-- 当前没有证据表明 NuGet 包已经发布；不要把项目文件中的打包配置视为可用发布渠道。
-- `TedToolkit.Occt.Windows` package/assembly 仍是已接受的目标架构和 Draft delivery contract，
-  不是当前已存在或已发布的项目。
+- `TedToolkit.Occt.Windows` 当前只生成宿主选择的 `Geom2d_BSplineCurve` 声明闭包，不宣称完整 OCCT 头文件覆盖。
+- 当前仅支持经验证的 `win-x64`、OCCT 8.0.1 和 `net8.0` 组合。
+- 本机生成和 NuGet 打包已经可用，但尚未发布到远程 feed。
+- 新增平台、RID 或头文件范围时仍必须重新执行编译器探测和真实原生行为验证。
 
 ## 开发
 

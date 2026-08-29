@@ -8,6 +8,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text.RegularExpressions;
 
 using ClangSharp;
 using ClangSharp.Interop;
@@ -36,6 +37,8 @@ internal sealed class RecordModelManager(
     IVcpkgDefaultTripletResolver defaultsResolver,
     IVcpkgEnvironment vcpkgEnvironment) : IRecordModelManager
 {
+    private static readonly Regex NativeIdentifierRegex = new("[A-Za-z_][A-Za-z0-9_]*");
+
     private readonly List<EnumModel> _enumModels = [];
 
     private readonly HashSet<CXCursor> _enumNames = [];
@@ -56,7 +59,26 @@ internal sealed class RecordModelManager(
     {
         get
         {
-            return _recordNames.Values.Where(t => t.Type.CppTypeName is not "Standard_Transient");
+            ShareHeaderRequirements();
+            return _recordNames.Values.Where(t => t.IsPubliclyAccessible
+                                                   && t.IsClosedTemplateSpecialization
+                                                   && !IsAnonymousTypeName(t.Type.CppTypeName));
+        }
+    }
+
+    private void ShareHeaderRequirements()
+    {
+        foreach (var models in _recordNames.Values.GroupBy(static model => model.SourceHeader, StringComparer.Ordinal))
+        {
+            var requiredHeaders = models
+                .SelectMany(static model => model.NativeRequiredHeaders)
+                .Distinct(StringComparer.Ordinal)
+                .Order(StringComparer.Ordinal)
+                .ToArray();
+            foreach (var model in models)
+            {
+                model.NativeRequiredHeaders = requiredHeaders;
+            }
         }
     }
 
@@ -83,6 +105,8 @@ internal sealed class RecordModelManager(
         record.Location.GetFileLocation(out var file, out _, out _, out _);
         var result = new RecordModel()
         {
+            IsPubliclyAccessible = IsPubliclyAccessible(record),
+            IsClosedTemplateSpecialization = IsClosedTemplateSpecialization(record),
             DescriptionItems = commentProjection.DescriptionItems,
             SourceHeader = Path.GetFileName(file.Name.CString),
             Type = ApplyRequiredHeaders(
@@ -98,8 +122,7 @@ internal sealed class RecordModelManager(
         var isOcctType =
             file.Name.CString.Contains(vcpkgEnvironment.GetOcctIncludeFolder(triplet), StringComparison.InvariantCulture);
 
-        result.FieldModels = GetAllDecls(record)
-            .SelectMany(r => r.Fields)
+        result.FieldModels = record.Fields
             .Where(f => isOcctType || f.Access is CX_CXXAccessSpecifier.CX_CXXPublic)
             .Where(options.Value.FieldTypeToGenerate)
             .Where(static f => IsDefined(f.Type))
@@ -107,10 +130,6 @@ internal sealed class RecordModelManager(
             .ToArray();
 
         result.MethodModels = record.Methods
-            .Concat(GetAllDecls(record)
-                .Where(baseRecord => baseRecord.Handle != record.Handle)
-                .SelectMany(static baseRecord => baseRecord.Methods)
-                .Where(static method => method is not (CXXConstructorDecl or CXXDestructorDecl)))
             .Where(m => ShouldIncludeMethod(m, record.IsAbstract))
             .GroupBy(GetMethodSignatureKey)
             .Select(static methods => methods
@@ -119,17 +138,334 @@ internal sealed class RecordModelManager(
             .Select(ToModel)
             .ToArray();
 
-        result.Base = isOcctType
+        result.NativeRequiredHeaders = GetNativeRequiredHeaders(record);
+        result.NativeDependencyRecords = GetNativeDependencyRecords(record);
+        result.UsesAllocatorPlacementNew = record.Methods.Any(static method =>
+            method.Name is "operator new" && method.Parameters.Count is 2);
+
+        result.Bases = isOcctType
             ? record.Bases
-                .Select(i => i.Type.AsCXXRecordDecl)
-                .OfType<CXXRecordDecl>()
-                .Select(Add)
-                .SingleOrDefault()
-            : null;
-        result.IsStandardTransient = result.Type.CppTypeName is "Standard_Transient"
-                                     || result.Base?.IsStandardTransient is true;
+                .Select(baseSpecifier => CreateBaseRelation(record, baseSpecifier))
+                .ToArray()
+            : [];
+        result.IsStandardTransient = DerivesFromStandardTransient(record, []);
+        NativeExportNameBuilder.Assign(result);
 
         return result;
+    }
+
+    private RecordModel[] GetNativeDependencyRecords(CXXRecordDecl record)
+    {
+        var dependencies = new HashSet<RecordModel>();
+        var visitedTypes = new HashSet<CXType>();
+        if (record is ClassTemplateSpecializationDecl specialization)
+        {
+            foreach (var argument in specialization.TemplateArgs)
+            {
+                if (argument.Kind is CXTemplateArgumentKind.CXTemplateArgumentKind_Type)
+                {
+                    AddNativeDependency(argument.AsType, dependencies, visitedTypes);
+                }
+            }
+        }
+
+        foreach (var field in record.Fields)
+        {
+            AddNativeDependency(field.Type, dependencies, visitedTypes);
+        }
+
+        foreach (var method in record.Methods)
+        {
+            AddNativeDependency(method.ReturnType, dependencies, visitedTypes);
+            foreach (var parameter in method.Parameters)
+            {
+                AddNativeDependency(parameter.Type, dependencies, visitedTypes);
+            }
+        }
+
+        return dependencies
+            .Where(dependency => !ReferenceEquals(dependency, _recordNames[record.CanonicalDecl.Handle]))
+            .OrderBy(static dependency => dependency.SourceHeader, StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private void AddNativeDependency(
+        ClangSharp.Type type,
+        HashSet<RecordModel> dependencies,
+        HashSet<CXType> visitedTypes)
+    {
+        var terminalType = type.CanonicalType;
+        if (!visitedTypes.Add(terminalType.Handle))
+        {
+            return;
+        }
+
+        while (terminalType is PointerType or LValueReferenceType or RValueReferenceType)
+        {
+            terminalType = terminalType.PointeeType.CanonicalType;
+            if (!visitedTypes.Add(terminalType.Handle))
+            {
+                return;
+            }
+        }
+
+        if (terminalType.AsCXXRecordDecl?.Definition is not { } dependency)
+        {
+            return;
+        }
+
+        if (dependency is ClassTemplateSpecializationDecl specialization)
+        {
+            foreach (var argument in specialization.TemplateArgs)
+            {
+                if (argument.Kind is CXTemplateArgumentKind.CXTemplateArgumentKind_Type)
+                {
+                    AddNativeDependency(argument.AsType, dependencies, visitedTypes);
+                }
+            }
+        }
+
+        if (TryUnwrapRecord(dependency) is not { } unwrappedDependency
+            || !IsPubliclyAccessible(unwrappedDependency))
+        {
+            return;
+        }
+
+        _ = dependencies.Add(Add(unwrappedDependency));
+    }
+
+    private static bool IsClosedTemplateSpecialization(CXXRecordDecl record)
+    {
+        if (record is not ClassTemplateSpecializationDecl specialization)
+        {
+            return true;
+        }
+
+        return specialization.TemplateArgs.All(static argument =>
+            argument.Kind is not CXTemplateArgumentKind.CXTemplateArgumentKind_Type
+            || argument.AsType.CanonicalType.Kind is not CXTypeKind.CXType_Void);
+    }
+
+    private string[] GetNativeRequiredHeaders(CXXRecordDecl record)
+    {
+        var headers = new HashSet<string>(StringComparer.Ordinal);
+        AddMacroPrerequisiteHeaders(record, headers);
+        AddNamedOcctHeaders(record.TypeForDecl.AsString, headers);
+        if (record is ClassTemplateSpecializationDecl specialization)
+        {
+            foreach (var argument in specialization.TemplateArgs)
+            {
+                CollectRequiredHeaders(argument, headers, [], []);
+            }
+        }
+
+        foreach (var field in record.Fields)
+        {
+            headers.UnionWith(GetRequiredHeaders(field.Type));
+        }
+
+        foreach (var method in record.Methods)
+        {
+            headers.UnionWith(GetRequiredHeaders(method.ReturnType));
+            foreach (var parameter in method.Parameters)
+            {
+                headers.UnionWith(GetRequiredHeaders(parameter.Type));
+            }
+        }
+
+        return headers.Order(StringComparer.Ordinal).ToArray();
+    }
+
+    private static void AddMacroPrerequisiteHeaders(CXXRecordDecl record, HashSet<string> headers)
+    {
+        record.Location.GetFileLocation(out var file, out _, out _, out _);
+        var sourceHeader = file.Name.CString;
+        if (!File.Exists(sourceHeader)
+            || !File.ReadAllText(sourceHeader).Contains("OCCT_DUMP_", StringComparison.Ordinal))
+        {
+            return;
+        }
+
+        _ = headers.Add("Standard_Dump.hxx");
+    }
+
+    private void AddNamedOcctHeaders(string nativeTypeName, HashSet<string> headers)
+    {
+        var triplet = options.Value.GetTriplet(defaultsResolver);
+        var includeFolder = vcpkgEnvironment.GetOcctIncludeFolder(triplet);
+        foreach (Match match in NativeIdentifierRegex.Matches(nativeTypeName))
+        {
+            var header = match.Value + ".hxx";
+            if (File.Exists(Path.Combine(includeFolder, header)))
+            {
+                _ = headers.Add(header);
+            }
+        }
+    }
+
+    private static bool IsPubliclyAccessible(CXXRecordDecl record)
+    {
+        return IsPubliclyAccessible(record, []);
+    }
+
+    private static bool IsPubliclyAccessible(CXXRecordDecl record, HashSet<CXCursor> visited)
+    {
+        if (!visited.Add(record.CanonicalDecl.Handle))
+        {
+            return true;
+        }
+
+        if (string.IsNullOrWhiteSpace(record.Name)
+            || record.TypeForDecl.AsString.Contains("(unnamed", StringComparison.Ordinal))
+        {
+            return false;
+        }
+
+        var cursor = record.Handle;
+        while (true)
+        {
+            var parent = clang.getCursorSemanticParent(cursor);
+            if (parent.kind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace)
+            {
+                break;
+            }
+
+            if (parent.kind is not (CXCursorKind.CXCursor_StructDecl
+                or CXCursorKind.CXCursor_ClassDecl
+                or CXCursorKind.CXCursor_ClassTemplate
+                or CXCursorKind.CXCursor_ClassTemplatePartialSpecialization)
+                || !HasPublicAccess(cursor))
+            {
+                return false;
+            }
+
+            cursor = parent;
+        }
+
+        if (record is not ClassTemplateSpecializationDecl specialization)
+        {
+            return true;
+        }
+
+        foreach (var argument in specialization.TemplateArgs)
+        {
+            if (argument.Kind is not CXTemplateArgumentKind.CXTemplateArgumentKind_Type)
+            {
+                continue;
+            }
+
+            var argumentType = argument.AsType.GetAddingType();
+            if (argumentType?.AsCXXRecordDecl is { } argumentRecord
+                && !IsPubliclyAccessible(argumentRecord.Definition ?? argumentRecord, visited))
+            {
+                return false;
+            }
+
+            if (argumentType is not null
+                && TryGetEnumDecl(argumentType, out var argumentEnum)
+                && !IsPubliclyAccessible(argumentEnum))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPubliclyAccessible(EnumDecl declaration)
+    {
+        if (string.IsNullOrWhiteSpace(declaration.Name)
+            || IsAnonymousTypeName(declaration.TypeForDecl.AsString))
+        {
+            return false;
+        }
+
+        var cursor = declaration.Handle;
+        while (true)
+        {
+            var parent = clang.getCursorSemanticParent(cursor);
+            if (parent.kind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace)
+            {
+                return true;
+            }
+
+            if (parent.kind is not (CXCursorKind.CXCursor_StructDecl
+                or CXCursorKind.CXCursor_ClassDecl
+                or CXCursorKind.CXCursor_ClassTemplate
+                or CXCursorKind.CXCursor_ClassTemplatePartialSpecialization)
+                || !HasPublicAccess(cursor))
+            {
+                return false;
+            }
+
+            cursor = parent;
+        }
+    }
+
+    private static bool HasPublicAccess(CXCursor cursor)
+    {
+        if (clang.getCXXAccessSpecifier(cursor) is CX_CXXAccessSpecifier.CX_CXXPublic)
+        {
+            return true;
+        }
+
+        var template = clang.getSpecializedCursorTemplate(cursor);
+        return clang.getCXXAccessSpecifier(template) is CX_CXXAccessSpecifier.CX_CXXPublic;
+    }
+
+    private static bool DerivesFromStandardTransient(
+        CXXRecordDecl record,
+        HashSet<CXCursor> visited)
+    {
+        record = record.Definition ?? record;
+        if (!visited.Add(record.CanonicalDecl.Handle))
+        {
+            return false;
+        }
+
+        if (record.TypeForDecl.CanonicalType.AsString is "Standard_Transient")
+        {
+            return true;
+        }
+
+        return record.Bases.Any(baseSpecifier =>
+            baseSpecifier.Type.AsCXXRecordDecl is { } baseRecord
+            && DerivesFromStandardTransient(baseRecord, visited));
+    }
+
+    private BaseRelationModel CreateBaseRelation(CXXRecordDecl record, CXXBaseSpecifier baseSpecifier)
+    {
+        var baseRecord = baseSpecifier.Type.AsCXXRecordDecl?.Definition
+                         ?? throw new NotSupportedException(
+                             $"Can't resolve base of '{record.TypeForDecl.AsString}'.");
+        return new()
+        {
+            Base = Add(baseRecord),
+            IsVirtual = baseSpecifier.IsVirtual,
+            IsPublic = clang.getCXXAccessSpecifier(baseSpecifier.Handle)
+                is CX_CXXAccessSpecifier.CX_CXXPublic,
+            PointerAdjustment = GetPointerAdjustmentKind(
+                record.Bases.Count,
+                baseSpecifier.IsVirtual,
+                record.NumVBases),
+        };
+    }
+
+    /// <summary>
+    /// Classifies whether a direct base conversion is address preserving.
+    /// </summary>
+    /// <param name="directBaseCount">The number of direct bases.</param>
+    /// <param name="isVirtual">Whether this direct base is virtual.</param>
+    /// <param name="virtualBaseCount">The number of virtual bases in the record.</param>
+    /// <returns>The required pointer adjustment strategy.</returns>
+    internal static PointerAdjustmentKind GetPointerAdjustmentKind(
+        int directBaseCount,
+        bool isVirtual,
+        uint virtualBaseCount)
+    {
+        return directBaseCount is 1 && !isVirtual && virtualBaseCount is 0
+            ? PointerAdjustmentKind.Identity
+            : PointerAdjustmentKind.NativeAdjust;
     }
 
     private TypeModel ToModel(ClangSharp.Type type)
@@ -286,6 +622,7 @@ internal sealed class RecordModelManager(
             ReturnType = ToModel(method.ReturnType),
             ReturnSelf = IsCompoundAssignmentOperator(method),
             MethodName = GetMethodName(method),
+            NativeMethodName = method.Name,
             Type = GetMethodType(method),
             Parameters = method.Parameters.Select((p, index) => ToModel(
                     p,
@@ -474,10 +811,12 @@ internal sealed class RecordModelManager(
         var commentProjection = fieldDecl.ToCommentProjection();
 
         var offset = fieldDecl.Handle.OffsetOfField / 8;
-        if (offset < 0)
+        var size = clang.Type_getSizeOf(fieldDecl.Type.Handle);
+        var alignment = clang.Type_getAlignOf(fieldDecl.Type.Handle);
+        if (offset < 0 || size <= 0 || alignment <= 0)
         {
             throw new NotSupportedException(
-                $"Can't get offset of field ({fieldDecl.Name} in {fieldDecl.Parent?.Name})");
+                $"Can't get physical layout of field ({fieldDecl.Name} in {fieldDecl.Parent?.Name})");
         }
 
         return new()
@@ -486,14 +825,26 @@ internal sealed class RecordModelManager(
             Name = fieldDecl.Name,
             Type = ToModel(fieldDecl.Type),
             Offset = offset,
+            Size = size,
+            Alignment = alignment,
         };
     }
 
     private static bool IsDefined(ClangSharp.Type type)
     {
+        if (IsAnonymousTypeName(type.CanonicalType.AsString))
+        {
+            return false;
+        }
+
         var addingType = type.CanonicalType.GetAddingType()?.CanonicalType;
 
         if (addingType is null)
+        {
+            return false;
+        }
+
+        if (IsAnonymousTypeName(addingType.AsString))
         {
             return false;
         }
@@ -522,12 +873,19 @@ internal sealed class RecordModelManager(
             return true;
         }
 
-        if (TryGetEnumDecl(addingType, out _))
+        if (TryGetEnumDecl(addingType, out var enumDeclaration))
         {
-            return true;
+            return IsPubliclyAccessible(enumDeclaration);
         }
 
-        return TryUnwrapRecord(addingType.AsCXXRecordDecl?.Definition) is not null;
+        return TryUnwrapRecord(addingType.AsCXXRecordDecl?.Definition) is { } record
+               && IsPubliclyAccessible(record);
+    }
+
+    private static bool IsAnonymousTypeName(string cppTypeName)
+    {
+        return cppTypeName.Contains("(unnamed", StringComparison.Ordinal)
+               || cppTypeName.Contains("(anonymous", StringComparison.Ordinal);
     }
 
     private static bool ShouldIncludeMethod(CXXMethodDecl method, bool isAbstract)
@@ -658,24 +1016,6 @@ internal sealed class RecordModelManager(
         };
     }
 
-    private static IEnumerable<CXXRecordDecl> GetAllDecls(CXXRecordDecl record)
-    {
-        foreach (var cxxBaseSpecifier in record.Bases)
-        {
-            if (cxxBaseSpecifier.Type.AsCXXRecordDecl is not { } baseDecl)
-            {
-                continue;
-            }
-
-            foreach (var bases in GetAllDecls(baseDecl))
-            {
-                yield return bases;
-            }
-        }
-
-        yield return record;
-    }
-
     private static CXXRecordDecl UnwrapRecord(CXXRecordDecl record)
     {
         ArgumentNullException.ThrowIfNull(record);
@@ -724,19 +1064,20 @@ internal sealed class RecordModelManager(
                || record.TypeForDecl.AsString.StartsWith("occ::handle<", StringComparison.Ordinal);
     }
 
-    private void Add(EnumDecl enumModel)
+    /// <inheritdoc/>
+    public void Add(EnumDecl declaration)
     {
-        if (!_enumNames.Add(enumModel.CanonicalDecl.Handle))
+        if (!_enumNames.Add(declaration.CanonicalDecl.Handle))
         {
             return;
         }
 
-        _enumModels.Add(CreateEnumModel(enumModel));
+        _enumModels.Add(CreateEnumModel(declaration));
     }
 
     private static EnumModel CreateEnumModel(EnumDecl enumDecl)
     {
-        if (enumDecl.IntegerType is not BuiltinType builtinType)
+        if (enumDecl.IntegerType.CanonicalType is not BuiltinType builtinType)
         {
             throw new NotSupportedException($"Unsupported enum underlying type ({enumDecl.IntegerType.AsString})");
         }
@@ -746,8 +1087,8 @@ internal sealed class RecordModelManager(
         return new()
         {
             DescriptionItems = enumDecl.ToCommentProjection().DescriptionItems,
-            Name = enumDecl.Name.ToValidCSharpName(),
-            SourceType = enumDecl.TypeForDecl.AsString,
+            Name = enumDecl.QualifiedName.ToValidCSharpName(),
+            SourceType = enumDecl.QualifiedName,
             UnderlyingType = underlyingType,
             Members = enumDecl.Enumerators.Select(ToEnumMember).ToArray(),
         };

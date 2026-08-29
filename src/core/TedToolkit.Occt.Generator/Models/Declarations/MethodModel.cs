@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Text;
+
 using TedToolkit.Occt.Generator.Models.Types;
 using TedToolkit.RoslynHelper.Generators;
 
@@ -15,6 +17,67 @@ namespace TedToolkit.Occt.Generator.Models.Declarations;
 /// </summary>
 internal class MethodModel
 {
+    /// <summary>
+    /// Gets the readable native operation name.
+    /// </summary>
+    /// <returns>The operation name used by the C export.</returns>
+    public string GetNativeOperationName()
+    {
+        if (Type is MethodModelType.NEW)
+        {
+            return "Create";
+        }
+
+        if (Type is MethodModelType.DELETE or MethodModelType.VALUE_DELETE)
+        {
+            return "Destroy";
+        }
+
+        if (Type is not MethodModelType.OPERATOR)
+        {
+            return MethodName;
+        }
+
+        var builder = new StringBuilder("Operator");
+        var upperNext = false;
+        foreach (var character in MethodName)
+        {
+            if (char.IsLetterOrDigit(character) || character is '_')
+            {
+                _ = builder.Append(upperNext ? char.ToUpperInvariant(character) : character);
+                upperNext = false;
+                continue;
+            }
+
+            upperNext = true;
+            _ = builder.Append(character switch
+            {
+                ' ' => "",
+                '=' => "Equal",
+                '+' => "Plus",
+                '-' => "Minus",
+                '*' => "Star",
+                '/' => "Slash",
+                '%' => "Percent",
+                '!' => "Bang",
+                '<' => "Less",
+                '>' => "Greater",
+                '&' => "Ampersand",
+                '|' => "Pipe",
+                '^' => "Caret",
+                '~' => "Tilde",
+                '(' => "LeftParen",
+                ')' => "RightParen",
+                '[' => "LeftBracket",
+                ']' => "RightBracket",
+                ',' => "Comma",
+                _ => "Char",
+            });
+        }
+
+        return builder.ToString();
+    }
+
     /// <summary>
     /// Gets a value indicating whether the method returns <c>void</c>.
     /// </summary>
@@ -30,6 +93,16 @@ internal class MethodModel
     /// Gets the XML documentation description items for the method.
     /// </summary>
     public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }
+
+    /// <summary>
+    /// Gets the complete native C export name assigned by Model normalization.
+    /// </summary>
+    public string NativeExportName { get; internal set; } = "";
+
+    /// <summary>
+    /// Gets the exact C++ declaration name used for native invocation.
+    /// </summary>
+    public string NativeMethodName { get; init; } = "";
 
     /// <summary>
     /// Gets the XML documentation description items for the return value.

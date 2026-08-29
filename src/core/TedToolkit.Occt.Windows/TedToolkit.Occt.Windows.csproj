@@ -1,0 +1,42 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <AssemblyName>TedToolkit.Occt.Windows</AssemblyName>
+    <RootNamespace>TedToolkit.Occt</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Title>TedToolkit OCCT Windows bindings</Title>
+    <Description>Generated OCCT bindings for the pinned Windows x64 native artifact.</Description>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\output\generated</GeneratedRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.Occt.Runtime\TedToolkit.Occt.Runtime.csproj" />
+    <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_occt.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(VcpkgRoot)\installed\x64-windows\bin\TKG2d.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(VcpkgRoot)\installed\x64-windows\bin\TKMath.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(VcpkgRoot)\installed\x64-windows\bin\TKernel.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+  </ItemGroup>
+
+  <Target Name="GenerateWindowsBindings" BeforeTargets="CoreCompile;Pack">
+    <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.Occt.Windows." />
+    <Exec Command="dotnet run --project &quot;$(MSBuildProjectDirectory)\..\..\..\tests\TedToolkit.Occt.Console\TedToolkit.Occt.Console.csproj&quot; -c $(Configuration)" />
+    <Exec Command="cmake -Wno-unused-cli -S &quot;$(GeneratedRoot)\cpp&quot; -B &quot;$(GeneratedRoot)\native-build&quot; -DCMAKE_TOOLCHAIN_FILE=&quot;$(VcpkgRoot)\scripts\buildsystems\vcpkg.cmake&quot; -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_APPLOCAL_DEPS=OFF" />
+    <Exec Command="cmake --build &quot;$(GeneratedRoot)\native-build&quot; --config $(Configuration)" />
+    <ItemGroup>
+      <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

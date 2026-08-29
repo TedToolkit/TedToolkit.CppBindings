@@ -59,6 +59,10 @@ failed construction path, and keep the owner alive through native use. Disposal 
 invoke the matching non-throwing C++ destructor once; neither intrusive `Release` nor native storage
 free is involved.
 
+`Handle<T>` and `Owned<T>` implement `IOcctOwner<T>`. Its only member is non-owning `ref T Value`,
+which lets generated extensions share their native-call receiver path. The interface does not
+inherit `IDisposable` or define acquisition, release, destruction, or conversion semantics.
+
 ## Compatibility
 
 Runtime and its managed tests target only .NET 8.
@@ -82,9 +86,8 @@ non-transient Handle use.
 The Runtime NuGet package embeds its internal Runtime analyzer for direct and transitive consumers
 as a compiler-only asset. It is neither published as a separate package nor loaded while Runtime
 itself is compiled, and the analyzer assembly is not copied to application output.
-The transient and non-transient owners have no public inheritance relationship, conversion, or
-common public owner base. Runtime may still reuse declaration-agnostic lifetime machinery
-internally.
+The transient and non-transient owners have no ownership inheritance or conversion. Their shared
+`IOcctOwner<T>` contract is limited to generated invocation and non-owning value access.
 
 Generated code supplies concrete supported-type provenance and target-specific retain/release or
 cleanup capabilities to these shared mechanisms. Runtime does not maintain another declaration

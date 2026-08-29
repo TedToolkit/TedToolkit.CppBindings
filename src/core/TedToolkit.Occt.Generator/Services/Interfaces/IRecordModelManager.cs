@@ -24,6 +24,12 @@ internal interface IRecordModelManager
     RecordModel Add(CXXRecordDecl record);
 
     /// <summary>
+    /// Adds an enum declaration to the model cache.
+    /// </summary>
+    /// <param name="declaration">The enum declaration to add.</param>
+    void Add(EnumDecl declaration);
+
+    /// <summary>
     /// Gets the projected enum models discovered during parsing.
     /// </summary>
     IReadOnlyList<EnumModel> EnumModels { get; }

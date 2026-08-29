@@ -15,18 +15,19 @@ namespace TedToolkit.Occt.Generator.Tests.Modules;
 internal sealed class DependencyMetadataTests
 {
     /// <summary>
-    /// Verifies Clean and Parse are independent prerequisites of both generators.
+    /// Verifies the compiler probe completes after parsing and before both generators.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
     public async Task Should_require_clean_and_parse_before_both_generators_Async()
     {
-        Type[] expectedDependencies = [typeof(CleanGenerationOutputModule), typeof(ParseModule),];
+        Type[] expectedDependencies = [typeof(CleanGenerationOutputModule), typeof(CompilerProbeModule),];
 
         await Assert.That(GetDependencies(typeof(GenerateCSharpModule))).IsEquivalentTo(expectedDependencies);
         await Assert.That(GetDependencies(typeof(GenerateCppModule))).IsEquivalentTo(expectedDependencies);
         await Assert.That(GetDependencies(typeof(CleanGenerationOutputModule))).IsEmpty();
         await Assert.That(GetDependencies(typeof(ParseModule))).IsEmpty();
+        await Assert.That(GetDependencies(typeof(CompilerProbeModule))).IsEquivalentTo([typeof(ParseModule),]);
     }
 
     private static Type[] GetDependencies(Type moduleType)

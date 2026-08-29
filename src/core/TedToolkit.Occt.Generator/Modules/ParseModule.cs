@@ -134,10 +134,18 @@ public sealed class ParseModule : Module<bool>
         ArgumentNullException.ThrowIfNull(context);
         var triplet = _generationOptions.Value.GetTriplet(_defaultsResolver);
 
+        var declarationsToInclude = _generationOptions.Value.DeclOptions;
+        if (!_generationOptions.Value.GenerateAllPublicHeaders && declarationsToInclude.Count is 0)
+        {
+            throw new InvalidOperationException("At least one target declaration is required.");
+        }
+
         using var file = CXUnsavedFile.Create(RELAY_FILE_NAME,
-            await _vcpkgEnvironment
-                .GetIncludingHeaderContentAsync(triplet, _generationOptions.Value.DeclOptions, cancellationToken)
-                .ConfigureAwait(false));
+            _generationOptions.Value.GenerateAllPublicHeaders
+                ? GetAllPublicHeaderContent(triplet)
+                : await _vcpkgEnvironment
+                    .GetIncludingHeaderContentAsync(triplet, declarationsToInclude, cancellationToken)
+                    .ConfigureAwait(false));
 
         using var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
@@ -156,6 +164,32 @@ public sealed class ParseModule : Module<bool>
         }
 
         var declarations = unit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>().ToArray();
+        if (_generationOptions.Value.GenerateAllPublicHeaders)
+        {
+            var occtIncludeRoot = _vcpkgEnvironment.GetOcctIncludeFolder(triplet);
+            var definitions = declarations
+                .Select(static declaration => declaration.Definition)
+                .OfType<CXXRecordDecl>()
+                .Where(definition => IsDeclaredBelow(definition, occtIncludeRoot)
+                                     && HasConcreteLayout(definition)
+                                     && IsPubliclyNameable(definition))
+                .DistinctBy(static definition => definition.CanonicalDecl.Handle);
+            foreach (var definition in definitions)
+            {
+                _recordModelManager.Add(definition);
+            }
+
+            foreach (var enumDeclaration in unit.TranslationUnitDecl.CursorChildren
+                         .OfType<EnumDecl>()
+                         .Where(declaration => IsDeclaredBelow(declaration, occtIncludeRoot)
+                                               && IsPubliclyNameable(declaration)))
+            {
+                _recordModelManager.Add(enumDeclaration);
+            }
+
+            return true;
+        }
+
         var targets = _generationOptions.Value.DeclOptions
             .Select(static declaration => declaration.FileName)
             .Distinct(StringComparer.Ordinal);
@@ -182,5 +216,134 @@ public sealed class ParseModule : Module<bool>
         }
 
         return true;
+    }
+
+    private static bool IsDeclaredBelow(CXXRecordDecl declaration, string root)
+    {
+        return IsDeclaredBelow(declaration.Handle, root);
+    }
+
+    private static bool IsDeclaredBelow(EnumDecl declaration, string root)
+    {
+        return IsDeclaredBelow(declaration.Handle, root);
+    }
+
+    private static bool IsDeclaredBelow(CXCursor declaration, string root)
+    {
+        clang.getCursorLocation(declaration).GetFileLocation(out var file, out _, out _, out _);
+        var path = file.Name.CString;
+        return path.StartsWith(root, StringComparison.OrdinalIgnoreCase)
+               && path.Length > root.Length
+               && (path[root.Length] is '\\' or '/')
+               && path.EndsWith(".hxx", StringComparison.OrdinalIgnoreCase);
+    }
+
+    private static bool HasConcreteLayout(CXXRecordDecl declaration)
+    {
+        var type = clang.getCanonicalType(declaration.TypeForDecl.Handle);
+        return clang.Type_getSizeOf(type) >= 0;
+    }
+
+    private static bool IsPubliclyNameable(CXXRecordDecl declaration)
+    {
+        var parentKind = clang.getCursorSemanticParent(declaration.Handle).kind;
+        return parentKind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace
+               && !string.IsNullOrWhiteSpace(declaration.Name)
+               && !declaration.TypeForDecl.AsString.Contains("(unnamed", StringComparison.Ordinal);
+    }
+
+    private static bool IsPubliclyNameable(EnumDecl declaration)
+    {
+        var parentKind = clang.getCursorSemanticParent(declaration.Handle).kind;
+        return parentKind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace
+               && !string.IsNullOrWhiteSpace(declaration.Name)
+               && !declaration.TypeForDecl.AsString.Contains("(unnamed", StringComparison.Ordinal)
+               && !declaration.TypeForDecl.AsString.Contains("(anonymous", StringComparison.Ordinal);
+    }
+
+    private string GetAllPublicHeaderContent(string triplet)
+    {
+        var headerPaths = Directory.EnumerateFiles(
+                _vcpkgEnvironment.GetOcctIncludeFolder(triplet),
+                "*.hxx")
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        var includeRoot = _vcpkgEnvironment.GetOcctIncludeFolder(triplet);
+        var availableHeaders = Directory.EnumerateFiles(includeRoot)
+            .Select(static path => Path.GetFileName(path)!)
+            .ToHashSet(StringComparer.Ordinal);
+        var dependencies = headerPaths.ToDictionary(
+            static path => Path.GetFileName(path)!,
+            GetOcctHeaderDependencies,
+            StringComparer.Ordinal);
+        var excludedHeaders = dependencies
+            .Where(pair => pair.Value.Any(dependency => !availableHeaders.Contains(dependency)))
+            .Select(static pair => pair.Key)
+            .ToHashSet(StringComparer.Ordinal);
+        _ = excludedHeaders.Add("MathLin_Jacobi.hxx");
+        _ = excludedHeaders.Add("OpenGl_GLESExtensions.hxx");
+        while (dependencies
+               .Where(pair => !excludedHeaders.Contains(pair.Key)
+                              && pair.Value.Any(excludedHeaders.Contains))
+               .Select(static pair => pair.Key)
+               .Any(excludedHeaders.Add))
+        {
+        }
+
+        var reportPath = Path.Combine(
+            _generationOptions.Value.CppFolder.Parent?.FullName
+            ?? _generationOptions.Value.CppFolder.FullName,
+            "unsupported-headers.txt");
+        File.WriteAllLines(reportPath, excludedHeaders.Order(StringComparer.Ordinal));
+
+        var builder = new System.Text.StringBuilder();
+        foreach (var path in headerPaths.Where(path => !excludedHeaders.Contains(Path.GetFileName(path)!)))
+        {
+            _ = builder.Append("#include <")
+                .Append(Path.GetFileName(path))
+                .AppendLine(">");
+        }
+
+        return builder.ToString();
+    }
+
+    private static List<string> GetOcctHeaderDependencies(string path)
+    {
+        var dependencies = new List<string>();
+        foreach (var line in File.ReadLines(path))
+        {
+            var trimmed = line.TrimStart();
+            if (!trimmed.StartsWith("#include", StringComparison.Ordinal))
+            {
+                continue;
+            }
+
+            var start = trimmed.IndexOfAny(['<', '"',]);
+            if (start < 0)
+            {
+                continue;
+            }
+
+            var terminator = trimmed[start] is '<' ? '>' : '"';
+            var end = trimmed.IndexOf(terminator, start + 1);
+            if (end > start)
+            {
+                var dependency = trimmed[(start + 1)..end];
+                if (IsOcctIncludeFile(dependency))
+                {
+                    dependencies.Add(dependency);
+                }
+            }
+        }
+
+        return dependencies;
+    }
+
+    private static bool IsOcctIncludeFile(string path)
+    {
+        return path.EndsWith(".hxx", StringComparison.Ordinal)
+               || path.EndsWith(".pxx", StringComparison.Ordinal)
+               || path.EndsWith(".lxx", StringComparison.Ordinal)
+               || path.EndsWith(".gxx", StringComparison.Ordinal);
     }
 }

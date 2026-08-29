@@ -11,6 +11,7 @@ using ModularPipelines.Attributes;
 using ModularPipelines.Context;
 using ModularPipelines.Modules;
 
+using TedToolkit.Occt.Generator.Generators;
 using TedToolkit.Occt.Generator.Models.Declarations;
 using TedToolkit.Occt.Generator.Options;
 using TedToolkit.Occt.Generator.Services.Interfaces;
@@ -21,7 +22,7 @@ namespace TedToolkit.Occt.Generator.Modules;
 /// Generates exactly one C++ invocation source for each parsed record.
 /// </summary>
 [DependsOn<CleanGenerationOutputModule>]
-[DependsOn<ParseModule>]
+[DependsOn<CompilerProbeModule>]
 public sealed class GenerateCppModule : Module<bool>
 {
     private readonly IOptions<GenerationOptions> _generationOptions;
@@ -52,12 +53,29 @@ public sealed class GenerateCppModule : Module<bool>
         ArgumentNullException.ThrowIfNull(context);
         var outputs = _recordManager.RecordModels
             .OrderBy(static record => record.Type.CSharpTypeName, StringComparer.Ordinal)
-            .Select(static record => new RecordOutput(record, record.Type.CSharpTypeName + ".cpp"))
+            .Select(static record => new RecordOutput(record, record.Type.CSharpTypeName.ToGeneratedFileStem() + ".cpp"))
             .ToArray();
         RejectFileNameCollisions(outputs);
 
         _generationOptions.Value.CppFolder.Create();
-        await Task.WhenAll(outputs.Select(output => GenerateRecordAsync(output, cancellationToken)))
+        var generationTasks = outputs.Select(output => GenerateRecordAsync(output, cancellationToken))
+            .Append(WriteSupportAsync(
+                NativeErrorSupportGenerator.HeaderFileName,
+                NativeErrorSupportGenerator.GenerateHeader(),
+                cancellationToken))
+            .Append(WriteSupportAsync(
+                NativeErrorSupportGenerator.SourceFileName,
+                NativeErrorSupportGenerator.GenerateSource(),
+                cancellationToken))
+            .Append(WriteSupportAsync(
+                NativeProjectGenerator.FileName,
+                NativeProjectGenerator.Generate(
+                    outputs.Select(static output => output.FileName)
+                        .Append(NativeErrorSupportGenerator.SourceFileName)
+                        .ToArray(),
+                    _generationOptions.Value.GetNativeLibraryBaseName()),
+                cancellationToken));
+        await Task.WhenAll(generationTasks)
             .ConfigureAwait(false);
         return true;
     }
@@ -87,6 +105,14 @@ public sealed class GenerateCppModule : Module<bool>
                 source,
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private Task WriteSupportAsync(string fileName, string contents, in CancellationToken cancellationToken)
+    {
+        return File.WriteAllTextAsync(
+            Path.Combine(_generationOptions.Value.CppFolder.FullName, fileName),
+            contents,
+            cancellationToken);
     }
 
     private sealed record RecordOutput(RecordModel Record, string FileName);

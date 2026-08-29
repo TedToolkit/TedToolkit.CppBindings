@@ -8,6 +8,8 @@
 - Applicable product intent: None
 - Governing principles: [Repository design principles](../principles/README.md)
 - Related architecture: [Generated binding system](generated-binding-system.md)
+- Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
+- Related ADR: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md)
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26.
 
 ## Current architecture

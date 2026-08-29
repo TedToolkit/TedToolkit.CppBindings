@@ -31,6 +31,155 @@ internal sealed class AddTest
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
 
     /// <summary>
+    /// Verifies a used standard pair specialization receives a closed, compiler-probed model.
+    /// </summary>
+    [Test]
+    public async Task Should_include_used_standard_pair_specialization_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            namespace std
+            {
+                template<typename TFirst, typename TSecond>
+                struct pair
+                {
+                    TFirst first;
+                    TSecond second;
+                };
+            }
+            template struct std::pair<double, double>;
+
+            struct Range
+            {
+                std::pair<double, double> Bounds() const;
+            };
+            """, "__occt__/test.cpp");
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static value => value.Name == "Range");
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var pair = manager.RecordModels.Single(static model =>
+            model.Type.CppTypeName == "std::pair<double, double>");
+        await Assert.That(pair.FieldModels.Select(static field => field.Name))
+            .IsEquivalentTo(["first", "second",]);
+    }
+
+    /// <summary>
+    /// Verifies public enum-valued nested template specializations remain available.
+    /// </summary>
+    [Test]
+    public async Task Should_include_public_nested_template_with_qualified_enum_argument_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct NodeId
+            {
+                enum class Kind { Face };
+                template<Kind Value> struct Typed { int Id; };
+                Typed<Kind::Face> Face() const;
+            };
+            template struct NodeId::Typed<NodeId::Kind::Face>;
+            """);
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static value => value.Name == "NodeId");
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        await Assert.That(manager.RecordModels.Select(static model => model.Type.CppTypeName))
+            .Contains("NodeId::Typed<NodeId::Kind::Face>");
+    }
+
+    /// <summary>
+    /// Verifies a specialization carrying a private forward-declared nested type is not public.
+    /// </summary>
+    [Test]
+    public async Task Should_exclude_template_with_private_forward_declared_argument_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template<typename T> struct Allocator { T* Value; };
+            class Cache
+            {
+            private:
+                struct Slot;
+                Allocator<Slot> Storage;
+            };
+            """);
+        var cache = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static value => value.Name == "Cache");
+        var specialization = cache.Fields.Single().Type.CanonicalType.AsCXXRecordDecl
+            ?? throw new InvalidOperationException("Allocator specialization was not found.");
+        var manager = CreateManager();
+
+        manager.Add(specialization);
+
+        await Assert.That(manager.RecordModels.Select(static model => model.Type.CppTypeName))
+            .DoesNotContain("Allocator<Cache::Slot>");
+    }
+
+    /// <summary>
+    /// Verifies C++ standard stream ownership APIs are excluded while unrelated methods remain.
+    /// </summary>
+    [Test]
+    public async Task Should_include_representable_stream_and_handle_dependencies_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            namespace std
+            {
+                template<typename T> struct basic_istream {};
+                template<typename T> struct basic_ostream {};
+                template<typename T> struct basic_streambuf {};
+                template<typename T> struct shared_ptr { T* Value; };
+            }
+
+            template struct std::basic_istream<char>;
+            template struct std::basic_ostream<char>;
+            template struct std::basic_streambuf<char>;
+            template struct std::shared_ptr<std::basic_istream<char>>;
+            template struct std::shared_ptr<std::basic_ostream<char>>;
+            template struct std::shared_ptr<std::basic_streambuf<char>>;
+
+            template<typename T> struct NCollection_Handle { void* Value; };
+
+            struct FileSystem
+            {
+                NCollection_Handle<int> InternalHandle;
+                int IsSupportedPath() const;
+                std::shared_ptr<std::basic_istream<char>> OpenIStream();
+                std::shared_ptr<std::basic_ostream<char>> OpenOStream();
+                void AcceptBuffer(const std::shared_ptr<std::basic_streambuf<char>>& value);
+                NCollection_Handle<int> UnsupportedHandle();
+                void AcceptHandle(const NCollection_Handle<int>& value);
+            };
+            """);
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static value => value.Name == "FileSystem");
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        var fileSystem = manager.RecordModels.Single(static model => model.Type.CppTypeName == "FileSystem");
+
+        await Assert.That(fileSystem.MethodModels.Select(static method => method.MethodName))
+            .IsEquivalentTo([
+                "IsSupportedPath",
+                "OpenIStream",
+                "OpenOStream",
+                "AcceptBuffer",
+                "UnsupportedHandle",
+                "AcceptHandle",
+            ]);
+        await Assert.That(fileSystem.FieldModels.Select(static field => field.Name))
+            .IsEquivalentTo(["InternalHandle",]);
+        await Assert.That(manager.RecordModels.Select(static model => model.Type.CppTypeName))
+            .Contains("std::shared_ptr<std::basic_istream<char>>");
+    }
+
+    /// <summary>
     /// Verifies enums referenced by fields are collected and documented.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -95,7 +244,7 @@ internal sealed class AddTest
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
-    public async Task Should_filter_special_methods_while_preserving_operators_Async()
+    public async Task Should_keep_only_declared_callable_methods_Async()
     {
         using var translationUnit = ParseTranslationUnit("""
             struct Base
@@ -129,7 +278,6 @@ internal sealed class AddTest
             .ToArray();
 
         await Assert.That(methodNames).IsEquivalentTo([
-            (MethodModelType.NORMAL, "BaseMethod"),
             (MethodModelType.NEW, "New"),
             (MethodModelType.DELETE, "Delete"),
             (MethodModelType.NORMAL, "OwnMethod"),
@@ -276,6 +424,41 @@ internal sealed class AddTest
     }
 
     /// <summary>
+    /// Verifies fields whose types are anonymous declarations are excluded from the model.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_fields_with_anonymous_types_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Holder
+            {
+                enum
+                {
+                    Value,
+                } InternalState;
+                union
+                {
+                    double Floating;
+                    long long Integer;
+                } InternalStorage;
+                int PublicValue;
+            };
+            """);
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static value => value.Name == "Holder");
+
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        await Assert.That(manager.RecordModels.Single().FieldModels.Select(static field => field.Name))
+            .IsEquivalentTo(["PublicValue",]);
+    }
+
+    /// <summary>
     /// Verifies implicit and explicit conversion operators are classified correctly.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -341,6 +524,37 @@ internal sealed class AddTest
         await Assert.That(manager.RecordModels.Single(static m => m.Type.CppTypeName == "Parent")
             .FieldModels.Single().Type.CppTypeName)
             .IsEqualTo("Child");
+    }
+
+    /// <summary>
+    /// Verifies a derived representation does not redeclare fields owned by its base representation.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_model_only_fields_declared_by_each_record_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Base
+            {
+                int SharedName;
+            };
+
+            struct Derived : Base
+            {
+                int SharedName;
+            };
+            """, "__occt__/test.cpp");
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static value => value.Name == "Derived");
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        await Assert.That(manager.RecordModels.Single(static model => model.Type.CppTypeName == "Base")
+            .FieldModels.Select(static field => field.Name)).IsEquivalentTo(["SharedName",]);
+        await Assert.That(manager.RecordModels.Single(static model => model.Type.CppTypeName == "Derived")
+            .FieldModels.Select(static field => field.Name)).IsEquivalentTo(["SharedName",]);
     }
 
     /// <summary>
@@ -434,6 +648,47 @@ internal sealed class AddTest
     }
 
     /// <summary>
+    /// Verifies specializations that expose a private template argument are excluded as unnameable dependencies.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_specializations_with_private_template_arguments_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template<typename T>
+            struct Wrapper
+            {
+                T Value;
+            };
+
+            struct Owner
+            {
+            private:
+                enum class State
+                {
+                    Ready,
+                };
+
+            public:
+                Wrapper<State> Internal;
+                int Value;
+            };
+            """, "__occt__/test.cpp");
+
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        await Assert.That(manager.RecordModels.Select(static item => item.Type.CppTypeName))
+            .IsEquivalentTo(["Owner",]);
+        await Assert.That(manager.RecordModels.Single().FieldModels.Select(static field => field.Name))
+            .IsEquivalentTo(["Value",]);
+    }
+
+    /// <summary>
     /// Verifies template specialization field types collect both the template and template-argument headers.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -488,6 +743,43 @@ internal sealed class AddTest
         {
             folder.Delete(recursive: true);
         }
+    }
+
+    /// <summary>
+    /// Verifies placeholder template specializations are omitted while fixed specializations remain generatable.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_generate_only_fixed_template_specializations_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename T = void>
+            struct Traverse
+            {
+            };
+
+            struct Owner
+            {
+                Traverse<> Placeholder;
+                Traverse<int> Fixed;
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var specializations = owner.Fields
+            .Select(static field => field.Type.AsCXXRecordDecl?.Definition)
+            .OfType<CXXRecordDecl>()
+            .ToArray();
+        var manager = CreateManager();
+
+        foreach (var specialization in specializations)
+        {
+            manager.Add(specialization);
+        }
+
+        await Assert.That(manager.RecordModels.Select(static record => record.Type.CppTypeName))
+            .IsEquivalentTo(["Traverse<int>",]);
     }
 
     /// <summary>
@@ -617,6 +909,24 @@ internal sealed class AddTest
             {
                 TransientDerived();
             };
+
+            template<typename T>
+            struct TransientTemplate
+            {
+            private:
+                struct Base : Standard_Transient
+                {
+                };
+
+            public:
+                struct Static : Base
+                {
+                };
+            };
+
+            struct NestedTransientDerived : TransientTemplate<int>::Static
+            {
+            };
             """, "__occt__/test.cpp");
 
         var heapOnlyRecord = translationUnit.TranslationUnitDecl.CursorChildren
@@ -625,14 +935,19 @@ internal sealed class AddTest
         var transientRecord = translationUnit.TranslationUnitDecl.CursorChildren
             .OfType<CXXRecordDecl>()
             .Single(static r => r.Name == "TransientDerived");
+        var nestedTransientRecord = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static r => r.Name == "NestedTransientDerived");
 
         var manager = CreateManager();
 
         var heapOnlyModel = manager.Add(heapOnlyRecord);
         var transientModel = manager.Add(transientRecord);
+        var nestedTransientModel = manager.Add(nestedTransientRecord);
 
         await Assert.That(heapOnlyModel.IsStandardTransient).IsFalse();
         await Assert.That(transientModel.IsStandardTransient).IsTrue();
+        await Assert.That(nestedTransientModel.IsStandardTransient).IsTrue();
     }
 
     private static RecordModelManager CreateManager()

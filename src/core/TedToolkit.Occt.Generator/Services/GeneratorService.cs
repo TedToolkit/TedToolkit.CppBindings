@@ -28,9 +28,11 @@ internal sealed class GeneratorService(
     }
 
     /// <inheritdoc/>
-    public IGenerator GenerateCSharp(RecordModel record)
+    public IGenerator GenerateCSharp(
+        RecordModel record,
+        IReadOnlyDictionary<string, RecordModel>? recordCatalog = null)
     {
-        return new CSharpGenerator(record, generationOptions);
+        return new CSharpGenerator(record, generationOptions, recordCatalog);
     }
 
     /// <inheritdoc/>

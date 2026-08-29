@@ -23,10 +23,10 @@ namespace TedToolkit.Occt;
 /// access with disposal. The native module containing the release function must remain loaded until
 /// this owner is disposed or finalized.
 /// </remarks>
-public sealed unsafe class Handle<T> : IDisposable
+public sealed unsafe class Handle<T> : IDisposable, IOcctOwner<T>
     where T : unmanaged, IStandard_Transient
 {
-    private readonly delegate* unmanaged[Cdecl]<T*, void> _release;
+    private readonly nint _release;
 
     private nint _value;
 
@@ -52,7 +52,7 @@ public sealed unsafe class Handle<T> : IDisposable
         ArgumentNullException.ThrowIfNull(release);
 
         _value = (nint)value;
-        _release = release;
+        _release = (nint)release;
     }
 
     /// <summary>
@@ -115,6 +115,6 @@ public sealed unsafe class Handle<T> : IDisposable
             return;
         }
 
-        _release((T*)value);
+        NativeCleanup.Invoke(_release, value);
     }
 }

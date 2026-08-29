@@ -26,6 +26,16 @@ internal sealed class FieldModel
     public required long Offset { get; init; }
 
     /// <summary>
+    /// Gets the native field size in bytes.
+    /// </summary>
+    public required long Size { get; init; }
+
+    /// <summary>
+    /// Gets the native field alignment in bytes.
+    /// </summary>
+    public required long Alignment { get; init; }
+
+    /// <summary>
     /// Gets the generated field name.
     /// </summary>
     public required string Name { get; init; }

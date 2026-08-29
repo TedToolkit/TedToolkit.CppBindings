@@ -6,6 +6,8 @@
   diagnostics, and packaging for generated OCCT bindings.
 - Applicable product intent: None
 - Governing principles: [Repository design principles](../principles/README.md)
+- Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
+- Related ADR: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md)
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26.
 
 ## Current architecture
@@ -39,27 +41,27 @@ and verifies the emitted native project.
 Every declaration-specific artifact derives from the completed Model, including layouts,
 ownership categories and operation lifetime flows, managed representation and API, imports and
 invocation glue, deterministic function-table slot identities, C declarations, C++ adapters,
-construction and cleanup paths, manifests,
-fingerprints, and native build descriptions. ABI-v1 and any other legacy boundary are never Model
+construction and cleanup paths, required-export tables, and native build descriptions. ABI-v1 and
+any other legacy boundary are never Model
 inputs, comparison authorities, fallbacks, or compatibility targets. A legacy boundary may remain
 physically present only as an inactive migration recovery artifact until the generated replacement
 passes, after which current source, build, fixtures, output, and documentation remove it.
 
 `TedToolkit.Occt.Runtime` contains only handwritten, declaration-agnostic managed mechanisms.
 Concrete OCCT layouts, imports, exports, function tables, operation bodies, closed-generic
-registrations, release functions, and expected native fingerprints belong to generated wrapper assemblies such as
+registrations, and release functions belong to generated wrapper assemblies such as
 `TedToolkit.Occt.Windows`. A wrapper uses Runtime's ordinary public API. Runtime grants no wrapper
 friend access, caller identity privilege, `InternalsVisibleTo`, or Windows-specific capability.
 
-### Native boundary and exact matching
+### Native boundary and generated loading
 
-Generated exports use C linkage, C11-compatible declarations, and `cdecl`. C++ types, references,
-templates, exceptions, and allocator obligations never appear directly in the C declaration
-surface. Every generated callable OCCT operation export uses `cdecl` and returns the private
-C-compatible native error carrier by value, including operations whose source C++ declaration is
-`noexcept`. A non-`void` source return is written to a required result output slot; a source `void`
-operation has no result slot. The adapter itself is non-throwing, validates its transports, catches
-every native exception, and returns either success or managed-projectable failure data.
+Generated exports use C linkage and `cdecl`. C++ references are transported as pointers, record
+values are placement-constructed in caller-provided storage, and no exception crosses the export
+boundary. An operation that may throw receives a final `NativeError*` output, catches OCCT,
+standard-library, allocation, and unknown failures, and leaves diagnostics owned by the native
+module. A source operation proved `noexcept` keeps the shorter signature and does not pay for an
+error carrier. The generated type-independent `NativeError.h` and `NativeError.cpp` provide only
+the shared carrier, diagnostic copying, and cleanup; they contain no declaration-specific catalog.
 
 Release and cleanup exports are the deliberate exception to the error-return rule. Handle
 intrusive-reference release, Owned destruction, native error clearing, and any other same-library
@@ -75,14 +77,13 @@ changes that call shape. Merely exposing a managed generic or accepting another 
 not create a Cartesian product of exports. Base conversion adjusts a pointer into the same proved
 native object storage; it does not copy fields or map the object into another representation.
 
-The native and managed outputs form one unversioned, inseparable artifact set. A generated
-fingerprint records every layout- and lifetime-relevant input, including OCCT input identity,
-compiler ABI, architecture, packing, closed specialization, native dependency, and cleanup
-contract. Managed initialization rejects a missing or different fingerprint before resolving an
-OCCT operation. After equality, the generated binding resolves every required operation and cleanup
-export into a private static managed `IntPtr[]`, validates the complete table, and publishes it
-once. No generated call observes a partially initialized table. The boundary does not promise
-independent native upgrades or major/minor ABI compatibility.
+The native and managed outputs form one unversioned, inseparable artifact set produced and packaged
+together. The generated binding loads only its package-owned native module, resolves every required
+operation and cleanup export into a private static managed `IntPtr[]`, validates the complete table,
+and publishes it once. The generated table is the compiled operation inventory; no separate binding
+manifest or fingerprint is required at runtime. No generated call observes a partially initialized
+table. The boundary does not support independent native upgrades, module substitution, or
+major/minor ABI compatibility.
 
 Every native allocation is destroyed and freed by the same native artifact that created it. Owned
 object bytes are the exception: they reside directly in managed storage whose address is stabilized
@@ -93,13 +94,13 @@ managed delegates or declaration-specific Runtime imports. Ordinary generated ca
 deterministic slot from the generated table and cast it to the exact unmanaged Cdecl signature.
 When a factory creates `Handle<T>` or `Owned<T>`, it copies the exact release or destructor address
 from its slot into the owner; disposal and finalization do not look up mutable global state. After
-exact-match initialization, the generated binding keeps its native module and table available until
+initialization, the generated binding keeps its native module and table available until
 process termination.
 Module unloading is unsupported, and individual owners neither acquire nor release module leases.
 Runtime owner constructors validate only the pointer and function inputs they receive; they cannot
-authenticate a cleanup function's module origin from its address. The generated exact-match
-initializer and factory are therefore responsible for supplying cleanup pointers only from the
-validated process-lifetime table.
+authenticate a cleanup function's module origin from its address. The generated loader and factory
+are therefore responsible for supplying cleanup pointers only from the package-owned
+process-lifetime table.
 
 ### Managed object model
 
@@ -115,6 +116,19 @@ values, `Handle<T>` for transient objects, and `Owned<T>` for non-transient RAII
 layout structs contain representation only and never implement `IDisposable` or declare lifetime
 operations.
 
+The Model records every direct base relation and classifies its pointer conversion once. A sole,
+non-virtual direct base under the pinned Windows/MSVC ABI is `Identity` and uses a managed pointer
+reinterpretation. Multiple inheritance, virtual inheritance, and any unproved relation are
+`NativeAdjust` and use one generated C++ adjustment operation for the required derived/base pair.
+Methods are emitted once for their declaring type; derived types reuse base extensions through
+interface constraints instead of receiving duplicate native exports.
+
+The generic receiver exists only for a declaring type with generated derived records. Types with no
+inheritance reuse surface keep their concrete receiver, so ordinary value types such as `gp_XYZ`
+do not expose `TReceiver`. In the inheritance case, C# does not permit an `in TReceiver` extension
+receiver; generated const operations therefore use `ref TReceiver` to avoid a value copy while the
+native call remains const.
+
 Generated public managed operations preserve the recognizable source C++ operation shape: operation
 name, static or instance role, parameter order and meaning, const or mutable receiver semantics,
 and projected business return type. Interop-only details do not appear in that public shape. In
@@ -123,6 +137,20 @@ details, while C++ object parameters and returns use their approved exact-layout
 `Handle<T>`, or `Owned<T>` projection. Generic object operations constrain `T` with `unmanaged` and
 the generated inheritance or lifetime interface required by the source declaration, so invocation
 does not box or copy an object merely to satisfy a base operation.
+
+Each native record is emitted into one C++ source and each managed record into one C# source. Native
+exports have C linkage and no C++ namespace. Names use `Type_Operation`; same-name overloads receive
+one-based suffixes in header declaration order. Parameters and results cross the boundary only as
+approved scalar values or pointers: C++ references are reconstructed inside the adapter, record
+results use caller-provided storage, transient construction returns one retained pointer, and
+non-transient construction placement-constructs caller-provided storage.
+
+After parsing and before either emitter runs, a compiler-probe module generates, compiles, and runs
+one temporary C++ executable over the selected record graph. It reports `sizeof`, `alignof`,
+`std::is_trivially_copyable`, and `std::is_trivially_destructible` for every record. The Model
+rejects missing, malformed, duplicate, or size-disagreeing results, then classifies each record as
+Value, Owned, or Handle. The temporary source and executable are removed after collection; callers
+provide no trait configuration.
 
 The ownership categories are:
 
@@ -152,9 +180,9 @@ The ownership categories are:
   backing storage. A distinct object is
   created only through an explicit generated clone or copy operation. Its public `ref T Value` is
   the same simple non-owning data view: it throws when the owner is already disposed, does not
-  extend lifetime, and must not overlap disposal. `Owned<T>` and `Handle<T>` have no public common
-  owner base, inheritance, or conversion. Shared declaration-agnostic lifetime machinery may remain
-  private to Runtime.
+  extend lifetime, and must not overlap disposal. `Owned<T>` and `Handle<T>` both implement
+  `IOcctOwner<T>`, which exposes only that `ref T Value` access for generated invocation. They have
+  no ownership inheritance or conversion, and the interface defines no cleanup semantics.
 
 Model normalization assigns exactly one of those three categories before any emitter runs. A
 proved `Standard_Transient` descendant is eligible for `Handle<T>` only when its complete intrusive
@@ -176,6 +204,29 @@ value, `ref T` view, or already-approved low-level native-pointer boundary. They
 managed object per native pointer, iterator, or subobject. The Runtime Analyzer reports supported
 suspicious lifetime patterns, but it is suppressible and incomplete; callers remain responsible
 for keeping the native owner live and for avoiding use-after-free or native invalidation.
+
+A C++ `const T&` result is projected as `ref readonly T`; a C++ `T&` result is projected as
+`ref T`. The generator never replaces either result with a hidden copy, clone, retain, allocation,
+`Owned<T>`, or `Handle<T>`. Such a replacement would change native semantics and make a policy
+decision for the consumer. The returned reference retains the C++ owner-lifetime and invalidation
+requirements, which generated API documentation must state explicitly.
+
+OCCT smart-pointer storage has two distinct managed projections. Lowercase `handle<T>` is a
+pointer-sized exact-layout struct with one private `T*` field and a non-owning `ref T Value` view;
+it exposes no raw pointer, construction, conversion, retention, release, or disposal API.
+C++ `const opencascade::handle<T>&` and
+`opencascade::handle<T>&` therefore become `ref readonly handle<T>` and `ref handle<T>`.
+Uppercase `Handle<T>` remains the managed owner of one intrusive reference received from an owning
+native result. An `opencascade::handle<T>` returned by value therefore becomes `Handle<T>`, while
+the lowercase type remains the representation for fields, parameters, and borrowed references.
+The compiler probe proves the native handle specialization has pointer size and alignment before
+generated code relies on the lowercase layout.
+
+Each applicable transient operation is generated as two direct extension overloads: one accepts
+`IOcctOwner<T>` and therefore supports owning `Handle<T>` or `Owned<T>`, and one accepts borrowed
+`in handle<T>`. Both call the same generated `NativeApi` slot directly; no generated `Core`
+forwarding method is emitted. The owner overload performs the required `GC.KeepAlive`, while the
+borrowed overload introduces no ownership, boxing, retention, or allocation.
 
 `Owned<T>` has no public construction-completion state or method. Its only declared public members
 are the generated-only
@@ -203,11 +254,12 @@ is rejected before callable binding emission; the generator does not silently se
 storage allocation or allow a possibly misaligned native call.
 
 Generated operations obtain every owner-derived pointer inside a lexical `fixed` scope over
-`owner.Value` and keep that pointer inside the scope. For `Owned<T>`, the scope pins its managed
-backing storage for the native call; for `Handle<T>`, it provides the same generated syntax over an
-already-stable native address. Generated code does not call `Unsafe.AsPointer`, expose another
-pointer member, or introduce a common owner interface. Immediately after each finalizable owner's
-last unmanaged use, and before managed error projection can throw, generated code calls
+`owner.Value` through `IOcctOwner<T>` and keep that pointer inside the scope. For `Owned<T>`, the
+scope pins its managed backing storage for the native call; for `Handle<T>`, it provides the same
+generated syntax over an already-stable native address. Generated code does not call
+`Unsafe.AsPointer` or expose another
+pointer member. Immediately after each finalizable owner's last unmanaged use, and before managed
+error projection can throw, generated code calls
 `GC.KeepAlive(owner)`. The `fixed` scope and `GC.KeepAlive` have separate responsibilities: the
 former stabilizes the referenced storage for the pointer use, while the latter prevents premature
 owner finalization. Neither synchronizes nor makes explicit concurrent `Dispose()` safe. Direct
@@ -288,8 +340,8 @@ generated and proved platform binding artifact; replacing only the native asset 
   return and transport its source result through a result slot; keep release and cleanup exports
   non-throwing `void` functions.
 - Derive one deterministic generated function-table slot for every required operation and cleanup
-  export. Resolve only the fixed fingerprint bootstrap before exact-match equality; afterward,
-  validate all required exports privately and publish one complete static managed table.
+  export. Load the package-owned module, validate all required exports privately, and publish one
+  complete static managed table. Do not emit a separate binding manifest or fingerprint protocol.
 - Invoke ordinary generated operations through their exact typed table slots. Copy release and
   destructor pointers into finalizable owners at construction; never make Runtime owners retain a
   table, index a mutable global table during cleanup, or depend on generated table types.
@@ -313,9 +365,11 @@ generated and proved platform binding artifact; replacing only the native asset 
   wrapper allocation solely to guard native pointers, references, iterators, or subobjects against
   use-after-free. Preserve the applicable direct C++-like value, `ref T`, or approved low-level
   pointer surface and leave its lifetime obligations with the caller.
+- Preserve reference-return semantics exactly: `const T&` becomes `ref readonly T` and `T&`
+  becomes `ref T`. Do not insert an implicit copy, clone, retain, allocation, or ownership wrapper.
 - Generate owner pointer use with a lexical `fixed` scope over `owner.Value`. Keep every derived
   pointer inside that scope; do not call `Unsafe.AsPointer` or introduce a generated-only pointer
-  method, static pointer gateway, or common owner interface.
+  method or static pointer gateway. Use the value-only `IOcctOwner<T>` interface for owner receivers.
 - Keep each finalizable owner alive through every generated unmanaged use with `GC.KeepAlive`
   immediately after that owner's last such use and before error projection. Do not treat `fixed` as
   a substitute for owner liveness or claim either mechanism protects against explicit concurrent

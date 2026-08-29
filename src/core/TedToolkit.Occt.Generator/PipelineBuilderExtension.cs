@@ -41,6 +41,7 @@ public static class PipelineBuilderExtension
         builder.Services
             .AddSingleton<IVcpkgDefaultTripletResolver, VcpkgDefaultTripletResolver>()
             .AddSingleton<IVcpkgEnvironment, VcpkgEnvironment>()
+            .AddSingleton<ITypeRule, HandleTypeRule>()
             .AddSingleton<ITypeRule, Utf8StringTypeRule>()
             .AddSingleton<IResolver, Resolver>()
             .AddSingleton<IGenerationOutputCleaner, GenerationOutputCleaner>()
@@ -51,6 +52,12 @@ public static class PipelineBuilderExtension
                     sp.GetRequiredService<IGenerationOutputCleaner>()))
             .AddModule<ParseModule>(sp =>
                 new ParseModule(
+                    sp.GetRequiredService<IRecordModelManager>(),
+                    sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>(),
+                    sp.GetRequiredService<IVcpkgDefaultTripletResolver>(),
+                    sp.GetRequiredService<IVcpkgEnvironment>()))
+            .AddModule<CompilerProbeModule>(sp =>
+                new CompilerProbeModule(
                     sp.GetRequiredService<IRecordModelManager>(),
                     sp.GetRequiredService<Microsoft.Extensions.Options.IOptions<GenerationOptions>>(),
                     sp.GetRequiredService<IVcpkgDefaultTripletResolver>(),

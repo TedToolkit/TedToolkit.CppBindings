@@ -26,8 +26,9 @@ internal interface IGeneratorService
     /// Creates a C# generator for the specified record.
     /// </summary>
     /// <param name="record">The record declaration.</param>
+    /// <param name="recordCatalog">The completed record models used to classify record results.</param>
     /// <returns>The generator instance.</returns>
-    IGenerator GenerateCSharp(RecordModel record);
+    IGenerator GenerateCSharp(RecordModel record, IReadOnlyDictionary<string, RecordModel>? recordCatalog = null);
 
     /// <summary>
     /// Creates a C# generator for the specified enum.

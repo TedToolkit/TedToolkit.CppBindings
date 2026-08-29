@@ -6,6 +6,8 @@
 // -----------------------------------------------------------------------
 
 using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
 
 using TedToolkit.Occt;
 
@@ -16,6 +18,32 @@ namespace TedToolkit.Occt.Runtime.Tests.HandleTests;
 /// </summary>
 internal sealed class PublicSurfaceTests
 {
+    /// <summary>
+    /// Verifies that lowercase handle is a pointer-sized non-owning native layout view.
+    /// </summary>
+    /// <returns>A task that completes when the public-surface assertions finish.</returns>
+    [Test]
+    public async Task Should_expose_pointer_sized_non_owning_handle_value_Async()
+    {
+        var handleType = typeof(handle<TestTransient>);
+        var field = handleType.GetFields(BindingFlags.Instance | BindingFlags.NonPublic).Single();
+        var value = handleType.GetProperty(nameof(handle<TestTransient>.Value));
+
+        await Assert.That(handleType.IsValueType).IsTrue();
+        await Assert.That(handleType.IsByRefLike).IsFalse();
+        await Assert.That(typeof(IDisposable).IsAssignableFrom(handleType)).IsFalse();
+        await Assert.That(handleType.StructLayoutAttribute?.Value).IsEqualTo(LayoutKind.Sequential);
+        await Assert.That(Unsafe.SizeOf<handle<TestTransient>>()).IsEqualTo(IntPtr.Size);
+        await Assert.That(RuntimeHelpers.IsReferenceOrContainsReferences<handle<TestTransient>>()).IsFalse();
+        await Assert.That(field.FieldType.IsPointer).IsTrue();
+        await Assert.That(field.FieldType.GetElementType()).IsEqualTo(typeof(TestTransient));
+        await Assert.That(value).IsNotNull();
+        await Assert.That(value!.PropertyType).IsEqualTo(typeof(TestTransient).MakeByRefType());
+        await Assert.That(handleType.GetMethods(
+                BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly)
+            .Select(static method => method.Name)).IsEquivalentTo(["get_Value",]);
+    }
+
     /// <summary>
     /// Verifies that Handle exposes only the approved public construction, value, and disposal surface.
     /// </summary>
@@ -37,7 +65,8 @@ internal sealed class PublicSurfaceTests
 
         await Assert.That(handleDefinition.IsClass).IsTrue();
         await Assert.That(handleDefinition.IsSealed).IsTrue();
-        await Assert.That(typeof(IDisposable).IsAssignableFrom(handleDefinition)).IsTrue();
+        await Assert.That(handleType.GetInterfaces())
+            .IsEquivalentTo([typeof(IDisposable), typeof(IOcctOwner<TestTransient>),]);
         await Assert.That(genericParameter.GenericParameterAttributes & GenericParameterAttributes.VarianceMask)
             .IsEqualTo(GenericParameterAttributes.None);
         await Assert.That(genericParameter.GenericParameterAttributes & GenericParameterAttributes.NotNullableValueTypeConstraint)
@@ -64,6 +93,8 @@ internal sealed class PublicSurfaceTests
                 BindingFlags.Instance | BindingFlags.Static | BindingFlags.Public | BindingFlags.DeclaredOnly))
             .IsEmpty();
         await Assert.That(typeof(IStandard_Transient).GetMembers()).IsEmpty();
+        await Assert.That(typeof(IOcctOwner<TestTransient>).GetProperties().Single().PropertyType)
+            .IsEqualTo(typeof(TestTransient).MakeByRefType());
     }
 
     private struct TestTransient : IStandard_Transient;

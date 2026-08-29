@@ -17,6 +17,28 @@ dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Gener
 - Write repository documentation, architecture records, change records, and new code comments in
   English.
 
+## Preserve native semantics
+
+- Generated bindings describe the capability and semantics of the C++ API; they do not make policy
+  decisions for consumers.
+- Preserve C++ reference returns directly: generate `ref readonly T` for `const T&` and `ref T` for
+  `T&`.
+- Never turn a borrowed reference return into an implicit value copy, `Owned<T>`, `Handle<T>`, clone,
+  retain, or allocation. Copying or ownership changes require an explicit native operation chosen
+  by the consumer.
+- Document that returned references remain subject to the original C++ owner lifetime and
+  invalidation rules; do not hide that obligation behind generated safety machinery.
+- Project `opencascade::handle<T>` storage as the pointer-sized, non-owning lowercase `handle<T>`
+  layout. Keep it distinct from uppercase `Handle<T>`, which owns and releases one intrusive
+  reference.
+- Keep lowercase `handle<T>` minimal: one private `T*` field and one public non-owning `ref T Value`
+  property only. Expose no raw pointer, constructor, conversion, retain, release, or disposal API.
+- Project an `opencascade::handle<T>` returned by value as owning uppercase `Handle<T>`; preserve
+  lowercase `handle<T>` for fields, parameters, and borrowed references.
+- Generate separate direct extension overloads for `Handle<T>` and `in handle<T>` receivers. Both
+  call the same `NativeApi` slot; do not add a common public handle interface or a generated Core
+  forwarding method. Apply owner liveness only to the uppercase overload.
+
 ## Change record retention
 
 - Keep `docs/changes/` for active delivery records only.

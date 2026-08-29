@@ -48,7 +48,8 @@ internal sealed class PublicSurfaceTests
 
         await Assert.That(ownedDefinition.IsClass).IsTrue();
         await Assert.That(ownedDefinition.IsSealed).IsTrue();
-        await Assert.That(ownedDefinition.GetInterfaces()).IsEquivalentTo([typeof(IDisposable),]);
+        await Assert.That(ownedType.GetInterfaces())
+            .IsEquivalentTo([typeof(IDisposable), typeof(IOcctOwner<TCollection_TestRaii>),]);
         await Assert.That(genericParameterAttributes)
             .IsEqualTo(
                 GenericParameterAttributes.NotNullableValueTypeConstraint
@@ -80,6 +81,8 @@ internal sealed class PublicSurfaceTests
             .IsEmpty();
         await Assert.That(ownedType.BaseType).IsEqualTo(typeof(object));
         await Assert.That(typeof(IOcctRaii).GetMembers()).IsEmpty();
+        await Assert.That(typeof(IOcctOwner<TCollection_TestRaii>).GetProperties().Single().PropertyType)
+            .IsEqualTo(typeof(TCollection_TestRaii).MakeByRefType());
     }
 
     /// <summary>

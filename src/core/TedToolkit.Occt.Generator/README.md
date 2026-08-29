@@ -61,7 +61,7 @@ The primary `GenerationOptions` values are:
 | `DeclOptions` | Entry records such as `Geom2d_BSplineCurve`. |
 | `CSharpFolder` | Generated C# source directory. |
 | `CppFolder` | Generated per-record C++ invocation sources. |
-| `NativeLibraryBaseName` | Reserved portable native artifact basename for the incomplete generated native-project stage. |
+| `NativeLibraryBaseName` | Native artifact basename used by the generated CMake project and managed loader. |
 | `Triplet` | Explicit vcpkg triplet; automatically selected when omitted. |
 | `CppVersion` | C++ standard passed to Clang and CMake; defaults to 17. |
 | `CommandLineArgs` | Additional Clang parse arguments. |
@@ -69,10 +69,8 @@ The primary `GenerationOptions` values are:
 | `IsInternal` | Selects internal visibility for generated C# types. |
 | `GetFieldOffsetByRunning` | Exposed layout option; the current model still reads size and offsets from libclang. |
 
-The accepted target also adds the validated `CSharpNamespace` option, with `TedToolkit.Occt` as the
-default namespace of the planned `TedToolkit.Occt.Windows` package. That option is not yet
-implemented end to end. It must apply to every generated C# artifact without changing package,
-assembly, canonical C++, or native export identity.
+`CSharpNamespace` defaults to `TedToolkit.Occt` and applies to every generated C# artifact without
+changing package, assembly, canonical C++, or native export identity.
 
 ## Generation pipeline
 
@@ -201,7 +199,9 @@ The accepted replacement must instead generate every supported object as an unma
 struct, calculate explicit private padding and aligned opaque storage from compiler layout data,
 emit no `FieldOffsetAttribute` or managed `BaseType`, prove managed/native size and alignment, and
 fail closed when the pinned CLR cannot reproduce a native layout. C++ templates use one C# generic
-struct only when one physical graph proves every registered closed specialization.
+struct only when one physical graph proves every registered closed specialization. A template that
+uses `void` as a dependent implementation placeholder is not emitted as an open generic type; only
+its usable closed specializations are emitted, using underscore-expanded fixed type names.
 
 ## 输出目录
 
@@ -222,26 +222,59 @@ the same case-insensitive path fail before materialization.
 
 ## Known limitations
 
-- Recursive managed-model discovery may still encounter STL and compiler implementation types;
-  incomplete declarations are excluded, while supported interop projections still need explicit
-  transport and lifetime rules.
-- Generated C11 declarations/exports, CMake/native-library materialization, managed imports, and
-  public invocation bodies remain incomplete.
-- Configurable C# root namespace and optional post-emission native compilation remain incomplete.
-- The minimal ABI-major-1 native/PInvoke fixture is migration proof only and is not a production
-  generation input.
-- The C# record-generation condition still needs correction; non-abstract records currently do not generate structs.
-- Explicit-layout `[FieldOffset]` output remains migration debt and must be replaced by the
-  sequential physical-segment generator before a supported package baseline.
-- The P/Invoke invocation layer is incomplete.
-- The repository has no vcpkg manifest, so builds depend on a machine-level OCCT installation.
-- `GetFieldOffsetByRunning` does not yet replace the current libclang-based layout lookup.
+The generator fails closed when it cannot preserve native layout, ownership, or lifetime semantics.
+Unsupported input is handled at the narrowest safe boundary: a broken header excludes that header
+and its transitive dependants, while an unsupported method signature excludes only that method.
+
+### Excluded headers
+
+All-public-header generation excludes:
+
+- A header whose quoted OCCT include dependency is absent from the installed package, plus every
+  public header that transitively depends on it. Known missing installed files currently include
+  `BOPDS_ListOfPaveBlock.hxx` and `GeomBndLib_InfiniteHelpers.pxx`.
+- `MathLin_Jacobi.hxx`, because the installed declaration refers to the nonexistent
+  `EigenResult.NbIterations` member and cannot form a valid translation unit.
+- `OpenGl_GLESExtensions.hxx`, because its GLES declarations conflict with the desktop OpenGL
+  declarations in the all-header translation unit.
+
+The complete, deterministic header exclusion set is written to
+`output/generated/unsupported-headers.txt` on every all-public-header run. The generator does not
+create replacement OCCT headers or patch the installed package.
+
+### Excluded declarations and methods
+
+- Private, protected, unnamed, incomplete, deleted, unavailable, and invalid declarations are not
+  emitted as public binding types or methods. Public nested types remain supported.
+- C++ templates, standard-library types, smart pointers, and stream-related APIs are support
+  candidates. The generator must first attempt generic modeling and closed-specialization proof;
+  their category alone is not a valid exclusion reason. A concrete operation is excluded only when
+  its layout, transport, invocation, or lifetime semantics cannot be preserved.
+- Shared stream types and `NCollection_Handle<T>` follow that same admission path. They are not
+  denylisted. Generate every closed specialization whose native layout, invocation, borrowing, and
+  ownership behavior can be preserved. In particular, an `NCollection_Handle<T>` adapter must
+  retain and release its actual private `Standard_Transient` owner rather than substituting the
+  pointer returned by `get()`. If one concrete specialization or operation cannot satisfy that
+  proof, report and exclude only that boundary.
+
+The following callable categories also remain unsupported:
+
+- `operator()`, assignment operators, and custom `operator new/delete`;
+- abstract-type constructors and destructors;
+- constructors of nontrivial types that have no callable native destructor; such values cannot be
+  returned as `Owned<T>` safely;
+- parameters requiring an unavailable native copy constructor;
+- handle targets that remain forward-declared and have no complete definition;
+- builtin Clang types for which no stable C# ABI projection exists.
+
+Only the proved Windows x64 OCCT installation and matching MSVC ABI are currently targeted. The
+repository has no vcpkg manifest, so builds depend on a machine-level OCCT installation.
 
 ## 开发与验证
 
 The verified native boundary baseline is Windows x64 with CMake 3.28 or newer, Ninja, `clang-cl` targeting the MSVC ABI, and vcpkg `x64-windows` with OCCT 8.0.1. Supply the following environment and ensure Ninja and `clang-cl` are available on `PATH`:
 
-This matrix is the initial target of the planned `TedToolkit.Occt.Windows` package. The Windows
+This matrix is the initial target of the `TedToolkit.Occt.Windows` package. The Windows
 family name does not imply `win-arm64` or another compiler ABI; each additional matrix requires
 independent exact-layout proof and package architecture review.
 

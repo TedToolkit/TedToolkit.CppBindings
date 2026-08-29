@@ -32,6 +32,11 @@ public sealed record GenerationOptions()
     public required IReadOnlyList<DeclOptions> DeclOptions { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether every public OCCT header and record should be generated.
+    /// </summary>
+    public bool GenerateAllPublicHeaders { get; init; }
+
+    /// <summary>
     /// Gets the extra command-line arguments passed to clang.
     /// </summary>
     public IReadOnlyList<string> CommandLineArgs { get; init; } = [];

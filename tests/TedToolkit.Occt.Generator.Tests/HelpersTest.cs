@@ -26,6 +26,33 @@ internal sealed class HelpersTest
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
 
     /// <summary>
+    /// Verifies template pointer arguments remain distinct in generated type names.
+    /// </summary>
+    [Test]
+    public async Task Should_preserve_pointer_identity_in_generated_type_names_Async()
+    {
+        await Assert.That("NCollection_Allocator<NCollection_Mat4<float> *>".ToGeneratedTypeName())
+            .IsEqualTo("NCollection_Allocator_NCollection_Mat4_float_Ptr");
+        await Assert.That("NCollection_Allocator<NCollection_Mat4<float>>".ToGeneratedTypeName())
+            .IsEqualTo("NCollection_Allocator_NCollection_Mat4_float");
+    }
+
+    /// <summary>
+    /// Verifies long physical file names are shortened deterministically without changing ordinary names.
+    /// </summary>
+    [Test]
+    public async Task Should_shorten_only_long_generated_file_names_Async()
+    {
+        await Assert.That("gp_Pnt".ToGeneratedFileStem()).IsEqualTo("gp_Pnt");
+
+        var longName = new string('A', 200);
+        var shortened = longName.ToGeneratedFileStem();
+        await Assert.That(shortened.Length).IsEqualTo(120);
+        await Assert.That(shortened).IsEqualTo(longName.ToGeneratedFileStem());
+        await Assert.That(shortened).IsNotEqualTo((longName + "B").ToGeneratedFileStem());
+    }
+
+    /// <summary>
     /// Verifies builtin native types map to the expected managed data types.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -89,6 +116,8 @@ internal sealed class HelpersTest
 
         var intPointerValue = method.Parameters.Single(static p => p.Name == "intPointerValue").Type.ToPInvokeDataType();
         var voidPointerValue = method.Parameters.Single(static p => p.Name == "voidPointerValue").Type.ToPInvokeDataType();
+        var publicVoidPointerValue = method.Parameters.Single(static p => p.Name == "voidPointerValue")
+            .Type.ToPublicDataType();
 
         var lValueReference = method.Parameters.Single(static p => p.Name == "lValueReference").Type.ToPInvokeDataType();
         var rValueReference = method.Parameters.Single(static p => p.Name == "rValueReference").Type.ToPInvokeDataType();
@@ -96,6 +125,7 @@ internal sealed class HelpersTest
 
         await AssertRenderedAsync(intPointerValue, DataType.Int.Pointer).ConfigureAwait(false);
         await AssertRenderedAsync(voidPointerValue, DataType.Void.Pointer).ConfigureAwait(false);
+        await AssertRenderedAsync(publicVoidPointerValue, DataType.Void.Pointer).ConfigureAwait(false);
         await AssertRenderedAsync(lValueReference, new DataType("Geom_Surface").Pointer).ConfigureAwait(false);
         await AssertRenderedAsync(rValueReference, new DataType("Geom_Surface").Pointer).ConfigureAwait(false);
         await AssertRenderedAsync(doublePointerValue, new DataType("Geom_Surface").Pointer.Pointer).ConfigureAwait(false);

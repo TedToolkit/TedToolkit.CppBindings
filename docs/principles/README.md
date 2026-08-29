@@ -18,6 +18,7 @@
 | GEN-02 | Reproduce every supported native object layout exactly | Required | Active | TedToolkit.Occt maintainers | A generated type cannot prove native size, alignment, or physical segment placement for the supported toolchain | This file |
 | GEN-03 | Separate native representation from ownership and behavior | Required | Active | TedToolkit.Occt maintainers | A generated API would place lifetime behavior in a native-layout struct, use a transient handle for a non-transient type, require routine handle operations through `.Value`, or expose instance behavior through a copied native value | This file |
 | GEN-04 | Keep the shared Runtime minimal and declaration-agnostic | Required | Active | TedToolkit.Occt maintainers | Runtime would gain a declaration-specific type, symbol, import, layout, specialization, or generated-set constant | This file |
+| GEN-05 | Support every representable native capability | Required | Active | TedToolkit.Occt maintainers | A declaration is excluded because of its library, template, smart-pointer, stream, or other broad type category | This file |
 
 ## Principles
 
@@ -125,6 +126,13 @@ struct does not contain or expose a managed `BaseType` field. Its storage is der
 compiler-reported layout of the complete C++ object, not by nesting the complete managed projection
 of a base type.
 
+An operation uses its concrete declaring struct as the extension receiver unless that declaring
+type has generated derived records that must reuse the operation. Only that proven inheritance case
+introduces a generic `TReceiver` and pointer adjustment. A standalone value type such as `gp_XYZ`
+therefore keeps concrete `in gp_XYZ` or `ref gp_XYZ` receivers. Because C# rejects `in` on a generic
+extension receiver, inherited generic value operations use `ref TReceiver`; the generated native
+call still preserves the source method's constness and does not copy the receiver.
+
 #### Rationale
 
 An exact in-memory projection permits generated interop to inspect and pass native objects directly
@@ -208,9 +216,10 @@ through the reference-type `Owned<T>`. Native code receives its address only whi
 stabilized by `fixed`. `Owned<T>` invokes deterministic
 same-library destruction but does not use intrusive `Release` and does not ask native code to free
 its managed backing storage. `Owned<T>.Value` provides the same kind of public, non-owning `ref T`
-view as `Handle<T>.Value`; it does not change the object's ownership or lifetime. `Handle<T>` and
-`Owned<T>` have no public inheritance relationship or common public owner base; their different
-native lifetime semantics remain visible in the managed type system.
+view as `Handle<T>.Value`; it does not change the object's ownership or lifetime. Both owners
+implement `IOcctOwner<T>`, whose sole member is `ref T Value`, so generated invocation can share one
+receiver contract. The interface defines no construction, cleanup, disposal, conversion, or
+ownership semantics; intrusive release and direct destruction remain distinct.
 
 Borrowing is an operation-level lifetime fact, not another ownership or public representation
 category. A non-owning native reference remains a direct, C++-like `ref T` view or an exact native
@@ -296,8 +305,10 @@ the lifetime.
   They therefore hold no per-owner module lease and do not participate in module unloading. Runtime
   validates cleanup pointers and owner state but does not authenticate a function pointer's module
   origin; that guarantee belongs to generated exact-match initialization and factory emission.
-  Runtime may share declaration-agnostic disposed-state and cleanup machinery internally; that
-  reuse is not exposed as public inheritance, conversion, or a common public owner abstraction.
+  Runtime may share declaration-agnostic disposed-state and cleanup machinery internally.
+- `IOcctOwner<T>` is the common generated-invocation boundary for `Handle<T>` and `Owned<T>`. It
+  exposes only non-owning `ref T Value`; it does not inherit `IDisposable` and cannot select or
+  replace either owner's cleanup operation.
 - Assigning a reference-type owner aliases one owner and one disposed state. A distinct native
   object is produced only by an explicit generated clone or copy operation that invokes the mapped
   C++ copy semantics.
@@ -306,10 +317,10 @@ the lifetime.
   value types.
 - Generated instance operations are extension methods on the semantic receiver. A C++ `const`
   value operation receives `this in T`; a mutating value operation receives `this ref T` so the
-  exact-layout struct is neither boxed nor silently copied. Handle operations receive
-  `Handle<T>`, RAII operations receive `Owned<T>`, and static operations and factories remain
-  static. Consumers call `value.Operation()`, `handle.Operation()`, or `owned.Operation()` without
-  reaching through an owner to invoke routine operations on its native-layout value.
+  exact-layout struct is neither boxed nor silently copied. Owner operations receive
+  `IOcctOwner<T>`, while borrowed lowercase-handle overloads, static operations, and factories
+  remain distinct. Consumers call `handle.Operation()` or `owned.Operation()` without reaching
+  through an owner to invoke routine operations on its native-layout value.
 - `Handle<T>.Value` and `Owned<T>.Value` are simple escape hatches for direct field or property data
   access and explicit low-level interop. They are not normal receivers for generated OCCT
   operations, lifetime tokens, or second owners. A returned reference cannot be revoked, does not
@@ -397,6 +408,90 @@ the current architecture before implementation. The update must explain why the 
 the information, how regeneration and version isolation remain complete, and when the exception
 can be removed.
 
+### GEN-05: Support every representable native capability
+
+- Status: Active
+- Strength: Required
+- Scope: Admission and projection of native declarations, C++ templates, standard-library types,
+  smart pointers, streams, and every operation that exposes them.
+- Owner: TedToolkit.Occt maintainers
+- Review trigger: A declaration or operation is excluded because it belongs to a broad type
+  category rather than because its concrete layout, transport, invocation, or lifetime semantics
+  cannot be proved.
+
+#### Default
+
+The Generator supports every native capability that its generic Model and generated adapter
+mechanisms can express without changing native semantics. A type is not unsupported merely because
+it is a C++ template, standard-library type, smart pointer, stream-related type, or an unfamiliar
+closed specialization.
+
+User-selected public headers are generation roots, not a whitelist of top-level output types. The
+Model recursively closes over every record, enum, base, field, parameter, result, and template
+specialization required by those roots. Every representable member of that dependency closure is
+generated. Output filtering by library, namespace, template family, nested-declaration category, or
+whether a type was selected directly is forbidden. The Windows product uses nearly all installed
+OCCT public headers as roots and therefore delivers their complete representable dependency closure.
+
+When one generic physical and behavioral model is valid, generate one C# generic struct and its
+generic operation surface. Every used closed specialization still receives compiler-backed layout,
+ABI, construction, destruction, borrowing, and ownership validation. When one generic managed
+shape cannot represent all specializations, generate separately proved closed projections instead
+of rejecting the entire template category.
+
+A native template declaration that uses `void` as a placeholder for a dependent implementation
+type is not itself a usable generic API and must not be projected as one. Generate only its usable
+closed specializations, using the established underscore-expanded fixed type names that encode the
+concrete template arguments.
+
+Smart pointers and stream-related APIs follow the same rule. They are supported when generated
+native adapters can preserve the exact pointee, control-block or reference-count behavior,
+construction, copying, movement, destruction, and borrowing contract. An exposed inner pointer is
+never substituted for the actual native owner, and managed convenience does not invent ownership
+that the C++ API does not provide.
+
+Shared stream specializations and `NCollection_Handle<T>` are explicitly included in this rule.
+Neither may be denylisted by name or family. The Generator attempts their closed models and native
+adapters first; failure of one concrete semantic or ABI proof excludes only the affected
+specialization or operation and must be reported with that evidence.
+
+#### Rationale
+
+Broad exclusions trade generator simplicity for unnecessary loss of the native API. The Generator
+already owns generic declaration analysis, compiler probing, native adapters, and managed emission;
+those mechanisms should scale to representable template families instead of maintaining a growing
+denylist. Evidence-driven admission preserves API coverage without weakening layout or lifetime
+correctness.
+
+#### Practical implications
+
+- Attempt generic modeling before adding any type-name or library-category exclusion.
+- Treat selected headers as roots and recursively generate their complete representable type
+  dependency closure. Never leave an emitted declaration referring to a type that was filtered out.
+- The Windows package selects nearly all installed OCCT public headers. Header exclusion requires a
+  concrete parse or dependency failure, and declaration exclusion requires a concrete failed
+  semantic or ABI proof at the narrowest affected boundary.
+- `std::pair<TFirst, TSecond>`, shared streams, smart pointers, and `NCollection_Handle<T>` are
+  ordinary support candidates, not predefined unsupported categories.
+- Generate methods and extension methods from the template Model just as for non-template records;
+  do not handwrite per-specialization wrappers.
+- Do not emit open generic projections for `void`-placeholder template declarations. Emit only the
+  concrete closed specializations, with underscore-expanded fixed names.
+- Validate every emitted specialization on the target compiler ABI. Generic source shape does not
+  replace closed-specialization proof.
+- If only one concrete operation cannot preserve layout, transport, invocation, or lifetime
+  semantics, exclude and report that operation at the narrowest boundary; do not discard unrelated
+  methods or the entire template family.
+- Unsupported reports state the failed semantic proof. A broad label such as "STL type",
+  "smart pointer", or "iostream" is not sufficient justification.
+
+#### Exception route
+
+Adding a broad category exclusion requires an accepted ADR demonstrating that the category cannot
+be represented by the common Model or generated adapter architecture. The ADR must identify the
+failed semantic proof, affected API surface, considered generic and closed-specialization designs,
+and an objective condition for revisiting the exclusion.
+
 ## Exception route
 
 A proposed deviation from a Required principle must first update the affected principle and current
@@ -410,4 +505,4 @@ gate are not shipped as supported generated bindings.
   a declaration-specific mapping, a manual generated-source step, a native layout category, or an
   ownership category; a generated binding package changes its platform matrix; or Runtime gains a
   new public mechanism or dependency.
-- Last reviewed: 2026-08-26
+- Last reviewed: 2026-08-28

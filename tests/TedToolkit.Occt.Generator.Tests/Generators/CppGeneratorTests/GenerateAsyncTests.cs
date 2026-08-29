@@ -31,12 +31,19 @@ internal sealed class GenerateAsyncTests
             CSharpPInvokeType = DataType.Double,
             CSharpPublicType = DataType.Double,
         };
+        var intType = new TypeModel()
+        {
+            CppTypeName = "int",
+            CSharpPInvokeType = DataType.Int,
+            CSharpPublicType = DataType.Int,
+        };
         var record = new RecordModel()
         {
             DescriptionItems = [],
-            Base = null,
+            Bases = [],
             IsAbstract = false,
             IsStandardTransient = false,
+            ObjectKind = NativeObjectKind.Value,
             SourceHeader = "gp_Pnt2d.hxx",
             Type = new()
             {
@@ -50,19 +57,84 @@ internal sealed class GenerateAsyncTests
             [
                 CreateMethod(MethodModelType.NEW, "New", doubleType, [CreateParameter("x", doubleType),]),
                 CreateMethod(MethodModelType.NORMAL, "X", doubleType, [], isConst: true),
+                CreateMethod(MethodModelType.NORMAL, "Set", doubleType, [CreateParameter("value", doubleType),]),
+                CreateMethod(MethodModelType.NORMAL, "Set", doubleType, [CreateParameter("value", intType),]),
+                CreateMethod(MethodModelType.NORMAL, "NoThrow", doubleType, [], noExceptions: true),
             ],
         };
+
+        NativeExportNameBuilder.Assign(record);
 
         var source = await new CppGenerator(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(source).Contains("#include <gp_Pnt2d.hxx>");
-        await Assert.That(source).Contains("gp_Pnt2d* create_0(double x)");
-        await Assert.That(source).Contains("return new gp_Pnt2d(x);");
-        await Assert.That(source).Contains("double invoke_1(const gp_Pnt2d& self)");
-        await Assert.That(source).Contains("return self.X();");
+        await Assert.That(source).Contains(
+            "extern \"C\" void gp_Pnt2d_Create(gp_Pnt2d* result, double x, NativeError* __error) noexcept");
+        await Assert.That(source).Contains("::new (result) gp_Pnt2d(x);");
+        await Assert.That(source).Contains(
+            "extern \"C\" double gp_Pnt2d_X(const gp_Pnt2d* self, NativeError* __error) noexcept");
+        await Assert.That(source).Contains("return (self->*static_cast<double (gp_Pnt2d::*)() const>(&gp_Pnt2d::X))();");
+        await Assert.That(source).Contains("catch (const Standard_Failure& exception)");
+        await Assert.That(source).Contains("NativeError_Set(__error, 8");
+        await Assert.That(source).Contains(
+            "extern \"C\" double gp_Pnt2d_NoThrow(gp_Pnt2d* self) noexcept");
+        await Assert.That(source).Contains("gp_Pnt2d_Set_1");
+        await Assert.That(source).Contains("gp_Pnt2d_Set_2");
+        await Assert.That(source).DoesNotContain("gp_Pnt2d_Set_double");
         await Assert.That(source).DoesNotContain("AbiOperationModel");
         await Assert.That(source).DoesNotContain("CSHARP_WRAPPER");
-        await Assert.That(source).DoesNotContain("extern \"C\"");
+        await Assert.That(source).DoesNotContain("namespace ");
+        await Assert.That(source).DoesNotContain("create_0");
+        await Assert.That(source).DoesNotContain("invoke_1");
+    }
+
+    /// <summary>
+    /// Verifies an intrusive handle returned by value is retained after the native call.
+    /// </summary>
+    [Test]
+    public async Task Should_generate_handle_value_return_after_the_parameter_list_Async()
+    {
+        var handleType = new TypeModel()
+        {
+            CppTypeName = "opencascade::handle<Geom_Surface>",
+            CSharpPInvokeType = new("Geom_Surface*"),
+            CSharpPublicType = new("Handle<Geom_Surface>"),
+            IsOcctHandle = true,
+            IsRecord = true,
+            OcctHandleElementCppType = "Geom_Surface",
+            OcctHandleElementType = "Geom_Surface",
+        };
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            Bases = [],
+            IsAbstract = false,
+            IsStandardTransient = false,
+            ObjectKind = NativeObjectKind.Value,
+            SourceHeader = "SurfaceOwner.hxx",
+            Type = new()
+            {
+                CppTypeName = "SurfaceOwner",
+                CSharpPInvokeType = new("SurfaceOwner"),
+                CSharpPublicType = new("SurfaceOwner"),
+            },
+            Size = 8,
+            FieldModels = [],
+            MethodModels =
+            [
+                CreateMethod(MethodModelType.NORMAL, "Surface", handleType, [], isConst: true),
+            ],
+        };
+        NativeExportNameBuilder.Assign(record);
+
+        var source = await new CppGenerator(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(source).Contains(
+            "extern \"C\" Geom_Surface* SurfaceOwner_Surface(const SurfaceOwner* self, NativeError* __error) noexcept");
+        await Assert.That(source).Contains(
+            "auto resultHandle = (self->*static_cast<opencascade::handle<Geom_Surface> (SurfaceOwner::*)() const>(&SurfaceOwner::Surface))();");
+        await Assert.That(source).Contains("auto* result = resultHandle.get();");
+        await Assert.That(source).DoesNotContain("selfauto resultHandle");
     }
 
     private static MethodModel CreateMethod(
@@ -70,13 +142,14 @@ internal sealed class GenerateAsyncTests
         string name,
         TypeModel returnType,
         IReadOnlyList<ParameterModel> parameters,
-        bool isConst = false)
+        bool isConst = false,
+        bool noExceptions = false)
     {
         return new()
         {
             DescriptionItems = [],
             ReturnTypeDescriptionItems = [],
-            NoExceptions = false,
+            NoExceptions = noExceptions,
             IsConst = isConst,
             IsStatic = false,
             ReturnType = returnType,

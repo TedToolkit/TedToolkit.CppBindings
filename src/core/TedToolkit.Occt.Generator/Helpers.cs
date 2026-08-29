@@ -7,6 +7,8 @@
 
 using System.Collections.ObjectModel;
 using System.Runtime.InteropServices;
+using System.Security.Cryptography;
+using System.Text;
 
 using ClangSharp;
 using ClangSharp.Interop;
@@ -23,6 +25,8 @@ namespace TedToolkit.Occt.Generator;
 /// </summary>
 internal static class Helpers
 {
+    private const int MaximumGeneratedFileStemLength = 120;
+
     /// <summary>
     /// Converts a Clang type into its projected public C# data type.
     /// </summary>
@@ -31,6 +35,17 @@ internal static class Helpers
     public static DataType ToPublicDataType(this ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
+
+        if (type.DePointer() is
+            {
+                CanonicalType: BuiltinType
+                {
+                    Kind: CXTypeKind.CXType_Void,
+                },
+            })
+        {
+            return type.ToPInvokeDataType();
+        }
 
         if ((type.DePointer().DeConst() ?? type.DeConst().DePointer()) is { } constPointer)
         {
@@ -105,7 +120,7 @@ internal static class Helpers
             return builtinType.ToDataType();
         }
 
-        return new(type.AsString.ToValidCSharpName());
+        return new(type.AsString.ToGeneratedTypeName());
     }
 
     /// <summary>
@@ -211,6 +226,92 @@ internal static class Helpers
             builder.Append('_');
             last = true;
         }
+    }
+
+    /// <summary>
+    /// Converts a native type spelling into a stable generated type name without losing pointer and reference identity.
+    /// </summary>
+    /// <param name="name">The native type spelling to normalize.</param>
+    /// <returns>The normalized generated type name.</returns>
+    public static string ToGeneratedTypeName(this string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+
+        using var builder = ZString.CreateStringBuilder();
+        var needsSeparator = false;
+        var endsWithUnderscore = false;
+        for (var index = 0; index < name.Length; index++)
+        {
+            var c = name[index];
+            if (char.IsLetterOrDigit(c))
+            {
+                if (builder.Length is 0 && char.IsNumber(c))
+                {
+                    builder.Append('_');
+                }
+
+                if (needsSeparator && builder.Length > 0 && !endsWithUnderscore)
+                {
+                    builder.Append('_');
+                }
+
+                builder.Append(c);
+                needsSeparator = false;
+                endsWithUnderscore = false;
+                continue;
+            }
+
+            var token = c switch
+            {
+                '*' => "Ptr",
+                '&' when index + 1 < name.Length && name[index + 1] == '&' => "RRef",
+                '&' => "Ref",
+                _ => null,
+            };
+
+            if (token is not null)
+            {
+                if (c == '&' && token == "RRef")
+                {
+                    index++;
+                }
+
+                if (builder.Length > 0 && !endsWithUnderscore)
+                {
+                    builder.Append('_');
+                }
+
+                builder.Append(token);
+                needsSeparator = true;
+                endsWithUnderscore = false;
+            }
+            else
+            {
+                needsSeparator = builder.Length > 0;
+            }
+        }
+
+        return builder.ToString();
+    }
+
+    /// <summary>
+    /// Shortens a generated type name only when required for a portable physical file name.
+    /// </summary>
+    /// <param name="name">The generated type name.</param>
+    /// <returns>The original name, or a readable prefix followed by a stable content hash.</returns>
+    public static string ToGeneratedFileStem(this string name)
+    {
+        ArgumentNullException.ThrowIfNull(name);
+        if (name.Length <= MaximumGeneratedFileStemLength)
+        {
+            return name;
+        }
+
+        var hash = Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(name)))[..16];
+        return string.Concat(
+            name.AsSpan(0, MaximumGeneratedFileStemLength - hash.Length - 1),
+            "_",
+            hash);
     }
 
     /// <summary>

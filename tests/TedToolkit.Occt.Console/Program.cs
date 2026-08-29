@@ -41,18 +41,11 @@ var pipeline = await Pipeline.CreateBuilder()
     .AddOcctGenerators(
         new GenerationOptions()
         {
-            DeclOptions =
-            [
-                new("Geom2d_BSplineCurve"),
-            ],
+            DeclOptions = [],
+            GenerateAllPublicHeaders = true,
             CSharpFolder = outputFolder.CreateSubdirectory("csharp"),
             CppFolder = outputFolder.CreateSubdirectory("cpp"),
-            CommandLineArgs = [],
-            FieldTypeToGenerate = field =>
-            {
-                var type = field.Type.CanonicalType;
-                return !type.AsString.Contains("std::", StringComparison.Ordinal);
-            },
+            CommandLineArgs = ["-w",],
         }).BuildAsync().ConfigureAwait(false);
 
 await pipeline

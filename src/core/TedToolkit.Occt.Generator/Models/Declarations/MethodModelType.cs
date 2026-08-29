@@ -41,4 +41,14 @@ internal enum MethodModelType
     /// Represents an explicit conversion operator.
     /// </summary>
     EXPLICIT = 5,
+
+    /// <summary>
+    /// Represents direct destruction of an object returned with value ownership.
+    /// </summary>
+    VALUE_DELETE = 6,
+
+    /// <summary>
+    /// Represents release of one intrusive reference owned by an OCCT handle.
+    /// </summary>
+    HANDLE_RELEASE = 7,
 }

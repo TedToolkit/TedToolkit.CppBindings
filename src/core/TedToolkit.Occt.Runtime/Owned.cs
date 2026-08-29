@@ -13,7 +13,7 @@ using TedToolkit.Occt.Runtime;
 namespace TedToolkit.Occt;
 
 /// <summary>
-/// Represents the managed owner of one non-transient OCCT object with native RAII state.
+/// Represents the managed owner of one OCCT object returned with value ownership.
 /// </summary>
 /// <typeparam name="T">The exact-layout unmanaged RAII projection contained by this owner.</typeparam>
 /// <remarks>
@@ -21,10 +21,10 @@ namespace TedToolkit.Occt;
 /// field by generated code. Assigning this reference type aliases the same owner and disposal state.
 /// <see cref="Value"/> is non-owning and must not be used after or concurrently with disposal.
 /// </remarks>
-public sealed unsafe class Owned<T> : IDisposable
+public sealed unsafe class Owned<T> : IDisposable, IOcctOwner<T>
     where T : unmanaged, IOcctRaii
 {
-    private readonly delegate* unmanaged[Cdecl]<T*, void> _destroy;
+    private readonly nint _destroy;
 
     private T _value;
 
@@ -48,7 +48,7 @@ public sealed unsafe class Owned<T> : IDisposable
     public Owned(delegate* unmanaged[Cdecl]<T*, void> destroy)
     {
         ArgumentNullException.ThrowIfNull(destroy);
-        _destroy = destroy;
+        _destroy = (nint)destroy;
     }
 
     /// <summary>
@@ -106,14 +106,14 @@ public sealed unsafe class Owned<T> : IDisposable
     [MethodImpl(MethodImplOptions.AggressiveInlining)]
     private void Destroy()
     {
-        if ((nint)_destroy == 0 || Interlocked.Exchange(ref _disposed, 1) != 0)
+        if (_destroy == 0 || Interlocked.Exchange(ref _disposed, 1) != 0)
         {
             return;
         }
 
         fixed (T* value = &_value)
         {
-            _destroy(value);
+            NativeCleanup.Invoke(_destroy, (nint)value);
         }
     }
 }

@@ -1,4 +1,4 @@
-# ADR-001: Resolve and Cache Native Owner Exports
+# ADR-001: Load and Cache Generated Native Exports
 
 - Status: Accepted
 - Date: 2026-08-26
@@ -9,13 +9,15 @@
 - Applicable principles: [GEN-01 through GEN-04](../../principles/README.md)
 - Supersedes: None
 - Superseded by: None
-- Approval source: Explicit maintainer approval in the Codex task on 2026-08-26.
+- Approval source: Explicit maintainer approval of the simplified no-fingerprint, no-runtime-manifest
+  generated `NativeApi` design in the Codex task on 2026-08-27.
 
 ## Decision at a glance
 
 Windows generated bindings resolve required exports with the Win32 loader into one private static
 managed function table, while each finalizable owner retains its exact module-specific cleanup
-function pointer.
+function pointer. The generated table itself is the compiled operation inventory; there is no
+separate binding manifest, fingerprint bootstrap, or unloadable table object.
 
 ## Context
 
@@ -38,7 +40,7 @@ The decision therefore separates three concerns:
 
 ## Decision
 
-For generated Windows bindings, import `LoadLibraryW`, `GetProcAddress`, and `FreeLibrary` from
+For generated Windows bindings, import `LoadLibraryW` and `GetProcAddress` from
 `kernel32` using `DllImport`. Resolve all required native exports once, validate them before
 publishing the binding, and cache their addresses in one generated, process-lifetime static
 function table. Use a managed `IntPtr[]` for the initial implementation. Generated calls read a
@@ -57,6 +59,12 @@ any generated call or finalizable owner can use an address from it. The initial 
 generated native modules and their tables for process lifetime; `FreeLibrary` and table replacement
 are reserved for a future lifetime design that can prove no live or finalizable owner retains an
 address from that module.
+
+Load the package-owned native library from the generated assembly's resolved package location. The
+initial contract intentionally omits a managed/native fingerprint and does not support substituting
+another native build. A wrong or incomplete module fails when a required export cannot resolve; the
+package's isolated-consumer proof, unique artifact ownership, and complete export resolution are the
+accepted boundary. Adding independent native replacement later requires a new compatibility design.
 
 All native cleanup exports must use an unmangled C ABI, the declared `cdecl` calling convention,
 and signatures that exactly match the managed function-pointer type.
@@ -163,11 +171,11 @@ either storage form.
 
 - The generated binding, not the platform-neutral Runtime, owns the concrete loader imports, module
   identity, export names, slot identities, and table.
-- Exact-match verification completes before operation exports are resolved. Required exports are
-  validated privately and the table is published only when complete; generated calls never observe
-  partial initialization.
+- Required exports are validated privately and the table is published only when complete; generated
+  calls never observe partial initialization.
 - Function-table slots are deterministic generated identities derived from the same semantic model
-  as their native exports and exact-match contract.
+  as their native exports. The table is the compiled inventory; no separate binding manifest is
+  loaded at runtime.
 - Every slot is invoked only through its exact generated unmanaged Cdecl signature.
 - Owner factories copy the exact cleanup address into `Handle<T>` or `Owned<T>`; generic Runtime
   owners never depend on a generated table, mutable global slot, or table index.

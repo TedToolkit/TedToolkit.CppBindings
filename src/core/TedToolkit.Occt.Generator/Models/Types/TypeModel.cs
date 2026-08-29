@@ -33,6 +33,36 @@ internal class TypeModel
     public required DataType CSharpPublicType { get; init; }
 
     /// <summary>
+    /// Gets the undecorated native value type name.
+    /// </summary>
+    public string CppValueTypeName { get; internal set; } = "";
+
+    /// <summary>
+    /// Gets a value indicating whether the terminal type is a C++ record.
+    /// </summary>
+    public bool IsRecord { get; internal set; }
+
+    /// <summary>
+    /// Gets a value indicating whether the terminal type is an OCCT intrusive handle specialization.
+    /// </summary>
+    public bool IsOcctHandle { get; internal set; }
+
+    /// <summary>
+    /// Gets the managed element type carried by an OCCT intrusive handle specialization.
+    /// </summary>
+    public string OcctHandleElementType { get; internal set; } = "";
+
+    /// <summary>
+    /// Gets the native element type carried by an OCCT intrusive handle specialization.
+    /// </summary>
+    public string OcctHandleElementCppType { get; internal set; } = "";
+
+    /// <summary>
+    /// Gets the compiler-derived type transport.
+    /// </summary>
+    public TypeTransportModel Transport { get; internal set; } = TypeTransportModel.Value;
+
+    /// <summary>
     /// Gets the additional native headers required to use the projected C++ type.
     /// </summary>
     public IReadOnlyList<string> RequiredHeaders { get; set; } = [];

@@ -312,6 +312,10 @@ internal sealed class ExecuteAsyncTests
             AddedRecordNames.Add(record.Name);
             return null!;
         }
+
+        public void Add(EnumDecl declaration)
+        {
+        }
     }
 
     private sealed class CapturingLogger : IModuleLogger
