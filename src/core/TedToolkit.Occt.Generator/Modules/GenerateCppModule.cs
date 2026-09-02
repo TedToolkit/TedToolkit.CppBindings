@@ -56,6 +56,7 @@ public sealed class GenerateCppModule : Module<bool>
             .Select(static record => new RecordOutput(record, record.Type.CSharpTypeName.ToGeneratedFileStem() + ".cpp"))
             .ToArray();
         RejectFileNameCollisions(outputs);
+        var exports = NativeApiGenerator.GetExports(outputs.Select(static output => output.Record).ToArray());
 
         _generationOptions.Value.CppFolder.Create();
         var generationTasks = outputs.Select(output => GenerateRecordAsync(output, cancellationToken))
@@ -68,10 +69,15 @@ public sealed class GenerateCppModule : Module<bool>
                 NativeErrorSupportGenerator.GenerateSource(),
                 cancellationToken))
             .Append(WriteSupportAsync(
+                NativeFunctionTableGenerator.FileName,
+                NativeFunctionTableGenerator.Generate(exports),
+                cancellationToken))
+            .Append(WriteSupportAsync(
                 NativeProjectGenerator.FileName,
                 NativeProjectGenerator.Generate(
                     outputs.Select(static output => output.FileName)
                         .Append(NativeErrorSupportGenerator.SourceFileName)
+                        .Append(NativeFunctionTableGenerator.FileName)
                         .ToArray(),
                     _generationOptions.Value.GetNativeLibraryBaseName()),
                 cancellationToken));

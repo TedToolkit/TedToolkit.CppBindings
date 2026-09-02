@@ -18,6 +18,16 @@ namespace TedToolkit.Occt.Generator.Models.Declarations;
 internal class MethodModel
 {
     /// <summary>
+    /// Gets native default expressions appended by an overload-priority projection.
+    /// </summary>
+    public IReadOnlyList<string> NativeDefaultArguments { get; init; } = [];
+
+    /// <summary>
+    /// Gets the declaration priority used when default arguments produce the same public signature.
+    /// </summary>
+    public int OverloadPriority { get; init; }
+
+    /// <summary>
     /// Gets the readable native operation name.
     /// </summary>
     /// <returns>The operation name used by the C export.</returns>
@@ -118,6 +128,16 @@ internal class MethodModel
     /// Gets a value indicating whether the native method is const-qualified.
     /// </summary>
     public required bool IsConst { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the native method is volatile-qualified.
+    /// </summary>
+    public bool IsVolatile { get; init; }
+
+    /// <summary>
+    /// Gets the native member-function reference qualifier, if present.
+    /// </summary>
+    public string RefQualifier { get; init; } = "";
 
     /// <summary>
     /// Gets a value indicating whether the native method is static.

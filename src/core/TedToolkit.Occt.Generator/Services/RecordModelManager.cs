@@ -8,6 +8,7 @@
 using System.Diagnostics.CodeAnalysis;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
+using System.Text;
 using System.Text.RegularExpressions;
 
 using ClangSharp;
@@ -39,11 +40,16 @@ internal sealed class RecordModelManager(
 {
     private static readonly Regex NativeIdentifierRegex = new("[A-Za-z_][A-Za-z0-9_]*");
 
+    private static readonly Regex RefQualifierRegex = new(
+        @"\)\s*(?:const\s*)?(?:volatile\s*)?(&&|&)(?:\s*noexcept)?$");
+
     private readonly List<EnumModel> _enumModels = [];
 
     private readonly HashSet<CXCursor> _enumNames = [];
 
     private readonly Dictionary<CXCursor, RecordModel> _recordNames = [];
+
+    private readonly Dictionary<string, byte[]> _sourceFiles = new(StringComparer.OrdinalIgnoreCase);
 
     /// <inheritdoc/>
     public IReadOnlyList<EnumModel> EnumModels
@@ -136,6 +142,10 @@ internal sealed class RecordModelManager(
                 .OrderBy(GetConstQualificationWeight)
                 .First())
             .Select(ToModel)
+            .SelectMany(ExpandDefaultArgumentOverloads)
+            .GroupBy(GetProjectedMethodSignatureKey)
+            .Select(SelectProjectedOverload)
+            .Where(method => IsInstantiableTemplateMember(result.Type.CppTypeName, method))
             .ToArray();
 
         result.NativeRequiredHeaders = GetNativeRequiredHeaders(record);
@@ -241,7 +251,7 @@ internal sealed class RecordModelManager(
             return true;
         }
 
-        return specialization.TemplateArgs.All(static argument =>
+        return specialization.TemplateArgs.Any(static argument =>
             argument.Kind is not CXTemplateArgumentKind.CXTemplateArgumentKind_Type
             || argument.AsType.CanonicalType.Kind is not CXTypeKind.CXType_Void);
     }
@@ -280,13 +290,29 @@ internal sealed class RecordModelManager(
     {
         record.Location.GetFileLocation(out var file, out _, out _, out _);
         var sourceHeader = file.Name.CString;
-        if (!File.Exists(sourceHeader)
-            || !File.ReadAllText(sourceHeader).Contains("OCCT_DUMP_", StringComparison.Ordinal))
+        if (!File.Exists(sourceHeader))
         {
             return;
         }
 
-        _ = headers.Add("Standard_Dump.hxx");
+        var source = File.ReadAllText(sourceHeader);
+        AddPrerequisiteHeader(source, "OCCT_DUMP_", "Standard_Dump.hxx", headers);
+        AddPrerequisiteHeader(
+            source,
+            "NCollection_List<TopoDS_Shape>",
+            "TopoDS_Shape.hxx",
+            headers);
+        AddPrerequisiteHeader(source, "TopoDS_TShape.hxx", "TopoDS_Shape.hxx", headers);
+        AddPrerequisiteHeader(source, "XCAFDoc_AssemblyIterator.hxx", "TDF_Label.hxx", headers);
+    }
+
+    private static void AddPrerequisiteHeader(
+        string source,
+        string marker,
+        string header,
+        HashSet<string> headers)
+    {
+        _ = source.Contains(marker, StringComparison.Ordinal) && headers.Add(header);
     }
 
     private void AddNamedOcctHeaders(string nativeTypeName, HashSet<string> headers)
@@ -548,8 +574,9 @@ internal sealed class RecordModelManager(
             return;
         }
 
-        if (type.AsCXXRecordDecl?.Definition is { } recordDecl)
+        if (type.AsCXXRecordDecl is { } declaration)
         {
+            var recordDecl = declaration.Definition ?? declaration;
             AddHeader(recordDecl, headers, visitedDecls);
 
             if (recordDecl is ClassTemplateSpecializationDecl classTemplateSpecializationDecl)
@@ -597,7 +624,10 @@ internal sealed class RecordModelManager(
             return;
         }
 
-        headers.Add(Path.GetFileName(file.Name.CString));
+        var header = Path.GetFileName(file.Name.CString);
+        headers.Add(string.Equals(header, "winnt.h", StringComparison.OrdinalIgnoreCase)
+            ? "Windows.h"
+            : header);
     }
 
     private static bool TryGetEnumDecl(ClangSharp.Type type, [NotNullWhen(true)] out EnumDecl? enumDecl)
@@ -629,8 +659,11 @@ internal sealed class RecordModelManager(
                     index,
                     commentProjection))
                 .ToArray(),
+            OverloadPriority = method.Parameters.Count,
             NoExceptions = IsNoExcept(method),
             IsConst = method.IsConst,
+            IsVolatile = method.Type.AsString.Contains(" volatile", StringComparison.Ordinal),
+            RefQualifier = GetRefQualifier(method.Type.AsString),
             IsStatic = method.IsStatic,
         };
     }
@@ -800,10 +833,233 @@ internal sealed class RecordModelManager(
 
         return new()
         {
+            CppDefaultValue = GetCppDefaultValue(paramDel),
             DescriptionItems = descriptionItems ?? [],
             Type = ToModel(paramDel.Type),
             Name = string.IsNullOrEmpty(paramDel.Name) ? $"value{parameterIndex}" : paramDel.Name,
         };
+    }
+
+    private IEnumerable<MethodModel> ExpandDefaultArgumentOverloads(MethodModel method)
+    {
+        yield return method;
+
+        if (method.Type is not MethodModelType.NEW)
+        {
+            yield break;
+        }
+
+        var requiredCount = method.Parameters.Count;
+        while (requiredCount > 0
+               && method.Parameters[requiredCount - 1].CppDefaultValue is not null)
+        {
+            requiredCount--;
+        }
+
+        for (var parameterCount = requiredCount; parameterCount < method.Parameters.Count; parameterCount++)
+        {
+            yield return new()
+            {
+                DescriptionItems = method.DescriptionItems,
+                ReturnTypeDescriptionItems = method.ReturnTypeDescriptionItems,
+                NativeDefaultArguments = method.Parameters
+                    .Skip(parameterCount)
+                    .Select(static parameter => parameter.CppDefaultValue!)
+                    .ToArray(),
+                OverloadPriority = method.Parameters.Count,
+                NativeExportName = method.NativeExportName,
+                NativeMethodName = method.NativeMethodName,
+                NoExceptions = method.NoExceptions,
+                IsConst = method.IsConst,
+                IsVolatile = method.IsVolatile,
+                RefQualifier = method.RefQualifier,
+                IsStatic = method.IsStatic,
+                ReturnType = method.ReturnType,
+                ReturnSelf = method.ReturnSelf,
+                MethodName = method.MethodName,
+                Type = method.Type,
+                Parameters = method.Parameters.Take(parameterCount).ToArray(),
+            };
+        }
+    }
+
+    private static MethodModel SelectProjectedOverload(IEnumerable<MethodModel> methods)
+    {
+        var candidates = methods.ToArray();
+        var selected = candidates
+            .OrderByDescending(static method => method.OverloadPriority)
+            .First();
+        if (candidates.Length > 1 || selected.NativeDefaultArguments.Count is 0)
+        {
+            return selected;
+        }
+
+        return new()
+        {
+            DescriptionItems = selected.DescriptionItems,
+            ReturnTypeDescriptionItems = selected.ReturnTypeDescriptionItems,
+            NativeDefaultArguments = [],
+            OverloadPriority = selected.OverloadPriority,
+            NativeExportName = selected.NativeExportName,
+            NativeMethodName = selected.NativeMethodName,
+            NoExceptions = selected.NoExceptions,
+            IsConst = selected.IsConst,
+            IsVolatile = selected.IsVolatile,
+            RefQualifier = selected.RefQualifier,
+            IsStatic = selected.IsStatic,
+            ReturnType = selected.ReturnType,
+            ReturnSelf = selected.ReturnSelf,
+            MethodName = selected.MethodName,
+            Type = selected.Type,
+            Parameters = selected.Parameters,
+        };
+    }
+
+    private static string GetRefQualifier(string functionType)
+    {
+        var match = RefQualifierRegex.Match(functionType);
+        return match.Success ? match.Groups[1].Value : "";
+    }
+
+    private static string GetProjectedMethodSignatureKey(MethodModel method)
+    {
+        return string.Join("|",
+        [
+            method.Type.ToString(),
+            method.MethodName,
+            method.ReturnType.CSharpPublicType.ToCode(),
+            .. method.Parameters.Select(static parameter => parameter.Type.CSharpPublicType.ToCode()),
+        ]);
+    }
+
+    private static bool IsInstantiableTemplateMember(string cppTypeName, MethodModel method)
+    {
+        // IntPolyh_Array<T>::Dump() requires T::Dump(). IntPolyh_Edge only provides Dump(int),
+        // so this concrete member cannot be instantiated even though Clang exposes its declaration.
+        if (cppTypeName is "IntPolyh_Array<IntPolyh_Edge>" or "IntPolyh_Array<IntPolyh_Triangle>")
+        {
+            return method.MethodName is not "Dump" || method.Parameters.Count is not 0;
+        }
+
+        if (cppTypeName is "NCollection_CellFilter<BRepExtrema_VertexInspector>")
+        {
+            return method.MethodName is not "Remove";
+        }
+
+        if (cppTypeName is "NCollection_Vec3<unsigned long long>")
+        {
+            return method.MethodName is not "cwiseAbs";
+        }
+
+        if (cppTypeName is "BVH_PairTraverse<double, 3>"
+            && method.MethodName is "Select"
+            && method.Parameters.Count is 0)
+        {
+            return false;
+        }
+
+        if (cppTypeName.StartsWith("std::unique_ptr<Geom_OsculatingSurface", StringComparison.Ordinal)
+            && method.Type is MethodModelType.DELETE)
+        {
+            return false;
+        }
+
+        if (method.MethodName is "swap"
+            && (cppTypeName.StartsWith("std::variant<std::monostate, Geom2dGridEval_", StringComparison.Ordinal)
+                || cppTypeName.StartsWith("std::variant<std::monostate, GeomBndLib_", StringComparison.Ordinal)
+                || cppTypeName.StartsWith("std::variant<std::monostate, GeomGridEval_", StringComparison.Ordinal)))
+        {
+            return false;
+        }
+
+        if (cppTypeName is not "NCollection_Sequence<CSLib_Class2d>")
+        {
+            return true;
+        }
+
+        if (method.MethodName is "Assign" or "SetValue")
+        {
+            return false;
+        }
+
+        if (method.MethodName is "Append" or "Prepend" or "InsertBefore" or "InsertAfter"
+            && method.Parameters.Any(parameter => parameter.Type.CppValueTypeName == cppTypeName))
+        {
+            return false;
+        }
+
+        return true;
+    }
+
+    private string? GetCppDefaultValue(ParmVarDecl parameter)
+    {
+        if (parameter.DefaultArg is { } defaultArgument)
+        {
+            return ReadSourceRange(defaultArgument.Extent)?.Trim();
+        }
+
+        var parameterSource = ReadSourceRange(parameter.SourceRange);
+        if (parameterSource is null)
+        {
+            return null;
+        }
+
+        var assignmentIndex = FindDefaultAssignment(parameterSource);
+        return assignmentIndex < 0 ? null : parameterSource[(assignmentIndex + 1)..].Trim();
+    }
+
+    private string? ReadSourceRange(CXSourceRange range)
+    {
+        range.Start.GetFileLocation(out var startFile, out _, out _, out var startOffset);
+        range.End.GetFileLocation(out var endFile, out _, out _, out var endOffset);
+        var fileName = startFile.Name.CString;
+        if (string.IsNullOrEmpty(fileName)
+            || !string.Equals(fileName, endFile.Name.CString, StringComparison.OrdinalIgnoreCase)
+            || !File.Exists(fileName)
+            || endOffset <= startOffset)
+        {
+            return null;
+        }
+
+        if (!_sourceFiles.TryGetValue(fileName, out var source))
+        {
+            source = File.ReadAllBytes(fileName);
+            _sourceFiles.Add(fileName, source);
+        }
+
+        return Encoding.UTF8.GetString(source, checked((int)startOffset), checked((int)(endOffset - startOffset)))
+            .Trim();
+    }
+
+    private static int FindDefaultAssignment(string parameterSource)
+    {
+        var depth = 0;
+        for (var index = 0; index < parameterSource.Length; index++)
+        {
+            switch (parameterSource[index])
+            {
+                case '(':
+                case '[':
+                case '{':
+                case '<':
+                    depth++;
+                    break;
+
+                case ')':
+                case ']':
+                case '}':
+                case '>':
+                    depth--;
+                    break;
+
+                case '=' when depth is 0
+                                   && (index is 0 || parameterSource[index - 1] is not '!' and not '<' and not '>' and not '=')
+                                   && (index + 1 >= parameterSource.Length || parameterSource[index + 1] is not '='):
+                    return index;
+            }
+        }
+
+        return -1;
     }
 
     private FieldModel ToModel(FieldDecl fieldDecl)

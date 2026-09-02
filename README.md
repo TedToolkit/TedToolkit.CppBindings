@@ -123,7 +123,7 @@ The ABI-v1 project remains only as an independent migration fixture.
 & "$env:VCPKG_ROOT\vcpkg.exe" list opencascade
 ```
 
-示例程序当前选择 `Geom2d_BSplineCurve`，输出到 `output/generated`：
+The development generation host processes every public OCCT header and writes to `output/generated`:
 
 ```powershell
 dotnet run --project tests/TedToolkit.Occt.Console/TedToolkit.Occt.Console.csproj -c Release
@@ -139,7 +139,8 @@ output/generated/
     └── <DependencyType>.cpp
 ```
 
-> ⚠️ This command remains a development entry point rather than a verified release example. Target-scoped parsing and generator ordering are enforced, but downstream model projection or native compilation can still reject unsupported OCCT surface.
+Exact members that cannot be instantiated or are absent from the delivered OCCT DLLs are excluded
+only after compiler or linker proof; representable related declarations remain generated.
 
 ## 组件
 
@@ -149,12 +150,12 @@ output/generated/
 | `TedToolkit.Occt.Generator` | 读取 vcpkg/OCCT、解析 AST、建立模型并生成两组代码 | [README](src/core/TedToolkit.Occt.Generator/README.md) |
 | `TedToolkit.Occt.Runtime` | 生成库依赖的最小、声明无关托管机制；提供异常投影、`handle<T>`、`Handle<T>` 和 `Owned<T>` | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
 | `TedToolkit.Occt.Analyzer` | 从已安装 OCCT 头文件生成可选择的头文件类型枚举 | `src/tools/TedToolkit.Occt.Analyzer` |
-| `TedToolkit.Occt.Console` | 运行 `Geom2d_BSplineCurve` 生成流程的开发样例 | `tests/TedToolkit.Occt.Console` |
+| `TedToolkit.Occt.Console` | Development host that generates the all-public-header Windows surface | `tests/TedToolkit.Occt.Console` |
 | `Build` | 仓库构建管线；不会为平台 wrapper 生成 Runtime 友元权限 | `Build` |
 
 ## 当前实现边界
 
-- `TedToolkit.Occt.Windows` 当前只生成宿主选择的 `Geom2d_BSplineCurve` 声明闭包，不宣称完整 OCCT 头文件覆盖。
+- `TedToolkit.Occt.Windows` generates every representable public-header declaration supported by the delivered OCCT DLLs.
 - 当前仅支持经验证的 `win-x64`、OCCT 8.0.1 和 `net8.0` 组合。
 - 本机生成和 NuGet 打包已经可用，但尚未发布到远程 feed。
 - 新增平台、RID 或头文件范围时仍必须重新执行编译器探测和真实原生行为验证。

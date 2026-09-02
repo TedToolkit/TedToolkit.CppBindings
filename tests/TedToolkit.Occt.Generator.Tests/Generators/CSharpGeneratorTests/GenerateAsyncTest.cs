@@ -68,14 +68,14 @@ internal sealed class GenerateAsyncTest
         };
         NativeExportNameBuilder.Assign(record);
 
-        var code = await new CSharpGenerator(record, CreateOptions())
+        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains(
             "public static bool @lock(this global::TedToolkit.Occt.IOcctOwner<Geom_Curve> self)");
         await Assert.That(code).Contains(
             "public static bool @lock(this in global::TedToolkit.Occt.handle<Geom_Curve> self)");
-        await Assert.That(code).Contains("NativeApi.Geom_Curve_lock");
+        await Assert.That(code).Contains("NativeApi.GetFunction(");
         await Assert.That(code).DoesNotContain("lockCore");
         await Assert.That(code).DoesNotContain("TReceiver");
     }
@@ -157,7 +157,11 @@ internal sealed class GenerateAsyncTest
             [derivedRecord.Type.CppTypeName] = derivedRecord,
         };
 
-        var code = await new CSharpGenerator(baseRecord, CreateOptions(), catalog)
+        var code = await new CSharpGenerator(
+                baseRecord,
+                CreateOptions(),
+                catalog,
+                CreateFunctionIndices(baseRecord, derivedRecord))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("public static bool Read<TReceiver>(this ref TReceiver self)");
@@ -216,13 +220,15 @@ internal sealed class GenerateAsyncTest
         };
         NativeExportNameBuilder.Assign(record);
 
-        var code = await new CSharpGenerator(record, CreateOptions())
+        var indices = CreateFunctionIndices(record);
+        indices["Standard_Type_Release"] = indices.Count;
+        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: indices)
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("Handle<Standard_Type>? DynamicType(");
         await Assert.That(code).Contains("if (__result == null)");
         await Assert.That(code).Contains("return null;");
-        await Assert.That(code).Contains("NativeApi.Standard_Type_Release");
+        await Assert.That(code).Contains("NativeApi.GetFunction(");
     }
 
     /// <summary>
@@ -257,7 +263,10 @@ internal sealed class GenerateAsyncTest
             },
         };
         NativeExportNameBuilder.Assign(record);
-        var generator = new CSharpGenerator(record, CreateOptions());
+        var generator = new CSharpGenerator(
+            record,
+            CreateOptions(),
+            nativeFunctionIndices: CreateFunctionIndices(record));
 
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
@@ -340,13 +349,16 @@ internal sealed class GenerateAsyncTest
                 ],
         };
         NativeExportNameBuilder.Assign(record);
-        var generator = new CSharpGenerator(record, CreateOptions());
+        var generator = new CSharpGenerator(
+            record,
+            CreateOptions(),
+            nativeFunctionIndices: CreateFunctionIndices(record));
 
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("Point wrapper.");
         await Assert.That(code).Contains("public static int Coord(this ref gp_Pnt2d self, int @params)");
-        await Assert.That(code).Contains("NativeApi.gp_Pnt2d_Coord");
+        await Assert.That(code).Contains("NativeApi.GetFunction(");
         await Assert.That(code).Contains("LayoutKind.Sequential");
         await Assert.That(code).DoesNotContain("FieldOffset");
         await Assert.That(code).Contains("public unsafe struct gp_Pnt2d :");
@@ -380,12 +392,16 @@ internal sealed class GenerateAsyncTest
                 ValueIsConst: true,
                 [new(TypeIndirectionKind.LValueReference, IsConstQualified: false),]),
         };
-        ParameterModel Parameter(string name) => new()
+        ParameterModel Parameter(string name)
         {
-            DescriptionItems = [],
-            Name = name,
-            Type = matrixReference,
-        };
+            return new()
+            {
+                DescriptionItems = [],
+                Name = name,
+                Type = matrixReference,
+            };
+        }
+
         var record = new RecordModel()
         {
             DescriptionItems = [],
@@ -431,7 +447,7 @@ internal sealed class GenerateAsyncTest
         };
         NativeExportNameBuilder.Assign(record);
 
-        var code = await new CSharpGenerator(record, CreateOptions())
+        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("public static bool Multiply_1(in Matrix left, in Matrix right)");
@@ -446,6 +462,13 @@ internal sealed class GenerateAsyncTest
             CSharpFolder = new(Path.GetTempPath()),
             CppFolder = new(Path.GetTempPath()),
         });
+    }
+
+    private static Dictionary<string, int> CreateFunctionIndices(params RecordModel[] records)
+    {
+        return NativeApiGenerator.GetExports(records)
+            .Select(static (export, index) => (export, index))
+            .ToDictionary(static value => value.export, static value => value.index, StringComparer.Ordinal);
     }
 
     private static TypeModel CreateReferenceType(string publicType, bool valueIsConst)

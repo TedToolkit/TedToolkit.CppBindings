@@ -29,6 +29,8 @@ namespace TedToolkit.Occt.Generator.Modules;
 [DependsOn<ParseModule>]
 public sealed class CompilerProbeModule : Module<bool>
 {
+    private static readonly HashSet<string> UnsupportedNativeExports = LoadUnsupportedNativeExports();
+
     private readonly IRecordModelManager _recordManager;
 
     private readonly IOptions<GenerationOptions> _options;
@@ -248,6 +250,7 @@ public sealed class CompilerProbeModule : Module<bool>
             }
             else if (record.ObjectKind is NativeObjectKind.Owned
                      && isDestructible
+                     && CanGenerateImplicitDestructor(record)
                      && !record.MethodModels.Any(static method => method.Type is MethodModelType.DELETE))
             {
                 record.MethodModels =
@@ -274,6 +277,37 @@ public sealed class CompilerProbeModule : Module<bool>
         }
 
         AddHandleReleaseOperations(records);
+        RemoveUnsupportedNativeExports(records);
+    }
+
+    private static HashSet<string> LoadUnsupportedNativeExports()
+    {
+        const string resourceName =
+            "TedToolkit.Occt.Generator.Resources.UnsupportedNativeExports.txt";
+        using var stream = typeof(CompilerProbeModule).Assembly.GetManifestResourceStream(resourceName)
+                           ?? throw new InvalidOperationException(
+                               $"Embedded resource '{resourceName}' was not found.");
+        using var reader = new StreamReader(stream);
+        return reader.ReadToEnd()
+            .Split(['\r', '\n',], StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries)
+            .ToHashSet(StringComparer.Ordinal);
+    }
+
+    private static void RemoveUnsupportedNativeExports(RecordModel[] records)
+    {
+        foreach (var record in records)
+        {
+            record.MethodModels = record.MethodModels
+                .Where(method => !UnsupportedNativeExports.Contains(method.NativeExportName))
+                .ToArray();
+        }
+    }
+
+    private static bool CanGenerateImplicitDestructor(RecordModel record)
+    {
+        return !record.Type.CppTypeName.StartsWith(
+            "std::unique_ptr<Geom_OsculatingSurface",
+            StringComparison.Ordinal);
     }
 
     private static void AddHandleReleaseOperations(RecordModel[] records)
@@ -287,7 +321,8 @@ public sealed class CompilerProbeModule : Module<bool>
             .ToHashSet(StringComparer.Ordinal);
 
         foreach (var record in records.Where(record =>
-                     handleTargets.Contains(record.Type.CppTypeName)
+                     record.ObjectKind is NativeObjectKind.Handle
+                     && handleTargets.Contains(record.Type.CppTypeName)
                      && !record.MethodModels.Any(static method =>
                          method.Type is MethodModelType.HANDLE_RELEASE
                              or MethodModelType.DELETE
@@ -311,6 +346,8 @@ public sealed class CompilerProbeModule : Module<bool>
             ReturnTypeDescriptionItems = [],
             NoExceptions = true,
             IsConst = false,
+            IsVolatile = false,
+            RefQualifier = "",
             IsStatic = false,
             ReturnType = new()
             {

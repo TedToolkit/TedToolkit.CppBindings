@@ -21,6 +21,7 @@ internal sealed class NativeApiGeneratorTests
     /// <summary>
     /// Verifies native exports distinguish pointer-bearing template arguments.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_preserve_template_pointer_identity_in_native_exports_Async()
     {
@@ -37,11 +38,11 @@ internal sealed class NativeApiGeneratorTests
     }
 
     /// <summary>
-    /// Verifies that loading and every required symbol are compiled into one static class.
+    /// Verifies that one process-lifetime table is loaded without materializing a field per function.
     /// </summary>
     /// <returns>A task that completes when the source assertions finish.</returns>
     [Test]
-    public async Task Should_generate_complete_static_export_table_Async()
+    public async Task Should_generate_indexed_static_export_table_Async()
     {
         var voidType = new TypeModel()
         {
@@ -87,8 +88,9 @@ internal sealed class NativeApiGeneratorTests
 
         await Assert.That(source).Contains(
             "NativeLibrary.Load(\"ted_toolkit_occt\", typeof(NativeApi).Assembly, null)");
-        await Assert.That(source).Contains("internal static readonly nint NativeError_Clear");
-        await Assert.That(source).Contains("internal static readonly nint Thing_Destroy");
+        await Assert.That(source).Contains("internal static nint GetFunction(int index) => Functions[index]");
+        await Assert.That(source).DoesNotContain("internal static readonly nint NativeError_Clear");
+        await Assert.That(source).DoesNotContain("internal static readonly nint Thing_Destroy");
         await Assert.That(source).DoesNotContain("fingerprint");
         await Assert.That(source).DoesNotContain("manifest");
         await Assert.That(source).DoesNotContain("Dispose");

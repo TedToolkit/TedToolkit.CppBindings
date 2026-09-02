@@ -28,10 +28,12 @@ namespace TedToolkit.Occt.Generator.Generators;
 /// <param name="recordDecl">The record declaration being generated.</param>
 /// <param name="generationOptions">The generator options.</param>
 /// <param name="recordCatalog">The completed record models used to classify record results.</param>
+/// <param name="nativeFunctionIndices">The function-table indices keyed by native export name.</param>
 internal sealed class CSharpGenerator(
     RecordModel recordDecl,
     IOptions<GenerationOptions> generationOptions,
-    IReadOnlyDictionary<string, RecordModel>? recordCatalog = null) : IGenerator
+    IReadOnlyDictionary<string, RecordModel>? recordCatalog = null,
+    IReadOnlyDictionary<string, int>? nativeFunctionIndices = null) : IGenerator
 {
     private bool UsesGenericReceiver
     {
@@ -288,8 +290,8 @@ internal sealed class CSharpGenerator(
             var deleteExport = GetDeleteExportName();
             _ = builder.Append("            var __result = new global::TedToolkit.Occt.Owned<")
                 .Append(recordName).Append(">((delegate* unmanaged[Cdecl]<")
-                .Append(recordName).Append("*, void>)global::TedToolkit.Occt.NativeApi.")
-                .Append(deleteExport).Append(");\n")
+                .Append(recordName).Append("*, void>)").Append(GetNativeFunctionExpression(deleteExport))
+                .Append(");\n")
                 .Append("            var constructed = false;\n            try\n            {\n")
                 .Append("                fixed (").Append(recordName)
                 .Append("* __resultPointer = &__result.Value)\n");
@@ -327,8 +329,9 @@ internal sealed class CSharpGenerator(
 
         nativeParameterTypes.Add(recordName + "*");
         _ = builder.Append("            {\n                var __result = ((delegate* unmanaged[Cdecl]<")
-            .AppendJoin(", ", nativeParameterTypes).Append(">)global::TedToolkit.Occt.NativeApi.")
-            .Append(method.NativeExportName).Append(")(").AppendJoin(", ", nativeArguments)
+            .AppendJoin(", ", nativeParameterTypes).Append(">)")
+            .Append(GetNativeFunctionExpression(method.NativeExportName)).Append(")(")
+            .AppendJoin(", ", nativeArguments)
             .Append(");\n");
         AppendKeepAlives(builder, parameterOwners, "                ");
         if (!method.NoExceptions)
@@ -338,11 +341,12 @@ internal sealed class CSharpGenerator(
 
         _ = builder.Append("                return new global::TedToolkit.Occt.Handle<")
             .Append(recordName).Append(">(__result, (delegate* unmanaged[Cdecl]<")
-            .Append(recordName).Append("*, void>)global::TedToolkit.Occt.NativeApi.")
-            .Append(GetDeleteExportName()).Append(");\n            }\n        }\n\n");
+            .Append(recordName).Append("*, void>)")
+            .Append(GetNativeFunctionExpression(GetDeleteExportName()))
+            .Append(");\n            }\n        }\n\n");
     }
 
-    private static void AppendPlacementConstructionCall(
+    private void AppendPlacementConstructionCall(
         StringBuilder builder,
         MethodModel method,
         IReadOnlyList<string> nativeParameterTypes,
@@ -360,7 +364,7 @@ internal sealed class CSharpGenerator(
 
         _ = builder.Append(spaces).Append("{\n").Append(spaces).Append("    ((delegate* unmanaged[Cdecl]<")
             .AppendJoin(", ", nativeParameterTypes.Append("void"))
-            .Append(">)global::TedToolkit.Occt.NativeApi.").Append(method.NativeExportName).Append(")(")
+            .Append(">)").Append(GetNativeFunctionExpression(method.NativeExportName)).Append(")(")
             .AppendJoin(", ", nativeArguments).Append(");\n");
         AppendKeepAlives(builder, parameterOwners, spaces + "    ");
         if (!method.NoExceptions)
@@ -474,8 +478,8 @@ internal sealed class CSharpGenerator(
             var destroy = destructor.NativeExportName;
             _ = builder.Append("            var __result = new global::TedToolkit.Occt.Owned<")
                 .Append(resultName).Append(">((delegate* unmanaged[Cdecl]<")
-                .Append(resultName).Append("*, void>)global::TedToolkit.Occt.NativeApi.")
-                .Append(destroy).Append(");\n")
+                .Append(resultName).Append("*, void>)").Append(GetNativeFunctionExpression(destroy))
+                .Append(");\n")
                 .Append("            var constructed = false;\n            try\n            {\n")
                 .Append("                fixed (").Append(resultName)
                 .Append("* __resultPointer = &__result.Value)\n");
@@ -529,7 +533,7 @@ internal sealed class CSharpGenerator(
         _ = builder.Append(indentation).Append("{\n").Append(indentation)
             .Append("    ((delegate* unmanaged[Cdecl]<")
             .AppendJoin(", ", nativeParameterTypes.Append("void"))
-            .Append(">)global::TedToolkit.Occt.NativeApi.").Append(method.NativeExportName)
+            .Append(">)").Append(GetNativeFunctionExpression(method.NativeExportName))
             .Append(")(").AppendJoin(", ", nativeArguments).Append(");\n");
         if (!method.IsStatic && !borrowedHandleReceiver
             && recordDecl.ObjectKind is NativeObjectKind.Handle or NativeObjectKind.Owned)
@@ -602,8 +606,9 @@ internal sealed class CSharpGenerator(
 
         nativeParameterTypes.Add(elementType + "*");
         _ = builder.Append("            {\n                var __result = ((delegate* unmanaged[Cdecl]<")
-            .AppendJoin(", ", nativeParameterTypes).Append(">)global::TedToolkit.Occt.NativeApi.")
-            .Append(method.NativeExportName).Append(")(").AppendJoin(", ", nativeArguments)
+            .AppendJoin(", ", nativeParameterTypes).Append(">)")
+            .Append(GetNativeFunctionExpression(method.NativeExportName)).Append(")(")
+            .AppendJoin(", ", nativeArguments)
             .Append(");\n");
         if (!method.IsStatic && !borrowedHandleReceiver
             && recordDecl.ObjectKind is NativeObjectKind.Handle or NativeObjectKind.Owned)
@@ -622,8 +627,8 @@ internal sealed class CSharpGenerator(
             .Append("                    return null;\n                }\n\n")
             .Append("                return new global::TedToolkit.Occt.Handle<")
             .Append(elementType).Append(">(__result, (delegate* unmanaged[Cdecl]<")
-            .Append(elementType).Append("*, void>)global::TedToolkit.Occt.NativeApi.")
-            .Append(NativeExportNameBuilder.GetHandleReleaseName(method.ReturnType.OcctHandleElementCppType))
+            .Append(elementType).Append("*, void>)").Append(GetNativeFunctionExpression(
+                NativeExportNameBuilder.GetHandleReleaseName(method.ReturnType.OcctHandleElementCppType)))
             .Append(");\n            }\n        }\n\n");
     }
 
@@ -685,7 +690,7 @@ internal sealed class CSharpGenerator(
 
         var signatureTypes = nativeParameterTypes.Append(method.ReturnType.CSharpPInvokeType.ToCode());
         _ = builder.Append("((delegate* unmanaged[Cdecl]<").AppendJoin(", ", signatureTypes)
-            .Append(">)global::TedToolkit.Occt.NativeApi.").Append(method.NativeExportName).Append(")(")
+            .Append(">)").Append(GetNativeFunctionExpression(method.NativeExportName)).Append(")(")
             .AppendJoin(", ", nativeArguments).Append(");\n");
         if (!method.IsStatic && !borrowedHandleReceiver
             && recordDecl.ObjectKind is NativeObjectKind.Handle or NativeObjectKind.Owned)
@@ -780,7 +785,7 @@ internal sealed class CSharpGenerator(
         var signatureTypes = nativeParameterTypes
             .Append(returnTypeName + "*");
         _ = builder.AppendJoin(", ", signatureTypes).Append(">)")
-            .Append("global::TedToolkit.Occt.NativeApi.").Append(method.NativeExportName).Append(")(")
+            .Append(GetNativeFunctionExpression(method.NativeExportName)).Append(")(")
             .AppendJoin(", ", nativeArguments).Append(");\n");
         if (!method.IsStatic && !borrowedHandleReceiver
             && recordDecl.ObjectKind is NativeObjectKind.Handle or NativeObjectKind.Owned)
@@ -798,12 +803,12 @@ internal sealed class CSharpGenerator(
         _ = builder.Append("                return ref *__result;\n            }\n        }\n\n");
     }
 
-    private static void AppendErrorProjection(StringBuilder builder, string indentation = "                ")
+    private void AppendErrorProjection(StringBuilder builder, string indentation = "                ")
     {
         _ = builder.Append(indentation).Append("global::TedToolkit.Occt.NativeErrorProjection.ThrowIfFailed(\n")
             .Append(indentation).Append("    ref __error,\n")
             .Append(indentation).Append("    (delegate* unmanaged[Cdecl]<global::TedToolkit.Occt.NativeError*, void>)")
-            .Append("global::TedToolkit.Occt.NativeApi.NativeError_Clear);\n");
+            .Append(GetNativeFunctionExpression("NativeError_Clear")).Append(");\n");
     }
 
     private void AppendReceiver(
@@ -961,8 +966,9 @@ internal sealed class CSharpGenerator(
                 pointerExpression = step.Relation.PointerAdjustment is PointerAdjustmentKind.Identity
                     ? $"({step.Relation.Base.Type.CSharpTypeName}*){pointerExpression}"
                     : $"((delegate* unmanaged[Cdecl]<{step.Derived.Type.CSharpTypeName}*, "
-                      + $"{step.Relation.Base.Type.CSharpTypeName}*>)global::TedToolkit.Occt.NativeApi."
-                      + NativeExportNameBuilder.GetPointerAdjustmentName(step.Derived, step.Relation.Base)
+                      + $"{step.Relation.Base.Type.CSharpTypeName}*>)"
+                      + GetNativeFunctionExpression(NativeExportNameBuilder.GetPointerAdjustmentName(
+                          step.Derived, step.Relation.Base))
                       + $")({pointerExpression})";
             }
 
@@ -1052,6 +1058,16 @@ internal sealed class CSharpGenerator(
         nativeArguments.Add(string.Equals(publicType, nativeType, StringComparison.Ordinal)
             ? parameterName
             : $"({nativeType}){parameterName}");
+    }
+
+    private string GetNativeFunctionExpression(string exportName)
+    {
+        if (nativeFunctionIndices is null || !nativeFunctionIndices.TryGetValue(exportName, out var index))
+        {
+            throw new InvalidOperationException($"Native function '{exportName}' has no function-table index.");
+        }
+
+        return $"global::TedToolkit.Occt.NativeApi.GetFunction({index})";
     }
 
     private static void AppendKeepAlives(

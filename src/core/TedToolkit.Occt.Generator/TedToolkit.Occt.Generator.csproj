@@ -11,6 +11,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <EmbeddedResource Include="Resources\UnsupportedNativeExports.txt" />
     <PackageReference Include="ClangSharp" />
     <PackageReference Include="libclang.runtime.win-x64" />
     <PackageReference Include="libClangSharp.runtime.win-x64" />

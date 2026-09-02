@@ -251,7 +251,7 @@ internal sealed class CppGenerator(RecordModel record) : IGenerator
             }
 
             _ = builder.Append(record.Type.CppTypeName).Append('(');
-            AppendArguments(builder, method.Parameters);
+            AppendArguments(builder, method);
             _ = builder.Append(");\n    result->IncrementRefCounter();\n    return result;\n");
             AppendTryEnd(builder, method, "return nullptr;");
             _ = builder.Append("}\n\n");
@@ -270,7 +270,7 @@ internal sealed class CppGenerator(RecordModel record) : IGenerator
         _ = builder.Append(") noexcept\n{\n");
         AppendTryStart(builder, method);
         _ = builder.Append("    ::new (result) ").Append(record.Type.CppTypeName).Append('(');
-        AppendArguments(builder, method.Parameters);
+        AppendArguments(builder, method);
         _ = builder.Append(");\n");
         AppendTryEnd(builder, method, "return;");
         _ = builder.Append("}\n\n");
@@ -398,6 +398,18 @@ internal sealed class CppGenerator(RecordModel record) : IGenerator
             _ = builder.Append(" const");
         }
 
+        if (method.IsVolatile)
+        {
+            _ = builder.Append(" volatile");
+        }
+
+        _ = builder.Append(method.RefQualifier);
+
+        if (method.NoExceptions)
+        {
+            _ = builder.Append(" noexcept");
+        }
+
         _ = builder.Append(">(&").Append(record.Type.CppTypeName).Append("::")
             .Append(GetNativeMethodName(method)).Append("))");
         AppendCallArguments(builder, method.Parameters);
@@ -498,6 +510,20 @@ internal sealed class CppGenerator(RecordModel record) : IGenerator
             }
 
             AppendTransportArgument(builder, parameters[index]);
+        }
+    }
+
+    private static void AppendArguments(StringBuilder builder, MethodModel method)
+    {
+        AppendArguments(builder, method.Parameters);
+        for (var index = 0; index < method.NativeDefaultArguments.Count; index++)
+        {
+            if (method.Parameters.Count > 0 || index > 0)
+            {
+                _ = builder.Append(", ");
+            }
+
+            _ = builder.Append(method.NativeDefaultArguments[index]);
         }
     }
 

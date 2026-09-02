@@ -91,6 +91,7 @@ internal sealed class GenerateAsyncTests
     /// <summary>
     /// Verifies an intrusive handle returned by value is retained after the native call.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_generate_handle_value_return_after_the_parameter_list_Async()
     {
@@ -132,9 +133,62 @@ internal sealed class GenerateAsyncTests
         await Assert.That(source).Contains(
             "extern \"C\" Geom_Surface* SurfaceOwner_Surface(const SurfaceOwner* self, NativeError* __error) noexcept");
         await Assert.That(source).Contains(
-            "auto resultHandle = (self->*static_cast<opencascade::handle<Geom_Surface> (SurfaceOwner::*)() const>(&SurfaceOwner::Surface))();");
+            "auto resultHandle = (self->*static_cast<::opencascade::handle<Geom_Surface> (SurfaceOwner::*)() const>(&SurfaceOwner::Surface))();");
         await Assert.That(source).Contains("auto* result = resultHandle.get();");
         await Assert.That(source).DoesNotContain("selfauto resultHandle");
+    }
+
+    /// <summary>
+    /// Verifies omitted native defaults are emitted explicitly after overload-priority selection.
+    /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
+    [Test]
+    public async Task Should_append_native_defaults_to_disambiguate_constructor_Async()
+    {
+        var intType = new TypeModel()
+        {
+            CppTypeName = "int",
+            CSharpPInvokeType = DataType.Int,
+            CSharpPublicType = DataType.Int,
+        };
+        var method = new MethodModel()
+        {
+            DescriptionItems = [],
+            ReturnTypeDescriptionItems = [],
+            NativeDefaultArguments = ["256",],
+            OverloadPriority = 2,
+            NoExceptions = false,
+            IsConst = false,
+            IsStatic = false,
+            ReturnType = intType,
+            MethodName = "New",
+            Type = MethodModelType.NEW,
+            Parameters = [CreateParameter("aN", intType),],
+        };
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            Bases = [],
+            IsAbstract = false,
+            IsStandardTransient = false,
+            ObjectKind = NativeObjectKind.Owned,
+            SourceHeader = "IntPolyh_Array.hxx",
+            Type = new()
+            {
+                CppTypeName = "IntPolyh_Array<IntPolyh_StartPoint>",
+                CSharpPInvokeType = new("IntPolyh_Array_IntPolyh_StartPoint"),
+                CSharpPublicType = new("IntPolyh_Array_IntPolyh_StartPoint"),
+            },
+            Size = 88,
+            FieldModels = [],
+            MethodModels = [method,],
+        };
+        NativeExportNameBuilder.Assign(record);
+
+        var source = await new CppGenerator(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(source).Contains(
+            "::new (result) IntPolyh_Array<IntPolyh_StartPoint>(aN, 256);");
     }
 
     private static MethodModel CreateMethod(

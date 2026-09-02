@@ -33,6 +33,7 @@ internal sealed class AddTest
     /// <summary>
     /// Verifies a used standard pair specialization receives a closed, compiler-probed model.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_include_used_standard_pair_specialization_Async()
     {
@@ -69,6 +70,7 @@ internal sealed class AddTest
     /// <summary>
     /// Verifies public enum-valued nested template specializations remain available.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_include_public_nested_template_with_qualified_enum_argument_Async()
     {
@@ -95,6 +97,8 @@ internal sealed class AddTest
     /// <summary>
     /// Verifies a specialization carrying a private forward-declared nested type is not public.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
+    /// <exception cref="InvalidOperationException">The expected specialization cannot be found.</exception>
     [Test]
     public async Task Should_exclude_template_with_private_forward_declared_argument_Async()
     {
@@ -123,6 +127,7 @@ internal sealed class AddTest
     /// <summary>
     /// Verifies C++ standard stream ownership APIs are excluded while unrelated methods remain.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_include_representable_stream_and_handle_dependencies_Async()
     {
@@ -380,13 +385,56 @@ internal sealed class AddTest
 
         manager.Add(record);
 
-        var constructors = manager.RecordModels.Single().MethodModels
+        var constructors = manager.RecordModels.Single(static model => model.Type.CppTypeName == "Holder").MethodModels
             .Where(static m => m.Type == MethodModelType.NEW)
             .Select(static m => m.Parameters.Select(p => p.Type.CppTypeName).ToArray())
             .ToArray();
 
         await Assert.That(constructors.Length).IsEqualTo(1);
         await Assert.That(constructors.Single()).IsEquivalentTo(["int",]);
+    }
+
+    /// <summary>
+    /// Verifies constructor defaults are expanded and overlapping signatures prefer the fuller declaration.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_apply_overload_priority_to_defaulted_constructors_Async()
+    {
+        var filePath = Path.Combine(Path.GetTempPath(), $"{Guid.NewGuid():N}.cpp");
+        const string source = """
+            struct Array
+            {
+                Array(int increment = 256);
+                Array(int count, int increment = 256);
+            };
+            """;
+        await File.WriteAllTextAsync(filePath, source).ConfigureAwait(false);
+        try
+        {
+            using var translationUnit = ParseTranslationUnit(source, filePath);
+            var record = translationUnit.TranslationUnitDecl.CursorChildren
+                .OfType<CXXRecordDecl>()
+                .Single(static value => value.Name == "Array");
+            var manager = CreateManager();
+
+            manager.Add(record);
+
+            var constructors = manager.RecordModels.Single().MethodModels
+                .Where(static method => method.Type == MethodModelType.NEW)
+                .OrderBy(static method => method.Parameters.Count)
+                .ToArray();
+            await Assert.That(constructors.Select(static method => method.Parameters.Count))
+                .IsEquivalentTo([0, 1, 2,]);
+            await Assert.That(constructors[0].NativeDefaultArguments).IsEmpty();
+            await Assert.That(constructors[1].Parameters[0].Name).IsEqualTo("count");
+            await Assert.That(constructors[1].NativeDefaultArguments).IsEquivalentTo(["256",]);
+            await Assert.That(constructors[2].NativeDefaultArguments).IsEmpty();
+        }
+        finally
+        {
+            File.Delete(filePath);
+        }
     }
 
     /// <summary>
@@ -780,6 +828,71 @@ internal sealed class AddTest
 
         await Assert.That(manager.RecordModels.Select(static record => record.Type.CppTypeName))
             .IsEquivalentTo(["Traverse<int>",]);
+    }
+
+    /// <summary>
+    /// Verifies an implementation-policy void argument does not hide a specialization with a fixed value type.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_generate_fixed_specialization_with_void_policy_argument_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename TValue, typename TPolicy = void>
+            struct Shared
+            {
+                TValue Value;
+            };
+
+            struct Owner
+            {
+                Shared<int> Field;
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(owner);
+
+        await Assert.That(manager.RecordModels.Select(static record => record.Type.CppTypeName))
+            .Contains("Shared<int>");
+    }
+
+    /// <summary>
+    /// Verifies a void-backed BVH traversal keeps callable overloads without instantiating its invalid shortcut.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_only_void_backed_bvh_shortcut_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename TValue, int Dimension, typename TSet = void, typename TMetric = TValue>
+            struct BVH_PairTraverse
+            {
+                int Select();
+                int Select(int first, int second);
+            };
+
+            struct Owner
+            {
+                BVH_PairTraverse<double, 3> Traversal;
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(owner);
+
+        var traversal = manager.RecordModels.Single(static record =>
+            record.Type.CppTypeName.StartsWith("BVH_PairTraverse<", StringComparison.Ordinal));
+        await Assert.That(traversal.MethodModels.Where(static method => method.MethodName == "Select"))
+            .HasSingleItem();
+        await Assert.That(traversal.MethodModels.Single(static method => method.MethodName == "Select").Parameters)
+            .Count().IsEqualTo(2);
     }
 
     /// <summary>

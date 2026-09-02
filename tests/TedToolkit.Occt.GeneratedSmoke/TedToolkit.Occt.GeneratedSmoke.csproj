@@ -16,7 +16,7 @@
           CopyToOutputDirectory="PreserveNewest">
       <Link>ted_toolkit_occt.dll</Link>
     </None>
-    <None Include="$(VcpkgRoot)\installed\x64-windows\bin\TKG2d.dll;$(VcpkgRoot)\installed\x64-windows\bin\TKMath.dll;$(VcpkgRoot)\installed\x64-windows\bin\TKernel.dll"
+    <None Include="$(VcpkgRoot)\installed\x64-windows\bin\*.dll"
           CopyToOutputDirectory="PreserveNewest"
           Link="%(Filename)%(Extension)" />
   </ItemGroup>

@@ -28,6 +28,7 @@ internal sealed class HelpersTest
     /// <summary>
     /// Verifies template pointer arguments remain distinct in generated type names.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_preserve_pointer_identity_in_generated_type_names_Async()
     {
@@ -40,6 +41,7 @@ internal sealed class HelpersTest
     /// <summary>
     /// Verifies long physical file names are shortened deterministically without changing ordinary names.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_shorten_only_long_generated_file_names_Async()
     {

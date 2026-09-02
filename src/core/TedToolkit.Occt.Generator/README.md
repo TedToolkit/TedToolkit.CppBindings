@@ -225,6 +225,9 @@ the same case-insensitive path fail before materialization.
 The generator fails closed when it cannot preserve native layout, ownership, or lifetime semantics.
 Unsupported input is handled at the narrowest safe boundary: a broken header excludes that header
 and its transitive dependants, while an unsupported method signature excludes only that method.
+For the Windows package, the delivered OCCT DLLs are authoritative: a function declared by a
+header but absent from those DLLs is unsupported by that package. The generator removes only the
+corresponding binding operation and preserves its declaring type and every other supported member.
 
 ### Excluded headers
 
@@ -256,6 +259,23 @@ create replacement OCCT headers or patch the installed package.
   retain and release its actual private `Standard_Transient` owner rather than substituting the
   pointer returned by `get()`. If one concrete specialization or operation cannot satisfy that
   proof, report and exclude only that boundary.
+- `IntPolyh_Array<IntPolyh_Edge>::Dump()` and `IntPolyh_Array<IntPolyh_Triangle>::Dump()` are
+  excluded because their template bodies call the element `Dump()` without its required integer
+  argument. Both concrete array types and every other callable member remain generated.
+- `NCollection_CellFilter<BRepExtrema_VertexInspector>::Remove(...)` is excluded because both
+  overloads require an `IsEqual` operation that `BRepExtrema_VertexInspector` does not provide.
+  The concrete cell-filter type and its other callable members remain generated.
+- Copy assignment, `SetValue(...)`, and sequence-to-sequence append, prepend, and insertion are
+  excluded from `NCollection_Sequence<CSLib_Class2d>` because `CSLib_Class2d` deletes copying.
+  Move construction, rvalue element insertion, and members that do not copy elements remain
+  generated.
+- `NCollection_Vec3<unsigned long long>::cwiseAbs()` is excluded because the installed OCCT body
+  calls an ambiguous MSVC `abs` overload. The concrete vector type and its other operations remain
+  generated.
+- Functions listed in `Resources/UnsupportedNativeExports.txt` are excluded because a complete
+  Windows x64 native link proved that the delivered OCCT binaries do not provide their required
+  symbols. This list uses final native export names so the exclusion remains member-specific and
+  auditable; it must be regenerated from linker evidence when the packaged OCCT binaries change.
 
 The following callable categories also remain unsupported:
 

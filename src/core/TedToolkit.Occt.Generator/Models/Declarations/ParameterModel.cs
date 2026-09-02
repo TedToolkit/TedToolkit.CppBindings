@@ -16,6 +16,11 @@ namespace TedToolkit.Occt.Generator.Models.Declarations;
 internal class ParameterModel
 {
     /// <summary>
+    /// Gets the native default argument expression, or <see langword="null"/> when the parameter is required.
+    /// </summary>
+    public string? CppDefaultValue { get; init; }
+
+    /// <summary>
     /// Gets the XML documentation description items for the parameter.
     /// </summary>
     public required IReadOnlyList<IDescriptionItem> DescriptionItems { get; init; }

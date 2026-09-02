@@ -60,13 +60,20 @@ public sealed class GenerateCSharpModule : Module<bool>
         var recordCatalog = records.ToDictionary(
             static record => record.Type.CppTypeName,
             StringComparer.Ordinal);
+        var nativeFunctionIndices = NativeApiGenerator.GetExports(records)
+            .Select(static (export, index) => (export, index))
+            .ToDictionary(static value => value.export, static value => value.index, StringComparer.Ordinal);
 
         await Task.WhenAll(
                 GenerateNativeApiAsync(cancellationToken),
                 Parallel.ForEachAsync(
                     records,
                     cancellationToken,
-                    (record, token) => new ValueTask(GenerateCSharpAsync(record, recordCatalog, token))),
+                    (record, token) => new ValueTask(GenerateCSharpAsync(
+                        record,
+                        recordCatalog,
+                        nativeFunctionIndices,
+                        token))),
                 Parallel.ForEachAsync(
                     enums,
                     cancellationToken,
@@ -90,12 +97,14 @@ public sealed class GenerateCSharpModule : Module<bool>
     private async Task GenerateCSharpAsync(
         RecordModel record,
         IReadOnlyDictionary<string, RecordModel> recordCatalog,
+        IReadOnlyDictionary<string, int> nativeFunctionIndices,
         CancellationToken cancellationToken)
     {
         var csharpFile = Path.Combine(_generationOptions.Value.CSharpFolder.FullName,
             ZString.Concat(record.Type.CSharpTypeName.ToGeneratedFileStem(), ".g.cs"));
 
-        var codes = await _generatorService.GenerateCSharp(record, recordCatalog).GenerateAsync(cancellationToken)
+        var codes = await _generatorService.GenerateCSharp(record, recordCatalog, nativeFunctionIndices)
+            .GenerateAsync(cancellationToken)
             .ConfigureAwait(false);
         await File.WriteAllTextAsync(csharpFile, codes, cancellationToken).ConfigureAwait(false);
     }

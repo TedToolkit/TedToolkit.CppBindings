@@ -45,6 +45,7 @@ internal sealed class CompilerProbeModuleTests
     /// <summary>
     /// Verifies an accessible implicit destructor receives a native destroy operation.
     /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
     [Test]
     public async Task Should_add_destroy_for_owned_record_with_implicit_destructor_Async()
     {
@@ -54,6 +55,21 @@ internal sealed class CompilerProbeModuleTests
 
         await Assert.That(owned.MethodModels.Single().Type).IsEqualTo(MethodModelType.DELETE);
         await Assert.That(owned.MethodModels.Single().NativeExportName).IsEqualTo("Owned_Destroy");
+    }
+
+    /// <summary>
+    /// Verifies functions absent from the delivered OCCT binaries are removed without removing the type.
+    /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
+    [Test]
+    public async Task Should_remove_exports_missing_from_delivered_native_binaries_Async()
+    {
+        var record = CreateRecord("Cocoa_LocalPool", 16, isTransient: false, includeDestructor: true);
+
+        CompilerProbeModule.CompleteRecords([record,], "0\t16\t8\t0\t0\t1\n");
+
+        await Assert.That(record.MethodModels).IsEmpty();
+        await Assert.That(record.Type.CppTypeName).IsEqualTo("Cocoa_LocalPool");
     }
 
     /// <summary>

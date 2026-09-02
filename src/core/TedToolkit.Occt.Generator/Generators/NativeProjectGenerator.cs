@@ -43,12 +43,12 @@ internal static class NativeProjectGenerator
 
         _ = builder.Append(")\n\ntarget_compile_features(").Append(libraryBaseName)
             .Append(" PRIVATE cxx_std_17)\n")
+            .Append("set_target_properties(").Append(libraryBaseName)
+            .Append(" PROPERTIES RUNTIME_OUTPUT_DIRECTORY \"${CMAKE_BINARY_DIR}/$<CONFIG>\")\n")
             .Append("target_include_directories(").Append(libraryBaseName)
             .Append(" PRIVATE ${OpenCASCADE_INCLUDE_DIR})\n")
             .Append("target_link_libraries(").Append(libraryBaseName)
-            .Append(" PRIVATE ${OpenCASCADE_LIBRARIES})\n")
-            .Append("set_target_properties(").Append(libraryBaseName)
-            .Append(" PROPERTIES WINDOWS_EXPORT_ALL_SYMBOLS ON)\n");
+            .Append(" PRIVATE ${OpenCASCADE_LIBRARIES})\n");
         return builder.ToString();
     }
 }
