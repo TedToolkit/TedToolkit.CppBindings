@@ -225,6 +225,14 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     Require ($plan.ToolchainSnapshot.CompilerBv.Length -gt 0 -and $plan.ToolchainSnapshot.WindowsSDKVersion.Length -gt 0) 'Exact vcvars/compiler/SDK identity was not pinned.'
     Require ($plan.ArtifactVolumeIdentity.Length -gt 0) 'Artifact physical volume was not pinned.'
     Require ($plan.NativeGate.SpecificationPath -ceq $gateSpecification) 'Native boundary gate was not bound.'
+    foreach ($receiptPath in $receipts.Values) {
+        $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
+        foreach ($hostFile in $receipt.HostFiles) {
+            $hostPath = [IO.Path]::GetFullPath((Join-Path $receipt.HostDirectory $hostFile.Path))
+            Require (@($matrix.InputFiles.Path | Where-Object { $_ -ceq $hostPath }).Count -eq 1) `
+                "Complete host file was not bound by the matrix: $hostPath"
+        }
+    }
     Require ((@($matrix.Workloads.Name) -join ',') -ceq 'artifact-cold,unchanged,declaration-edit,generator-change,missing-output') 'Workload inventory drifted.'
     foreach ($workload in $matrix.Workloads) {
         foreach ($variant in @('baseline', 'candidate')) {
@@ -278,6 +286,14 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $executablePlan = Get-Content -LiteralPath (Join-Path $specification 'occt-plan.json') -Raw | ConvertFrom-Json -AsHashtable
     $executablePlan.FixtureOnly = $false
     $executablePlan.HarnessBinding = "commit:$($executablePlan.CandidateHead)"
+    Write-JsonFile $executablePlanPath $executablePlan
+    $fixtureGateRejected = $false
+    try { & $adapter -PlanPath $executablePlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    catch { $fixtureGateRejected = $_.Exception.Message -like '*fixture-only native boundary gate*' }
+    Require $fixtureGateRejected 'A fixture-only native boundary gate reached workload execution.'
+
+    Remove-Item -LiteralPath $executablePlanPath
+    $executablePlan.NativeGate.FixtureOnly = $false
     Write-JsonFile $executablePlanPath $executablePlan
     $nestedTarget = Join-Path $proofRoot 'nested-target'; $null = [IO.Directory]::CreateDirectory($nestedTarget)
     $nestedJunction = Join-Path $arguments.BaselineArtifactRoot 'nested/reparse'

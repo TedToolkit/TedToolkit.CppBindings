@@ -373,6 +373,7 @@ if ($plan.HarnessBinding -cne "commit:$($plan.CandidateHead)") {
     throw 'Harness binding and candidate HEAD differ.'
 }
 if ($plan.FixtureOnly) { throw 'Fixture-only OCCT plans cannot execute workloads.' }
+if ($plan.NativeGate.FixtureOnly) { throw 'A fixture-only native boundary gate cannot execute workloads.' }
 if ($plan.Variants.baseline.ArtifactRoot.Length -ne $plan.Variants.candidate.ArtifactRoot.Length -or
     $plan.Variants.baseline.InputVcpkgRoot.Length -ne $plan.Variants.candidate.InputVcpkgRoot.Length -or
     $plan.Variants.baseline.InputVcpkgRoot -ceq $plan.ToolchainVcpkgRoot -or
