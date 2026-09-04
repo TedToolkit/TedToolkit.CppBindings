@@ -230,11 +230,9 @@ internal sealed class CSharpGenerator(
 
     private void AddField(TypeDeclaration structDeclaration, FieldModel fieldModel, bool usesExplicitLayout)
     {
-        var managedType = recordDecl.TemplateProjection is null
+        var managedType = recordDecl.TemplateProjection is null || string.IsNullOrEmpty(fieldModel.CSharpTemplateType)
             ? fieldModel.Type.CSharpPInvokeType
-            : new DataType(string.IsNullOrEmpty(fieldModel.CSharpTemplateType)
-                ? GeneralizeManagedType(fieldModel.Type.CSharpPInvokeType.ToCode())
-                : fieldModel.CSharpTemplateType);
+            : new DataType(fieldModel.CSharpTemplateType);
         var nativeType = recordDecl.TemplateProjection is not null
                          && !string.IsNullOrEmpty(fieldModel.CppTemplateType)
             ? fieldModel.CppTemplateType

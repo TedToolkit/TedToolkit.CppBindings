@@ -54,6 +54,18 @@ internal sealed class RecordModelManager(
     private bool _managedTemplateReferencesFinalized;
 
     /// <inheritdoc/>
+    public IEnumerable<RecordModel> NativePreparationRecords
+    {
+        get
+        {
+            ShareHeaderRequirements();
+            return _recordNames.Values.Where(t => (t.IsPubliclyAccessible || t.IsRequiredDependency)
+                                                   && t.IsClosedTemplateSpecialization
+                                                   && !IsAnonymousTypeName(t.Type.CppTypeName));
+        }
+    }
+
+    /// <inheritdoc/>
     public IReadOnlyList<EnumModel> EnumModels
     {
         get
@@ -67,11 +79,9 @@ internal sealed class RecordModelManager(
     {
         get
         {
-            ShareHeaderRequirements();
+            var records = NativePreparationRecords;
             FinalizeManagedTemplateReferences();
-            return _recordNames.Values.Where(t => (t.IsPubliclyAccessible || t.IsRequiredDependency)
-                                                   && t.IsClosedTemplateSpecialization
-                                                   && !IsAnonymousTypeName(t.Type.CppTypeName));
+            return records;
         }
     }
 
@@ -400,8 +410,10 @@ internal sealed class RecordModelManager(
     private TemplateProjectionModel? CreateTemplateProjection(CXXRecordDecl record)
     {
         if (record is not ClassTemplateSpecializationDecl specialization
+            || specialization.IsExplicitSpecialization
             || IsHandleSpecialization(specialization))
         {
+            // An explicit specialization owns its declarations, not the primary template's fields.
             return null;
         }
 

@@ -12,6 +12,7 @@ using ClangSharp.Interop;
 
 using Microsoft.Extensions.Options;
 
+using TedToolkit.CppBindings.Occt.Generator.Generators;
 using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
@@ -1231,6 +1232,96 @@ internal sealed class AddTest
         await Assert.That(heapOnlyModel.IsStandardTransient).IsFalse();
         await Assert.That(transientModel.IsStandardTransient).IsTrue();
         await Assert.That(nestedTransientModel.IsStandardTransient).IsTrue();
+    }
+
+    /// <summary>
+    /// Verifies a fixed field is not mistaken for a coincident specialization argument.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_preserve_fixed_field_types_in_shared_template_families_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template<class TValue> struct Box { TValue Value; float Fixed; };
+            struct Owner { Box<float> First; Box<int> Second; };
+            """);
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner"));
+        var records = manager.RecordModels.ToArray();
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            DeclOptions = [], CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var slots = NativeExportInventory.GetExports(records).Select(static (name, index) => (name, index))
+            .ToDictionary(static entry => entry.name, static entry => entry.index, StringComparer.Ordinal);
+        var boxes = records.Where(static record => record.Type.CppTypeName.StartsWith("Box<", StringComparison.Ordinal)).ToArray();
+        await Assert.That(boxes.Length).IsEqualTo(2);
+        foreach (var record in boxes)
+        {
+            await Assert.That(record.TemplateProjection).IsNotNull();
+            var source = await new CSharpGenerator(record, options, nativeFunctionIndices: slots)
+                .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+            await Assert.That(source).Contains("public TValue Value;");
+            await Assert.That(source).Contains("public float Fixed;");
+            await Assert.That(source).DoesNotContain("public TValue Fixed;");
+        }
+    }
+
+    /// <summary>
+    /// Verifies family sharing waits for native ownership classifications and preserves dependent references.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_finalize_template_families_after_native_lifetime_classification_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct zOwned { int Value; ~zOwned() {} };
+            template<class TValue> struct Box { TValue Value; Box() = default; };
+            struct Owner { Box<int> First; Box<zOwned> Second; };
+            """);
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner"));
+        var records = manager.NativePreparationRecords.OrderBy(static record => record.Type.CppTypeName, StringComparer.Ordinal).ToArray();
+        var nativeFacts = records.Select(static (record, index) =>
+        {
+            var trivial = record.Type.CppTypeName is "Box<int>" ? 1 : 0;
+            return $"{index}\t{record.Size}\t4\t{trivial}\t{trivial}\t1\n";
+        });
+        OcctCompilerProbeModule.CompleteRecords(records, string.Concat(nativeFacts));
+        var completed = manager.RecordModels.ToArray();
+        var boxes = completed.Where(static record => record.Type.CppTypeName.StartsWith("Box<", StringComparison.Ordinal)).ToArray();
+        await Assert.That(boxes.Length).IsEqualTo(2);
+        await Assert.That(boxes.All(static record => record.TemplateProjection is null)).IsTrue();
+        await Assert.That(boxes.Select(static record => record.Type.CSharpTypeName))
+            .IsEquivalentTo(["Box_int", "Box_zOwned",]);
+        await Assert.That(boxes.Select(static record => record.ObjectKind))
+            .IsEquivalentTo([NativeObjectKind.Value, NativeObjectKind.Owned,]);
+        var owner = completed.Single(static record => record.Type.CppTypeName == "Owner");
+        await Assert.That(owner.FieldModels.Select(static field => field.Type.CSharpTypeName))
+            .IsEquivalentTo(["Box_int", "Box_zOwned",]);
+    }
+
+    /// <summary>
+    /// Verifies an explicit specialization uses its own native field declarations.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_keep_explicit_template_specializations_closed_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template<class T> struct Box { T Value; };
+            template<> struct Box<int> { float Value; };
+            struct Owner { Box<int> First; Box<float> Second; };
+            """);
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner"));
+        var record = manager.RecordModels.Single(static record => record.Type.CppTypeName == "Box<int>");
+        await Assert.That(record.TemplateProjection).IsNull();
+        await Assert.That(record.Type.CSharpTypeName).IsEqualTo("Box_int");
+        await Assert.That(record.FieldModels.Single().Type.CSharpTypeName).IsEqualTo("float");
     }
 
     private static RecordModelManager CreateManager()

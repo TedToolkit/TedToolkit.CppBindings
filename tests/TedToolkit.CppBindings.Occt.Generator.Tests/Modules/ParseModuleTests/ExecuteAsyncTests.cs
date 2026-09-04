@@ -305,6 +305,8 @@ internal sealed class ExecuteAsyncTests
 
         public IEnumerable<RecordModel> RecordModels { get; } = [];
 
+        public IEnumerable<RecordModel> NativePreparationRecords { get; } = [];
+
         public RecordModel Add(CXXRecordDecl record)
         {
             AddedRecordNames.Add(record.Name);

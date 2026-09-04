@@ -63,7 +63,7 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(context);
-        var records = _recordManager.RecordModels
+        var records = _recordManager.NativePreparationRecords
             .OrderBy(static record => record.Type.CppTypeName, StringComparer.Ordinal)
             .ToArray();
         if (records.Length is 0)

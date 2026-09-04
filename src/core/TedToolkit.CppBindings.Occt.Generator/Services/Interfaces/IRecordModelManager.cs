@@ -35,7 +35,12 @@ internal interface IRecordModelManager
     IReadOnlyList<EnumModel> EnumModels { get; }
 
     /// <summary>
-    /// Gets the projected record models discovered during parsing.
+    /// Gets managed projections finalized after native classification has completed.
     /// </summary>
     IEnumerable<RecordModel> RecordModels { get; }
+
+    /// <summary>
+    /// Gets parsed records for native classification before managed families are finalized.
+    /// </summary>
+    IEnumerable<RecordModel> NativePreparationRecords { get; }
 }
