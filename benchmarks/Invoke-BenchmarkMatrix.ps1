@@ -77,7 +77,7 @@ function Read-StageGroup {
         $value.WorkingDirectory = Resolve-BenchmarkPhysicalPath $value.WorkingDirectory
         if ($value.ContainsKey('PreMeasurementValidation')) {
             $pre = $value.PreMeasurementValidation
-            foreach ($member in @('Executable', 'Arguments', 'WorkingDirectory')) {
+            foreach ($member in @('Executable', 'Arguments', 'WorkingDirectory', 'TimeLimitSeconds')) {
                 if (-not $pre.ContainsKey($member)) { throw "Missing pre-measurement validation member: $member" }
             }
             if ($pre.Arguments -isnot [array] -or
@@ -89,6 +89,9 @@ function Read-StageGroup {
                 Select-Object -First 1
             $pre.Executable = Resolve-BenchmarkPhysicalPath $preCommand.Source
             $pre.WorkingDirectory = Resolve-BenchmarkPhysicalPath $pre.WorkingDirectory
+            if ($pre.TimeLimitSeconds -lt 1 -or $pre.TimeLimitSeconds -gt 43200) {
+                throw 'The pre-measurement validation time limit must be between 1 second and 12 hours.'
+            }
         }
         [pscustomobject]@{
             Path = $snapshot.Path

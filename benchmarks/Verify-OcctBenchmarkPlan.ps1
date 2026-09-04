@@ -371,7 +371,8 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
                     $generate.PreMeasurementValidation.Arguments.IndexOf('-Action') + 1] -ceq
                     'ValidateGenerationToolchain' -and
                 $generate.PreMeasurementValidation.Executable -ceq $generate.Executable -and
-                $generate.PreMeasurementValidation.WorkingDirectory -ceq $generate.WorkingDirectory) `
+                $generate.PreMeasurementValidation.WorkingDirectory -ceq $generate.WorkingDirectory -and
+                $generate.PreMeasurementValidation.TimeLimitSeconds -eq 300) `
                 "Generate lacks an immediately preceding out-of-band toolchain validation: $($workload.Name)/$variant"
         }
     }

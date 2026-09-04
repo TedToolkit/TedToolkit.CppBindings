@@ -374,6 +374,7 @@ function New-Stage {
                 '-SampleRoot', '{SampleRoot}'
             )
             WorkingDirectory = $destination
+            TimeLimitSeconds = 300
         }
     }
     Write-NewJson $path $stage

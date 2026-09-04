@@ -32,6 +32,7 @@ foreach ($scenario in $scenarios) {
             Executable = $pwshPath
             Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'delay', '-Value', '1200')
             WorkingDirectory = $proofRoot
+            TimeLimitSeconds = 20
         }
     }
     $specification | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $specPath -Encoding utf8
@@ -86,6 +87,7 @@ $preFailureReport = Join-Path $proofRoot 'pre-validation-failure'
         Executable = $pwshPath
         Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'failure', '-Value', '')
         WorkingDirectory = $proofRoot
+        TimeLimitSeconds = 20
     }
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $preFailureSpec -Encoding utf8
 $preFailure = $null
@@ -101,6 +103,42 @@ if ($preFailure -notlike '*Pre-measurement validation exited with code 17*' -or
     throw 'A failed pre-measurement validation did not block the timed child.'
 }
 
+$preHungSpec = Join-Path $proofRoot 'pre-validation-hung.json'
+$preHungReport = Join-Path $proofRoot 'pre-validation-hung'
+[ordered]@{
+    Label = 'Harness verification only: pre-validation-hung'
+    Executable = $pwshPath
+    Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'echo', '-Value', 'must-not-run')
+    WorkingDirectory = $proofRoot
+    DeadlineUtc = $deadline
+    TimeLimitSeconds = 20
+    MemoryLimitBytes = 2GB
+    PreMeasurementValidation = [ordered]@{
+        Executable = $pwshPath
+        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'tree', '-Value', '')
+        WorkingDirectory = $proofRoot
+        TimeLimitSeconds = 1
+    }
+} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $preHungSpec -Encoding utf8
+$preHungFailure = $null
+try { & $runner -SpecificationPath $preHungSpec -ReportDirectory $preHungReport }
+catch { $preHungFailure = $_.Exception.Message }
+$preHungResult = Get-Content -LiteralPath (Join-Path $preHungReport 'result.json') -Raw | ConvertFrom-Json
+$preHungOutput = Get-Content -LiteralPath (Join-Path $preHungReport 'pre-validation-stdout.log') -Raw
+if ($preHungOutput -notmatch 'child:(\d+)') { throw 'The hung validation descendant did not start.' }
+$preHungChildId = [int] $Matches[1]
+if ($preHungFailure -notlike '*Pre-measurement validation or experiment time budget was exceeded*' -or
+    $preHungResult.PreMeasurementValidation.Succeeded -or
+    $preHungResult.PreMeasurementValidation.IncludedInMeasuredTime -or
+    $preHungResult.PreMeasurementValidation.ObservedProcessCount -lt 2 -or
+    $null -ne $preHungResult.ProcessElapsedSeconds -or
+    $null -ne $preHungResult.StartedAtUtc -or
+    (Get-Item -LiteralPath (Join-Path $preHungReport 'stdout.log')).Length -ne 0 -or
+    (Get-Process -Id $preHungResult.PreMeasurementValidation.ProcessId -ErrorAction SilentlyContinue) -or
+    (Get-Process -Id $preHungChildId -ErrorAction SilentlyContinue)) {
+    throw 'A hung pre-measurement validation was not bounded and cleaned up before the timed child.'
+}
+
 $protectedReport = Join-Path $proofRoot 'success/result.json'
 $before = (Get-FileHash -LiteralPath $protectedReport -Algorithm SHA256).Hash
 $rejected = $false
@@ -109,4 +147,4 @@ catch { $rejected = $_.Exception.Message -like 'Use a new report directory*' }
 if (-not $rejected -or (Get-FileHash -LiteralPath $protectedReport -Algorithm SHA256).Hash -ne $before) {
     throw 'The existing-evidence guard failed.'
 }
-Write-Output "Stage proof passed: five process scenarios, out-of-band pre-measurement validation, and evidence preservation. Raw evidence: $proofRoot"
+Write-Output "Stage proof passed: five process scenarios, bounded out-of-band pre-measurement validation, and evidence preservation. Raw evidence: $proofRoot"

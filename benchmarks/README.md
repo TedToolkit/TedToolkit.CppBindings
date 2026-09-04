@@ -249,8 +249,10 @@ size, and SHA-256. The resource inventory file itself is hash-bound.
 Prepare reproduces that generator environment and rechecks the full driver trace, companion hashes,
 resource-directory identity and inventory outside material timing. Every Generate stage also declares
 a bound pre-measurement validation command. The stage runner executes that full check immediately
-before starting its stopwatch and measured child, records its separate elapsed time, and refuses to
-start the child after a validation failure. Validation emits a single-use receipt scoped to the plan,
+before starting its stopwatch and measured child, under a separate 300-second limit and the shared
+experiment deadline. It records separate stdout, stderr, elapsed time, and process-tree evidence;
+timeout or failure terminates the live validation tree and identity-checked observed descendants,
+and refuses to start the measured child. Validation emits a single-use receipt scoped to the plan,
 variant, workload, generator host, driver trace, and resource inventory; timed Generate consumes only
 a matching receipt no more than 30 seconds old. The timed action therefore contains only negligible
 receipt/environment setup plus the exact Console invocation

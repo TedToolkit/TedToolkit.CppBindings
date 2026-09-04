@@ -87,7 +87,7 @@ $executable = Get-Command $spec.Executable -CommandType Application -ErrorAction
 $preValidation = $null
 if ($spec.PSObject.Properties.Name -contains 'PreMeasurementValidation') {
     $preValidation = $spec.PreMeasurementValidation
-    foreach ($name in @('Executable', 'Arguments', 'WorkingDirectory')) {
+    foreach ($name in @('Executable', 'Arguments', 'WorkingDirectory', 'TimeLimitSeconds')) {
         if ($preValidation.PSObject.Properties.Name -notcontains $name) {
             throw "Missing pre-measurement validation member: $name"
         }
@@ -99,6 +99,9 @@ if ($spec.PSObject.Properties.Name -contains 'PreMeasurementValidation') {
     $preExecutable = Get-Command $preValidation.Executable -CommandType Application -ErrorAction Stop |
         Select-Object -First 1
     $preWorkDirectory = (Resolve-Path -LiteralPath $preValidation.WorkingDirectory).Path
+    if ($preValidation.TimeLimitSeconds -lt 1 -or $preValidation.TimeLimitSeconds -gt 43200) {
+        throw 'The pre-measurement validation time limit must be between 1 second and 12 hours.'
+    }
 }
 $destination = [IO.Path]::GetFullPath($ReportDirectory)
 if (Test-Path -LiteralPath $destination) { throw 'Use a new report directory for each stage; existing evidence is never overwritten.' }
@@ -110,7 +113,12 @@ $stdout = $null
 $stderr = $null
 $stdoutCopy = $null
 $stderrCopy = $null
+$preStdout = $null
+$preStderr = $null
+$preStdoutCopy = $null
+$preStderrCopy = $null
 $started = $false
+$preStarted = $false
 $failure = $null
 $exitCode = $null
 $processSeconds = $null
@@ -124,6 +132,10 @@ $preCompletedAt = $null
 $preExitCode = $null
 $preSucceeded = $null -eq $preValidation
 $preProcess = $null
+$preProcessId = $null
+$preKnown = @{}
+[long] $prePeakWorkingSet = 0
+$preSamples = 0
 $process = [Diagnostics.Process]::new()
 $process.StartInfo.FileName = $executable.Source
 $process.StartInfo.WorkingDirectory = $workDirectory
@@ -139,15 +151,36 @@ if ($null -ne $preValidation) {
     $preProcess.StartInfo.WorkingDirectory = $preWorkDirectory
     $preProcess.StartInfo.UseShellExecute = $false
     $preProcess.StartInfo.CreateNoWindow = $true
+    $preProcess.StartInfo.RedirectStandardOutput = $true
+    $preProcess.StartInfo.RedirectStandardError = $true
     foreach ($argument in $preValidation.Arguments) { $preProcess.StartInfo.ArgumentList.Add($argument) }
 }
 try {
     $stdout = [IO.File]::Open((Join-Path $destination 'stdout.log'), [IO.FileMode]::CreateNew)
     $stderr = [IO.File]::Open((Join-Path $destination 'stderr.log'), [IO.FileMode]::CreateNew)
     if ($null -ne $preProcess) {
+        $preStdout = [IO.File]::Open((Join-Path $destination 'pre-validation-stdout.log'), [IO.FileMode]::CreateNew)
+        $preStderr = [IO.File]::Open((Join-Path $destination 'pre-validation-stderr.log'), [IO.FileMode]::CreateNew)
         $preStartedAt = [DateTimeOffset]::UtcNow
         $preStopwatch.Start()
         if (-not $preProcess.Start()) { throw 'The pre-measurement validation process did not start.' }
+        $preStarted = $true
+        $preProcessId = $preProcess.Id
+        $preStdoutCopy = $preProcess.StandardOutput.BaseStream.CopyToAsync($preStdout)
+        $preStderrCopy = $preProcess.StandardError.BaseStream.CopyToAsync($preStderr)
+        while (-not $preProcess.HasExited) {
+            if ($preStopwatch.Elapsed.TotalSeconds -ge $preValidation.TimeLimitSeconds -or
+                [DateTimeOffset]::UtcNow -ge $deadline) {
+                throw 'Pre-measurement validation or experiment time budget was exceeded.'
+            }
+            $preWorkingSet = Read-ProcessTree $preProcess.Id $preKnown
+            $preSamples++
+            $prePeakWorkingSet = [Math]::Max($prePeakWorkingSet, $preWorkingSet)
+            if ($preWorkingSet -gt $spec.MemoryLimitBytes) {
+                throw 'The pre-measurement validation process-tree memory budget was exceeded.'
+            }
+            $null = $preProcess.WaitForExit(250)
+        }
         $preProcess.WaitForExit()
         $preExitCode = $preProcess.ExitCode
         if ($preExitCode -ne 0) { throw "Pre-measurement validation exited with code $preExitCode." }
@@ -179,6 +212,13 @@ try {
 catch { $failure = $_.Exception.Message }
 finally {
     try {
+        if ($preStarted -and -not $preProcess.HasExited) {
+            $preProcess.Kill($true)
+            if (-not $preProcess.WaitForExit(5000)) { throw 'The pre-measurement validation did not terminate.' }
+        }
+        if ($preStarted) {
+            Stop-ObservedDescendants $preProcess.Id $preKnown
+        }
         if ($started -and -not $process.HasExited) {
             $process.Kill($true)
             if (-not $process.WaitForExit(5000)) { throw 'The workload did not terminate.' }
@@ -195,8 +235,9 @@ finally {
             $processSeconds = ($process.ExitTime.ToUniversalTime() - $process.StartTime.ToUniversalTime()).TotalSeconds
         }
     }
+    if ($preStarted -and $preProcess.HasExited) { $preExitCode = $preProcess.ExitCode }
     $stopwatch.Stop()
-    foreach ($copy in @($stdoutCopy, $stderrCopy)) {
+    foreach ($copy in @($stdoutCopy, $stderrCopy, $preStdoutCopy, $preStderrCopy)) {
         if ($null -eq $copy) { continue }
         try {
             if (-not $copy.Wait(5000)) { throw 'An output pipe remained open after process cleanup.' }
@@ -206,6 +247,8 @@ finally {
     }
     if ($null -ne $stdout) { $stdout.Dispose() }
     if ($null -ne $stderr) { $stderr.Dispose() }
+    if ($null -ne $preStdout) { $preStdout.Dispose() }
+    if ($null -ne $preStderr) { $preStderr.Dispose() }
     if ($null -ne $preProcess) {
         if ($preStopwatch.IsRunning) { $preStopwatch.Stop() }
         if ($null -eq $preCompletedAt) { $preCompletedAt = [DateTimeOffset]::UtcNow }
@@ -257,6 +300,7 @@ $result = [ordered]@{
                 Executable = $preExecutable.Source
                 Arguments = $preValidation.Arguments
                 WorkingDirectory = $preWorkDirectory
+                TimeLimitSeconds = $preValidation.TimeLimitSeconds
             }
         }
         StartedAtUtc = if ($null -eq $preStartedAt) { $null } else { $preStartedAt.ToString('O') }
@@ -264,6 +308,10 @@ $result = [ordered]@{
         ElapsedSeconds = $preStopwatch.Elapsed.TotalSeconds
         Succeeded = $preSucceeded
         ExitCode = $preExitCode
+        ProcessId = $preProcessId
+        SampledPeakTreeWorkingSetBytes = $prePeakWorkingSet
+        CounterSamples = $preSamples
+        ObservedProcessCount = $preKnown.Count
         IncludedInMeasuredTime = $false
     }
     Limitations = @(

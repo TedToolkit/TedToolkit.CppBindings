@@ -197,7 +197,7 @@ Assert-CompleteBindings $planOnlyEvidence $planOnly
 
 foreach ($case in @('few-warm', 'few-cold', 'screening-extra', 'cross-volume', 'duplicate', 'no-verify',
         'wrong-hash', 'expired', 'extended', 'unknown-placeholder', 'embedded-placeholder',
-        'pre-validation-missing-member', 'pre-validation-placeholder')) {
+        'pre-validation-missing-member', 'pre-validation-placeholder', 'pre-validation-time-limit')) {
     $fixture = New-MatrixFixture $case
     $expected = switch ($case) {
         'few-warm' { $fixture.Specification.Workloads[1].Samples = 4; 'Invalid sample count*' }
@@ -239,10 +239,22 @@ foreach ($case in @('few-warm', 'few-cold', 'screening-extra', 'cross-volume', '
                 ConvertFrom-Json -AsHashtable
             $stage['PreMeasurementValidation'] = @{
                 Executable = $pwshPath; Arguments = @('success', 'prefix-{SampleRoot}'); WorkingDirectory = $fixture.Root
+                TimeLimitSeconds = 20
             }
             $stage | ConvertTo-Json -Depth 4 |
                 Set-Content -LiteralPath $fixture.Specification.Workloads[0].baseline.Measure[0] -Encoding utf8
             'Sample placeholders must occupy a whole stage argument*'
+        }
+        'pre-validation-time-limit' {
+            $stage = Get-Content -LiteralPath $fixture.Specification.Workloads[0].baseline.Measure[0] -Raw |
+                ConvertFrom-Json -AsHashtable
+            $stage['PreMeasurementValidation'] = @{
+                Executable = $pwshPath; Arguments = @('success'); WorkingDirectory = $fixture.Root
+                TimeLimitSeconds = 0
+            }
+            $stage | ConvertTo-Json -Depth 4 |
+                Set-Content -LiteralPath $fixture.Specification.Workloads[0].baseline.Measure[0] -Encoding utf8
+            'The pre-measurement validation time limit must be between*'
         }
     }
     Invoke-Fixture $fixture $expected -PlanOnly
@@ -285,4 +297,4 @@ if ($RealProcess) {
         $phase.ProcessElapsedSeconds -le 0) { throw 'The actual stage failure did not invalidate the sample.' }
     Write-Output 'Real process integration passed: actual process capture and failing verification reject the sample.'
 }
-Write-Output "Matrix proof passed: full 56-execution sampling, screening 10-execution feasibility, exact placeholders/bindings, recommendation authority guards, shared budget/deadline, plan-only, thirteen invalid plans and three fail-closed runs. Fixture-only evidence: $proofRoot"
+Write-Output "Matrix proof passed: full 56-execution sampling, screening 10-execution feasibility, exact placeholders/bindings, recommendation authority guards, shared budget/deadline, plan-only, fourteen invalid plans and three fail-closed runs. Fixture-only evidence: $proofRoot"
