@@ -300,8 +300,31 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     Require $plan.FixtureOnly 'Synthetic receipts did not force a fixture-only plan.'
     Require ($plan.HarnessBinding -ceq 'commit:PENDING-FINAL-HARNESS-COMMIT') 'Pending harness binding was lost.'
     Require ($plan.ToolchainSnapshot.CompilerBv.Length -gt 0 -and $plan.ToolchainSnapshot.WindowsSDKVersion.Length -gt 0) 'Exact vcvars/compiler/SDK identity was not pinned.'
-    Require ($plan.Tools.Clang -ceq $clang -and $plan.ToolchainSnapshot.ClangSha256.Length -eq 64 -and
+    Require ($plan.Tools.Clang -ceq $clang -and $plan.ToolchainSnapshot.ClangPath -ceq $clang -and
+        $plan.ToolchainSnapshot.ClangSha256.Length -eq 64 -and
         $plan.ToolchainSnapshot.ClangVersion.Length -gt 0) 'Exact clang++ identity was not pinned.'
+    Require ($plan.ToolchainSnapshot.ClangDriverTraceArguments.Count -gt 0 -and
+        $plan.ToolchainSnapshot.ClangDriverTrace.Length -gt 0 -and
+        $plan.ToolchainSnapshot.ClangDriverTraceSha256.Length -eq 64) 'The complete Clang driver trace was not pinned.'
+    Require (@($plan.ToolchainSnapshot.ClangDriverCompanions | Where-Object {
+            [IO.Path]::GetFileName($_.Path) -ceq 'lld-link.exe' -and $_.Sha256.Length -eq 64
+        }).Count -eq 1) 'The exact lld-link.exe companion was not pinned.'
+    $clangResourceInventory = Get-Content -LiteralPath $plan.ToolchainSnapshot.ClangResourceInventoryPath -Raw |
+        ConvertFrom-Json
+    Require ($clangResourceInventory.FileCount -eq $plan.ToolchainSnapshot.ClangResourceFileCount -and
+        $clangResourceInventory.TotalBytes -eq $plan.ToolchainSnapshot.ClangResourceTotalBytes -and
+        $clangResourceInventory.Files.Count -gt 0 -and
+        (Get-FileHash -LiteralPath $plan.ToolchainSnapshot.ClangResourceInventoryPath).Hash -ceq
+            $plan.ToolchainSnapshot.ClangResourceInventorySha256) 'The complete Clang resource directory was not pinned.'
+    Require ($plan.ToolchainSnapshot.ClangSelectedMsvcRoot -ceq
+            $plan.ToolchainSnapshot.VCToolsInstallDir.TrimEnd('\', '/') -and
+        $plan.ToolchainSnapshot.ClangSelectedMsvcVersion -ceq
+            (Split-Path $plan.ToolchainSnapshot.VCToolsInstallDir.TrimEnd('\', '/') -Leaf) -and
+        $plan.ToolchainSnapshot.ClangSelectedWindowsSdkRoot -ceq
+            $plan.ToolchainSnapshot.WindowsSdkDir.TrimEnd('\', '/') -and
+        $plan.ToolchainSnapshot.ClangSelectedWindowsSdkVersion -ceq
+            $plan.ToolchainSnapshot.WindowsSDKVersion.TrimEnd('\', '/')) `
+        'Clang selection did not match the vcvars MSVC and Windows SDK snapshot.'
     Require ($plan.ArtifactVolumeIdentity.Length -gt 0) 'Artifact physical volume was not pinned.'
     Require ($plan.NativeGate.SpecificationPath -ceq $gateSpecification) 'Native boundary gate was not bound.'
     $privateInputManifest = Get-Content -LiteralPath $plan.FrozenInputManifest -Raw | ConvertFrom-Json
@@ -466,9 +489,62 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $mismatchedClangPlan.Tools.Clang = $executablePlan.Tools.Compiler
     Write-JsonFile $mismatchedClangPlanPath $mismatchedClangPlan
     $mismatchedClangRejected = $false
-    try { & $adapter -PlanPath $mismatchedClangPlanPath -Action Prepare -Variant baseline -Workload artifact-cold -SampleRoot $proofRoot }
+    try { & $adapter -PlanPath $mismatchedClangPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
     catch { $mismatchedClangRejected = $_.Exception.Message -like '*clang++*' }
     Require $mismatchedClangRejected 'A generation environment with a different clang++ executable was accepted.'
+
+    $mutatedLldPlanPath = Join-Path $specification 'occt-plan-mutated-lld.json'
+    $mutatedLldPlan = $executablePlan.Clone()
+    $mutatedLldPlan.ToolchainSnapshot = $executablePlan.ToolchainSnapshot.Clone()
+    $mutatedLldPlan.ToolchainSnapshot.ClangDriverCompanions = @(
+        foreach ($binding in $executablePlan.ToolchainSnapshot.ClangDriverCompanions) {
+            $copy = $binding.Clone()
+            if ([IO.Path]::GetFileName($copy.Path) -ceq 'lld-link.exe') { $copy.Sha256 = '0' * 64 }
+            $copy
+        }
+    )
+    Write-JsonFile $mutatedLldPlanPath $mutatedLldPlan
+    $mutatedLldRejected = $false
+    try { & $adapter -PlanPath $mutatedLldPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    catch { $mutatedLldRejected = $_.Exception.Message -like '*Clang driver companion changed*' }
+    Require $mutatedLldRejected 'A mutated lld-link.exe companion identity was accepted.'
+
+    $mutatedResourceInventory = Get-Content -LiteralPath $executablePlan.ToolchainSnapshot.ClangResourceInventoryPath `
+        -Raw | ConvertFrom-Json -AsHashtable
+    $mutatedResourceInventory.Files[0].Sha256 = '0' * 64
+    $mutatedResourceInventoryPath = Join-Path $specification 'clang-resource-inventory-mutated.json'
+    Write-JsonFile $mutatedResourceInventoryPath $mutatedResourceInventory
+    $mutatedResourcePlanPath = Join-Path $specification 'occt-plan-mutated-clang-resource.json'
+    $mutatedResourcePlan = $executablePlan.Clone()
+    $mutatedResourcePlan.ToolchainSnapshot = $executablePlan.ToolchainSnapshot.Clone()
+    $mutatedResourcePlan.ToolchainSnapshot.ClangResourceInventoryPath = $mutatedResourceInventoryPath
+    $mutatedResourcePlan.ToolchainSnapshot.ClangResourceInventorySha256 =
+        (Get-FileHash -LiteralPath $mutatedResourceInventoryPath).Hash
+    Write-JsonFile $mutatedResourcePlanPath $mutatedResourcePlan
+    $mutatedResourceRejected = $false
+    try { & $adapter -PlanPath $mutatedResourcePlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    catch { $mutatedResourceRejected = $_.Exception.Message -like '*Clang resource directory changed*' }
+    Require $mutatedResourceRejected 'A mutated Clang resource-directory identity was accepted.'
+
+    $mismatchedMsvcPlanPath = Join-Path $specification 'occt-plan-mismatched-clang-msvc.json'
+    $mismatchedMsvcPlan = $executablePlan.Clone()
+    $mismatchedMsvcPlan.ToolchainSnapshot = $executablePlan.ToolchainSnapshot.Clone()
+    $mismatchedMsvcPlan.ToolchainSnapshot.ClangSelectedMsvcVersion = '0.0.fixture'
+    Write-JsonFile $mismatchedMsvcPlanPath $mismatchedMsvcPlan
+    $mismatchedMsvcRejected = $false
+    try { & $adapter -PlanPath $mismatchedMsvcPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    catch { $mismatchedMsvcRejected = $_.Exception.Message -like '*different MSVC or Windows SDK*' }
+    Require $mismatchedMsvcRejected 'A mismatched Clang-selected MSVC version was accepted.'
+
+    $mismatchedSdkPlanPath = Join-Path $specification 'occt-plan-mismatched-clang-sdk.json'
+    $mismatchedSdkPlan = $executablePlan.Clone()
+    $mismatchedSdkPlan.ToolchainSnapshot = $executablePlan.ToolchainSnapshot.Clone()
+    $mismatchedSdkPlan.ToolchainSnapshot.ClangSelectedWindowsSdkVersion = '0.0.fixture'
+    Write-JsonFile $mismatchedSdkPlanPath $mismatchedSdkPlan
+    $mismatchedSdkRejected = $false
+    try { & $adapter -PlanPath $mismatchedSdkPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    catch { $mismatchedSdkRejected = $_.Exception.Message -like '*different MSVC or Windows SDK*' }
+    Require $mismatchedSdkRejected 'A mismatched Clang-selected Windows SDK version was accepted.'
 
     $stablePrivateInput = Join-Path $baselineInput 'installed/x64-windows/lib/Fixture.lib'
     $stableHardlink = Join-Path $proofRoot 'stable-private-input-alias.lib'
@@ -520,7 +596,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     catch { $nestedRejected = $_.Exception.Message -like '*nested reparse point*' }
     Require $nestedRejected 'A nested artifact junction reached cleanup.'
 
-    Write-Output "OCCT benchmark plan proof passed: fresh managed host publishes, exact patch provenance, complete private triplet inputs, exact clang++ and vcvars compiler identities, formal Prepare array transport, physical isolation, volume/path shape, canonical oracles, native gate, five workloads, and plan-only guards. Evidence: $proofRoot"
+    Write-Output "OCCT benchmark plan proof passed: fresh managed host publishes, exact patch provenance, complete private triplet inputs, complete Clang driver/companion/resource identity, matching Clang/vcvars MSVC and SDK selection, formal Prepare array transport, physical isolation, volume/path shape, canonical oracles, native gate, five workloads, and plan-only guards. Evidence: $proofRoot"
 }
 finally {
     if (Test-Path -LiteralPath $proofRoot) { Remove-Item -LiteralPath $proofRoot -Recurse -Force }

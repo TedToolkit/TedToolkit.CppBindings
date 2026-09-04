@@ -237,14 +237,21 @@ and private input paths must also have equal lengths; both variants use one neut
 
 Plan creation revalidates and freezes every publish completion receipt, host file, publishing and
 receipt script, then loads the exact declared `vcvars64.bat`, verifies that it selects the declared x64
-`cl.exe`, records compiler `/Bv`, MSVC and Windows SDK roots/version, and records direct CMake,
-Ninja, dotnet, and `clang++` version probes. The exact `clang++.exe` path and hash are bound because
-the generator launches it by name for its native compiler probe. Prepare rechecks these identities
-outside material timing; no PATH-only tool identity is accepted. Generator stages temporarily prepend
-only that executable's directory to `PATH`, verify name resolution, set the variant's private
-`VCPKG_ROOT`, invoke the exact Console DLL with `dotnet <Console.dll> --output-root <isolated-root>`,
-and restore both environment variables. Prepare and verify stages also validate the complete live
-private-triplet inventory. Generator stages never call
+`cl.exe`, and records compiler `/Bv`, MSVC and Windows SDK roots/version, plus direct CMake, Ninja,
+and dotnet probes. It separately establishes the exact generator environment: a frozen `PATH` whose
+first directory contains the selected `clang++.exe` and the baseline private `VCPKG_ROOT`. In that
+environment it captures a stable non-executing `clang++ -###` compile/link trace, verifies the
+Clang-selected MSVC and Windows SDK root/version equal the `vcvars64` snapshot, binds the exact
+`clang++.exe` path/hash/version, resolves and hashes every explicit driver companion (including
+exactly one `lld-link.exe`), and inventories every file in `-print-resource-dir` by relative path,
+size, and SHA-256. The resource inventory file itself is hash-bound.
+
+Prepare reproduces that generator environment and rechecks the full driver trace, companion hashes,
+resource-directory identity and inventory outside material timing. Immediately before every Generate
+action, the same checks run again with the variant's private `VCPKG_ROOT`. The harness invokes the exact
+Console DLL with `dotnet <Console.dll> --output-root <isolated-root>` and restores both `PATH` and
+`VCPKG_ROOT` after success or failure. Prepare and verify stages also validate the complete live
+private-triplet inventory. No PATH-only tool identity is accepted. Generator stages never call
 `Build/GenerateWindowsBindings.ps1` and therefore cannot be hidden by its generation cache.
 The full compiler/version probes remain in preparation; configure/build only recheck the already
 bound vcvars environment immediately before launching the pinned native tool, with the same check
@@ -279,7 +286,8 @@ infrastructure only and grants no production-adoption authority.
 
 The verifier publishes only a tiny managed Console-shaped fixture, generates cryptographically valid
 receipts and oracles, exercises pre-existing/stale/mismatched-output, missing `lib`/`bin`, mismatched
-`clang++`, hard-link alias, junction/case/shared-target/nested-reparse failures, and runs matrix
+`clang++`, mutated `lld-link.exe` and Clang-resource identities, mismatched Clang-selected MSVC/SDK,
+hard-link alias, junction/case/shared-target/nested-reparse failures, and runs matrix
 `-PlanOnly`. An external-process
 formal Prepare fixture transports manifest root/file arrays as JSON and verifies both root categories;
 the verifier does not run the OCCT generator, compile native code, or collect timing.

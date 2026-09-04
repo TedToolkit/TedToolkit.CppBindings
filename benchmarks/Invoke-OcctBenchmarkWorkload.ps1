@@ -241,6 +241,158 @@ function Restore-Environment {
     }
 }
 
+function Get-StringSha256 {
+    param([string] $Value)
+
+    return [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($utf8.GetBytes($Value)))
+}
+
+function Use-GenerationEnvironment {
+    param([string] $VcpkgRoot)
+
+    $previous = @{
+        PATH = [Environment]::GetEnvironmentVariable('PATH', 'Process')
+        VCPKG_ROOT = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process')
+    }
+    [Environment]::SetEnvironmentVariable('PATH', $plan.ToolchainSnapshot.ClangGenerationPath, 'Process')
+    [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $VcpkgRoot, 'Process')
+    return $previous
+}
+
+function Get-ClangDriverSelection {
+    param([string] $Trace)
+
+    $unescaped = $Trace.Replace('\\', '\')
+    $msvcMatches = [regex]::Matches($unescaped,
+        '(?i)(?<root>[A-Z]:\\[^"\r\n]+?\\VC\\Tools\\MSVC\\(?<version>[^\\"]+))\\(?:include|lib)')
+    $sdkMatches = [regex]::Matches($unescaped,
+        '(?i)(?<root>[A-Z]:\\[^"\r\n]+?\\Windows Kits\\10)\\(?:include|lib)\\(?<version>[^\\"]+)')
+    $msvcSelections = @($msvcMatches | ForEach-Object {
+        "$($_.Groups['root'].Value)|$($_.Groups['version'].Value)"
+    } | Sort-Object -Unique)
+    $sdkSelections = @($sdkMatches | ForEach-Object {
+        "$($_.Groups['root'].Value)|$($_.Groups['version'].Value)"
+    } | Sort-Object -Unique)
+    if ($msvcSelections.Count -ne 1 -or $sdkSelections.Count -ne 1) {
+        throw 'The Clang driver trace did not select exactly one MSVC and Windows SDK toolchain.'
+    }
+    $msvc = $msvcSelections[0].Split('|', 2)
+    $sdk = $sdkSelections[0].Split('|', 2)
+    return [ordered]@{
+        MsvcRoot = Resolve-BenchmarkPhysicalPath $msvc[0]
+        MsvcVersion = $msvc[1]
+        WindowsSdkRoot = Resolve-BenchmarkPhysicalPath $sdk[0]
+        WindowsSdkVersion = $sdk[1]
+    }
+}
+
+function Get-ClangDriverCompanionPaths {
+    param([string] $Trace)
+
+    $paths = [Collections.Generic.List[string]]::new()
+    foreach ($line in $Trace -split "`n") {
+        if ($line -notmatch '^\s*"(?<path>[^"]+)"') { continue }
+        $path = $Matches.path.Replace('\\', '\')
+        if (-not [IO.Path]::HasExtension($path) -and (Test-Path -LiteralPath "$path.exe" -PathType Leaf)) {
+            $path = "$path.exe"
+        }
+        $resolved = Resolve-BenchmarkPhysicalPath $path
+        if (-not (Test-BenchmarkPathEqual $resolved $plan.Tools.Clang) -and $resolved -cnotin $paths) {
+            $paths.Add($resolved)
+        }
+    }
+    return @($paths)
+}
+
+function Assert-ClangResourceInventory {
+    $snapshot = $plan.ToolchainSnapshot
+    Assert-Hash $snapshot.ClangResourceInventoryPath $snapshot.ClangResourceInventorySha256
+    $manifest = Read-Json $snapshot.ClangResourceInventoryPath
+    if ($manifest.SchemaVersion -ne 1 -or
+        -not (Test-BenchmarkPathEqual $manifest.ResourceDirectory $snapshot.ClangResourceDirectory) -or
+        $manifest.FileCount -ne $snapshot.ClangResourceFileCount -or
+        $manifest.TotalBytes -ne $snapshot.ClangResourceTotalBytes -or
+        $manifest.Files -isnot [array] -or $manifest.Files.Count -eq 0) {
+        throw 'The frozen Clang resource-directory inventory is invalid.'
+    }
+    Assert-NoReparseComponents $snapshot.ClangResourceDirectory
+    Assert-NoNestedReparse $snapshot.ClangResourceDirectory
+    $actual = @(Get-ChildItem -LiteralPath $snapshot.ClangResourceDirectory -Recurse -File |
+        Sort-Object { [IO.Path]::GetRelativePath($snapshot.ClangResourceDirectory, $_.FullName).Replace('\', '/') } -CaseSensitive)
+    $actualTotalBytes = ($actual | Measure-Object Length -Sum).Sum
+    if ($actual.Count -ne $manifest.Files.Count -or $actualTotalBytes -ne $manifest.TotalBytes) {
+        throw 'The Clang resource-directory inventory changed.'
+    }
+    for ($index = 0; $index -lt $actual.Count; $index++) {
+        $expected = $manifest.Files[$index]
+        $relative = [IO.Path]::GetRelativePath($snapshot.ClangResourceDirectory, $actual[$index].FullName).Replace('\', '/')
+        if ($relative -cne $expected.Path -or $actual[$index].Length -ne $expected.Bytes -or
+            (Get-FileHash -LiteralPath $actual[$index].FullName -Algorithm SHA256).Hash -cne $expected.Sha256) {
+            throw "The Clang resource directory changed: $relative"
+        }
+    }
+}
+
+function Assert-ClangDriverSnapshot {
+    $snapshot = $plan.ToolchainSnapshot
+    $requiredDriverArguments = @('-###', '-fdebug-compilation-dir=.', '-fcoverage-compilation-dir=.',
+        '-save-temps=obj', '-x', 'c++', 'NUL', '-o', 'NUL.exe')
+    if (($snapshot.ClangDriverTraceArguments -join "`0") -cne ($requiredDriverArguments -join "`0")) {
+        throw 'The stable Clang driver trace arguments changed.'
+    }
+    if (-not (Test-BenchmarkPathEqual $plan.Tools.Clang $snapshot.ClangPath)) {
+        throw 'The generation environment selected a different clang++ executable.'
+    }
+    Assert-Hash $plan.Tools.Clang $snapshot.ClangSha256
+    $resolvedClang = (Get-Command clang++ -CommandType Application -ErrorAction Stop).Source
+    if (-not (Test-BenchmarkPathEqual $resolvedClang $plan.Tools.Clang)) {
+        throw 'The generation environment resolved a different clang++ executable.'
+    }
+    $clangVersion = @(& $plan.Tools.Clang --version 2>&1)
+    if ($LASTEXITCODE -ne 0 -or ($clangVersion -join "`n") -cne $snapshot.ClangVersion) {
+        throw 'The pinned clang++ version identity changed.'
+    }
+    $driverTraceLines = @(& $plan.Tools.Clang @($snapshot.ClangDriverTraceArguments) 2>&1)
+    $driverTrace = $driverTraceLines -join "`n"
+    if ($LASTEXITCODE -ne 0 -or $driverTrace -cne $snapshot.ClangDriverTrace -or
+        (Get-StringSha256 $driverTrace) -cne $snapshot.ClangDriverTraceSha256) {
+        throw 'The effective Clang driver trace changed.'
+    }
+    $resourceLines = @(& $plan.Tools.Clang -print-resource-dir 2>&1)
+    if ($LASTEXITCODE -ne 0 -or $resourceLines.Count -ne 1 -or
+        -not (Test-BenchmarkPathEqual $resourceLines[0].Trim() $snapshot.ClangResourceDirectory)) {
+        throw 'The selected Clang resource directory changed.'
+    }
+    $actualCompanions = @(Get-ClangDriverCompanionPaths $driverTrace)
+    if ($snapshot.ClangDriverCompanions -isnot [array] -or
+        @($snapshot.ClangDriverCompanions | Where-Object {
+            [IO.Path]::GetFileName($_.Path) -ceq 'lld-link.exe'
+        }).Count -ne 1 -or $actualCompanions.Count -ne $snapshot.ClangDriverCompanions.Count) {
+        throw 'The Clang driver companion inventory changed.'
+    }
+    for ($index = 0; $index -lt $actualCompanions.Count; $index++) {
+        $expected = $snapshot.ClangDriverCompanions[$index]
+        if (-not (Test-BenchmarkPathEqual $actualCompanions[$index] $expected.Path)) {
+            throw 'The Clang driver companion inventory changed.'
+        }
+        if ((Get-FileHash -LiteralPath $expected.Path -Algorithm SHA256).Hash -cne $expected.Sha256) {
+            throw "The Clang driver companion changed: $($expected.Path)"
+        }
+    }
+    $selection = Get-ClangDriverSelection $driverTrace
+    if (-not (Test-BenchmarkPathEqual $selection.MsvcRoot $snapshot.ClangSelectedMsvcRoot) -or
+        $selection.MsvcVersion -cne $snapshot.ClangSelectedMsvcVersion -or
+        -not (Test-BenchmarkPathEqual $selection.WindowsSdkRoot $snapshot.ClangSelectedWindowsSdkRoot) -or
+        $selection.WindowsSdkVersion -cne $snapshot.ClangSelectedWindowsSdkVersion -or
+        -not (Test-BenchmarkPathEqual $selection.MsvcRoot $snapshot.VCToolsInstallDir) -or
+        $selection.MsvcVersion -cne (Split-Path $snapshot.VCToolsInstallDir.TrimEnd('\', '/') -Leaf) -or
+        -not (Test-BenchmarkPathEqual $selection.WindowsSdkRoot $snapshot.WindowsSdkDir) -or
+        $selection.WindowsSdkVersion -cne $snapshot.WindowsSDKVersion.TrimEnd('\', '/')) {
+        throw 'Clang selected a different MSVC or Windows SDK toolchain than vcvars64.'
+    }
+    Assert-ClangResourceInventory
+}
+
 function Assert-ActiveCompilerEnvironment {
     $environmentBindings = [ordered]@{
         VCToolsInstallDir = 'VCToolsInstallDir'
@@ -269,29 +421,12 @@ function Invoke-Generation {
     $generatorHost = if ($ChangedHost) { $VariantPlan.ChangedHost } else { $VariantPlan.OriginalHost }
     $expected = if ($ChangedHost) { $VariantPlan.ChangedHostSha256 } else { $VariantPlan.OriginalHostSha256 }
     Assert-Hash $generatorHost $expected
-    Assert-Hash $plan.Tools.Clang $plan.ToolchainSnapshot.ClangSha256
-    $priorVcpkgRoot = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process')
-    $priorPath = [Environment]::GetEnvironmentVariable('PATH', 'Process')
+    $previous = Use-GenerationEnvironment $VariantPlan.InputVcpkgRoot
     try {
-        [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $VariantPlan.InputVcpkgRoot, 'Process')
-        $clangDirectory = [IO.Path]::GetDirectoryName($plan.Tools.Clang)
-        $generationPath = if ([string]::IsNullOrEmpty($priorPath)) {
-            $clangDirectory
-        }
-        else { $clangDirectory + [IO.Path]::PathSeparator + $priorPath }
-        [Environment]::SetEnvironmentVariable('PATH', $generationPath, 'Process')
-        $resolvedClang = (Get-Command clang++ -CommandType Application -ErrorAction Stop).Source
-        if (-not (Test-BenchmarkPathEqual $resolvedClang $plan.Tools.Clang)) {
-            throw 'The generation environment resolved a different clang++ executable.'
-        }
+        Assert-ClangDriverSnapshot
         Invoke-Checked $plan.Tools.DotNet @($generatorHost, '--output-root', $generatedRoot)
     }
-    finally {
-        $vcpkgRoot = if ($null -eq $priorVcpkgRoot) { [NullString]::Value } else { $priorVcpkgRoot }
-        $path = if ($null -eq $priorPath) { [NullString]::Value } else { $priorPath }
-        [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $vcpkgRoot, 'Process')
-        [Environment]::SetEnvironmentVariable('PATH', $path, 'Process')
-    }
+    finally { Restore-Environment $previous }
 }
 
 function Invoke-NativeBuild {
@@ -396,17 +531,16 @@ function Assert-ToolchainSnapshot {
         $cmakeVersion = @(& $plan.Tools.CMake --version 2>&1)
         $ninjaVersion = @(& $plan.Tools.Ninja --version 2>&1)
         $dotnetInfo = @(& $plan.Tools.DotNet --info 2>&1)
-        $clangVersion = @(& $plan.Tools.Clang --version 2>&1)
         if (($cmakeVersion -join "`n") -cne $plan.ToolchainSnapshot.CMakeVersion -or
             ($ninjaVersion -join "`n") -cne $plan.ToolchainSnapshot.NinjaVersion -or
-            ($dotnetInfo -join "`n") -cne $plan.ToolchainSnapshot.DotNetInfo -or
-            ($clangVersion -join "`n") -cne $plan.ToolchainSnapshot.ClangVersion -or
-            (Get-FileHash -LiteralPath $plan.Tools.Clang -Algorithm SHA256).Hash -cne
-                $plan.ToolchainSnapshot.ClangSha256) {
-            throw 'The pinned CMake, Ninja, dotnet, or clang++ environment changed.'
+            ($dotnetInfo -join "`n") -cne $plan.ToolchainSnapshot.DotNetInfo) {
+            throw 'The pinned CMake, Ninja, or dotnet environment changed.'
         }
     }
     finally { Restore-Environment $previous }
+    $generationPrevious = Use-GenerationEnvironment $plan.Variants.baseline.InputVcpkgRoot
+    try { Assert-ClangDriverSnapshot }
+    finally { Restore-Environment $generationPrevious }
 }
 
 function Copy-NewFile {
