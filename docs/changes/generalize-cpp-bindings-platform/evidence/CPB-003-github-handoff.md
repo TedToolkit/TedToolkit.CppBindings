@@ -35,8 +35,9 @@ Build succeeded.
 Time Elapsed 00:46:46.56
 ```
 
-The gate regenerated the complete binding corpus and compiled and linked all 6,989 generated C++
-units into `ted_toolkit_occt.dll`. The five produced `TedToolkit.CppBindings*` NuGet packages each
+The gate regenerated the complete binding corpus and completed all 6,989 native build steps,
+compiling 6,988 generated C++ translation units and linking `ted_toolkit_occt.dll`. The five produced
+`TedToolkit.CppBindings*` NuGet packages each
 contain `https://github.com/TedToolkit/TedToolkit.CppBindings` as `projectUrl`. The documentation-only
 review corrections recorded after `aeafbb3` do not change the built source or package inputs.
 
@@ -120,6 +121,7 @@ Build succeeded.
 Time Elapsed 00:47:27.37
 ```
 
-The clean-clone gate restored dependencies, regenerated the complete corpus, and compiled and linked
-all 6,989 generated C++ units from the renamed authoritative repository. AC-01 and CPB-003 are
-therefore verified on the authoritative integration revision.
+The clean-clone gate restored dependencies, regenerated the complete corpus, and completed all 6,989
+native build steps, compiling 6,988 generated C++ translation units and linking the DLL from the
+renamed authoritative repository. AC-01 and CPB-003 are therefore verified on the authoritative
+integration revision.
