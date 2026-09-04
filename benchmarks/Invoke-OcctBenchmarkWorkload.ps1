@@ -118,13 +118,13 @@ function Restore-Environment {
 
 function Invoke-Generation {
     param([hashtable] $VariantPlan, [bool] $ChangedHost)
-    $host = if ($ChangedHost) { $VariantPlan.ChangedHost } else { $VariantPlan.OriginalHost }
+    $generatorHost = if ($ChangedHost) { $VariantPlan.ChangedHost } else { $VariantPlan.OriginalHost }
     $expected = if ($ChangedHost) { $VariantPlan.ChangedHostSha256 } else { $VariantPlan.OriginalHostSha256 }
-    Assert-Hash $host $expected
+    Assert-Hash $generatorHost $expected
     $prior = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process')
     try {
         [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $VariantPlan.InputVcpkgRoot, 'Process')
-        Invoke-Checked $plan.Tools.DotNet @($host, '--output-root', $generatedRoot)
+        Invoke-Checked $plan.Tools.DotNet @($generatorHost, '--output-root', $generatedRoot)
     }
     finally {
         $value = if ($null -eq $prior) { [NullString]::Value } else { $prior }
