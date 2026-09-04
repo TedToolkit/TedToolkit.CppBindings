@@ -19,7 +19,7 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\TedToolkit.Occt.Runtime\TedToolkit.Occt.Runtime.csproj" />
+    <ProjectReference Include="..\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
     <ProjectReference Include="..\..\..\tests\TedToolkit.Occt.Console\TedToolkit.Occt.Console.csproj"
                       ReferenceOutputAssembly="false"
                       SkipGetTargetFrameworkProperties="true"

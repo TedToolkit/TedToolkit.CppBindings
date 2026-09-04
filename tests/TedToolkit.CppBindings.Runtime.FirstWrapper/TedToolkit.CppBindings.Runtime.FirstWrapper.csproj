@@ -1,0 +1,18 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
+
+  <PropertyGroup>
+    <AssemblyName>TedToolkit.CppBindings.Occt.Windows</AssemblyName>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);CA1815;RCS1231</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>

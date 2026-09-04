@@ -20,6 +20,6 @@ enable_testing()
 add_test(
     NAME ted_occt_managed_handle_native_integration
     COMMAND dotnet
-        "${CMAKE_CURRENT_SOURCE_DIR}/../../TedToolkit.Occt.Runtime.NativeIntegration/bin/Release/net8.0/TedToolkit.Occt.Runtime.NativeIntegration.dll"
+        "${CMAKE_CURRENT_SOURCE_DIR}/../../TedToolkit.CppBindings.Runtime.NativeIntegration/bin/Release/net8.0/TedToolkit.CppBindings.Runtime.NativeIntegration.dll"
         "$<TARGET_FILE:ted_occt_first_handle_fixture>"
         "$<TARGET_FILE:ted_occt_second_handle_fixture>")
