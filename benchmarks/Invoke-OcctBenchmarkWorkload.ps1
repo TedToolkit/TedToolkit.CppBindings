@@ -204,6 +204,29 @@ function Restore-Environment {
     }
 }
 
+function Assert-ActiveCompilerEnvironment {
+    $environmentBindings = [ordered]@{
+        VCToolsInstallDir = 'VCToolsInstallDir'
+        WindowsSdkDir = 'WindowsSdkDir'
+        WindowsSDKVersion = 'WindowsSDKVersion'
+        HostArchitecture = 'VSCMD_ARG_HOST_ARCH'
+        TargetArchitecture = 'VSCMD_ARG_TGT_ARCH'
+        Include = 'INCLUDE'
+        Lib = 'LIB'
+        LibPath = 'LIBPATH'
+    }
+    foreach ($binding in $environmentBindings.GetEnumerator()) {
+        if ([Environment]::GetEnvironmentVariable($binding.Value, 'Process') -cne
+            $plan.ToolchainSnapshot[$binding.Key]) {
+            throw "vcvars-selected toolchain changed: $($binding.Value)"
+        }
+    }
+    $selectedCompiler = [IO.Path]::GetFullPath((Join-Path $plan.ToolchainSnapshot.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe'))
+    if (-not $selectedCompiler.Equals($plan.Tools.Compiler, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'VCToolsInstallDir selected a different compiler.'
+    }
+}
+
 function Invoke-Generation {
     param([hashtable] $VariantPlan, [bool] $ChangedHost)
     $generatorHost = if ($ChangedHost) { $VariantPlan.ChangedHost } else { $VariantPlan.OriginalHost }
@@ -223,6 +246,7 @@ function Invoke-Generation {
 function Invoke-NativeBuild {
     $previous = Use-CompilerEnvironment
     try {
+        Assert-ActiveCompilerEnvironment
         Invoke-Checked $plan.Tools.CMake @('--build', $nativeBuildRoot, '--config', $plan.Configuration,
             '--parallel', ([string] $plan.Parallelism))
     }
@@ -309,27 +333,7 @@ function Assert-CanonicalBoundary {
 function Assert-ToolchainSnapshot {
     $previous = Use-CompilerEnvironment
     try {
-        $environmentBindings = [ordered]@{
-            VCToolsInstallDir = 'VCToolsInstallDir'
-            WindowsSdkDir = 'WindowsSdkDir'
-            WindowsSDKVersion = 'WindowsSDKVersion'
-            HostArchitecture = 'VSCMD_ARG_HOST_ARCH'
-            TargetArchitecture = 'VSCMD_ARG_TGT_ARCH'
-            Include = 'INCLUDE'
-            Lib = 'LIB'
-            LibPath = 'LIBPATH'
-        }
-        foreach ($binding in $environmentBindings.GetEnumerator()) {
-            $name = $binding.Value
-            if ([Environment]::GetEnvironmentVariable($name, 'Process') -cne
-                $plan.ToolchainSnapshot[$binding.Key]) {
-                throw "vcvars-selected toolchain changed: $name"
-            }
-        }
-        $selectedCompiler = [IO.Path]::GetFullPath((Join-Path $plan.ToolchainSnapshot.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe'))
-        if (-not $selectedCompiler.Equals($plan.Tools.Compiler, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'VCToolsInstallDir selected a different compiler.'
-        }
+        Assert-ActiveCompilerEnvironment
         $compilerBv = @(& $plan.Tools.Compiler /Bv /c NUL 2>&1)
         if ($LASTEXITCODE -ne 0 -or ($compilerBv -join "`n") -cne $plan.ToolchainSnapshot.CompilerBv) {
             throw 'The selected compiler /Bv identity changed.'
@@ -443,6 +447,7 @@ switch ($Action) {
         if ($Workload -ne 'artifact-cold') { throw 'cmake --fresh is allowed only for artifact-cold samples.' }
         $previous = Use-CompilerEnvironment
         try {
+            Assert-ActiveCompilerEnvironment
             Invoke-Checked $plan.Tools.CMake @('--fresh', '-G', 'Ninja Multi-Config', '-Wno-unused-cli',
                 '-S', $cppRoot, '-B', $nativeBuildRoot, "-DCMAKE_MAKE_PROGRAM=$($plan.Tools.Ninja)",
                 "-DCMAKE_CXX_COMPILER=$($plan.Tools.Compiler)", "-DCMAKE_TOOLCHAIN_FILE=$($plan.ToolchainFile)",

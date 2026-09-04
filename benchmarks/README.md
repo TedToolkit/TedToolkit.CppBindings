@@ -218,6 +218,9 @@ Ninja, and dotnet version probes. Prepare rechecks that receipt outside material
 tool identity is accepted. Prepare and verify stages also hash the live private-header inventory. Generator stages invoke the exact
 Console DLL directly with `dotnet <Console.dll> --output-root <isolated-root>`; they never call
 `Build/GenerateWindowsBindings.ps1` and therefore cannot be hidden by its generation cache.
+The full compiler/version probes remain in preparation; configure/build only recheck the already
+bound vcvars environment immediately before launching the pinned native tool, with the same check
+on both variants.
 
 Bind artifact manifests and ordered `NativeFunctionTable.cpp` export inventories for the canonical
 original state and the representative declaration edit. Every baseline and candidate result must
