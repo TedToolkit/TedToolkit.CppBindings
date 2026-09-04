@@ -112,17 +112,18 @@ dotnet run --project tests/TedToolkit.Occt.Runtime.Tests/TedToolkit.Occt.Runtime
   -c Release --no-build -- --report-trx
 ```
 
-Build and run the two real C++ release-export fixtures with a configured C++ toolchain:
+Build the managed integration runner in Release, then build and run the two real C++
+release-export fixtures with a configured C++ toolchain:
 
 ```powershell
-cmake -S tests/native/handle-fixtures -B out/build/handle-fixtures
+dotnet build tests/TedToolkit.Occt.Runtime.NativeIntegration/TedToolkit.Occt.Runtime.NativeIntegration.csproj -c Release
+cmake -S tests/native/handle-fixtures -B out/build/handle-fixtures -DCMAKE_BUILD_TYPE=Release -DVCPKG_APPLOCAL_DEPS=OFF
 cmake --build out/build/handle-fixtures --config Release
 ctest --test-dir out/build/handle-fixtures -C Release --output-on-failure
 ```
 
-The legacy ABI-major-1 managed boundary proof remains a deliberately minimal fixture in
-`AbiV1ManagedBoundaryTests`; it is not Runtime production code. Runtime exception behavior is
-covered by the Runtime TUnit project.
+Runtime exception behavior is covered by the Runtime TUnit project. The historical versioned ABI
+migration fixture is retired; current native lifetime proof uses the two release-export fixtures above.
 
 ## Related documentation
 

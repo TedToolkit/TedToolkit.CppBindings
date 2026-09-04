@@ -8,5 +8,5 @@ permissions:
 
 jobs:
   run-build-project:
-    uses: TedToolkit/TedToolkit/.github/workflows/build.yml@development
+    uses: TedToolkit/TedToolkit/.github/workflows/build.yml@b9152e16ef9e227a2540b86b90af5391374cfd90
     secrets: inherit

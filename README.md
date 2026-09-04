@@ -102,7 +102,8 @@ exact layout，并交付对应的平台绑定产物。
 The production generation path no longer uses a handwritten operation catalog or
 `AbiOperationModel`. Per-type C++ files are still internal invocation helpers; the complete C11
 transport boundary, CMake/DLL, managed imports, and exact-match validation remain unimplemented.
-The ABI-v1 project remains only as an independent migration fixture.
+The historical ABI-v1 migration fixture is retired; verification targets the current generated
+boundary and Runtime/native lifetime contracts.
 
 更详细的生成流程见 [TedToolkit.Occt.Generator](src/core/TedToolkit.Occt.Generator/README.md)，生命周期和异常模型见 [TedToolkit.Occt.Runtime](src/core/TedToolkit.Occt.Runtime/README.md)。
 
@@ -180,6 +181,34 @@ The Generator test project uses the same executable test entry point:
 ```powershell
 dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj -c Release --no-build -- --report-trx
 ```
+
+The repository build entry point runs the Generator, Runtime, and Runtime Analyzer TUnit projects.
+It also configures and builds the two native Handle fixtures, then runs their managed integration
+executable with the resolved library paths:
+
+```powershell
+dotnet run --project Build/Build.csproj
+```
+
+The Windows build and native fixture gate require PowerShell 7, CMake, and Visual Studio with
+the MSVC C++ compiler, CMake tools, and LLVM (`clang-cl`) components. After the solution build,
+managed tests run with `--no-build --no-restore`; the build phase itself performs its normal restore
+behavior unless the caller configures the .NET environment to prevent it.
+
+Use a short Windows checkout path. Long generated template names can exceed MSVC's object-path
+limit in deeply nested worktrees; shorten the checkout if CMake warns about object path lengths.
+
+Focused build-gate checks are available independently of the full native build:
+
+```powershell
+pwsh -NoProfile -File Build/VerifyGenerationCache.ps1
+dotnet build Build/Build.csproj -c Release
+pwsh -NoProfile -File Build/VerifyManagedTestGate.ps1
+```
+
+The managed-gate reflection check requires PowerShell running on .NET 10 or later. These checks
+cover invalid caches, incomplete TRX results, failed child processes, and cancellation; they do not
+replace the full solution and native integration gates.
 
 Set `VCPKG_ROOT` to a usable vcpkg installation to run the real OCCT boundary test. When it is unset or the selected OCCT header is unavailable, only that environment-dependent test is reported as skipped.
 

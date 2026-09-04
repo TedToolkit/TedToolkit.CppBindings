@@ -177,8 +177,8 @@ not use a handwritten operation catalog or a parallel ABI declaration graph.
 These helpers deliberately have C++ linkage. They are not yet the public C11 transport boundary and
 cannot by themselves be called safely from generated C#. The active migration must still add the
 validated transport/conversion projection, matching C declarations and exports, manifest,
-fingerprint, CMake description, and managed imports. The independent ABI-v1 fixture remains only as
-replacement evidence until that complete generated boundary is proved.
+fingerprint, CMake description, and managed imports. The historical ABI-v1 fixture is retired and
+is not an input, fallback, or compatibility target for current generation.
 
 ## 5. Current C# type generation
 
@@ -304,8 +304,9 @@ $env:CMAKE_GENERATOR = 'Ninja'
 $env:CXX = 'clang-cl'
 ```
 
-This is the legacy boundary verification baseline, not an exclusive consumer toolchain requirement.
-It remains available until the generated unversioned C11/native/managed boundary replaces it.
+The repository build selects Visual Studio's bundled Ninja and MSVC tools for generated OCCT code,
+and Ninja/LLVM for the independent Handle fixtures. Consumers of generated source still need a
+compiler compatible with the proved native layout and calling convention.
 
 从仓库根目录运行开发样例：
 

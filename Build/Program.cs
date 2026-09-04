@@ -16,13 +16,13 @@ var pipeline = new TedPipeline(
             Solutions.TedToolkit_Occt,
         ],
         Solution = Solutions.TedToolkit_Occt,
-        TestFiles =
-        [
-            Projects.TedToolkit_Occt_Generator_Tests,
-        ],
+        TestFiles = [],
     },
     new FileInfo(Path.Combine(Projects.Build.Directory!.FullName, "appsettings.json")));
 
 await pipeline
-    .ExecuteAsync()
+    .ExecuteAsync(static builder => builder
+        .AddModule<WindowsBindingsModule>()
+        .AddModule<NativeIntegrationModule>()
+        .AddModule<ManagedTestGateModule>())
     .ConfigureAwait(false);

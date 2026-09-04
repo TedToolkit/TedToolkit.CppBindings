@@ -43,6 +43,8 @@ internal static class NativeProjectGenerator
 
         _ = builder.Append(")\n\ntarget_compile_features(").Append(libraryBaseName)
             .Append(" PRIVATE cxx_std_17)\n")
+            .Append("target_compile_options(").Append(libraryBaseName)
+            .Append(" PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP8>)\n")
             .Append("set_target_properties(").Append(libraryBaseName)
             .Append(" PROPERTIES RUNTIME_OUTPUT_DIRECTORY \"${CMAKE_BINARY_DIR}/$<CONFIG>\")\n")
             .Append("target_include_directories(").Append(libraryBaseName)
