@@ -218,6 +218,6 @@ internal static class GeneratedCycleProbe
 
     private sealed class Heap
     {
-        public MAT_Bisector Value;
+        public MAT_Bisector Value = default;
     }
 }
