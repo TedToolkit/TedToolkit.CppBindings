@@ -27,7 +27,7 @@ workload driver must separately declare and enforce its process-tree memory ceil
 12-machine-hour experiment budget. Idle persistent MSBuild and IDE service processes are excluded
 from the competing-build heuristic; the snapshot cannot detect every source of CPU/I/O contention.
 
-Before sampling, also pin MSVC, Windows SDK, the selected Ninja executable, OCCT/vcpkg versions,
+Before sampling, also pin MSVC, Windows SDK, the selected `clang++` and Ninja executables, OCCT/vcpkg versions,
 input hashes, worker counts, cache state, and a complete exact source candidate. A revision alone
 does not bind uncommitted edits. Full-workload sampling must not overlap migration builds.
 
@@ -220,8 +220,14 @@ variant revision. Changed hosts must use clean commits whose complete `git diff 
 the plan schema, but make the resulting plan permanently non-executable; a text file named `.dll`
 is rejected in both modes.
 
-The editable inputs are private physical copies of `installed/x64-windows/include` and the vcpkg
-status file. The real vcpkg root is used only as the CMake toolchain and must be a different path.
+The editable inputs are private physical copies of the complete `installed/x64-windows` triplet and
+`installed/vcpkg/status`; `include`, `lib`, and `bin` are all required because generation parses
+headers, links its compiler probe against OCCT libraries, and runs that probe with the triplet DLLs.
+Every private file must have hard-link count one when the plan is frozen, and its physical identity,
+relative path, size, and hash are rechecked outside measured work. Baseline and candidate inventories
+must be byte-identical. Only the selected declaration header is excluded from the stable inventory;
+its original/changed hashes and physical identity remain separately frozen. The real vcpkg root is
+used only as the CMake toolchain and must be a different path.
 Repositories, inputs, toolchain, canonical artifacts, measured artifacts, specifications, and host
 directories must be pairwise disjoint under case-insensitive comparison and cannot contain reparse
 components. Nested reparse points are rechecked immediately before artifact cleanup. Both measured
@@ -232,9 +238,13 @@ and private input paths must also have equal lengths; both variants use one neut
 Plan creation revalidates and freezes every publish completion receipt, host file, publishing and
 receipt script, then loads the exact declared `vcvars64.bat`, verifies that it selects the declared x64
 `cl.exe`, records compiler `/Bv`, MSVC and Windows SDK roots/version, and records direct CMake,
-Ninja, and dotnet version probes. Prepare rechecks that receipt outside material timing; no PATH-only
-tool identity is accepted. Prepare and verify stages also hash the live private-header inventory. Generator stages invoke the exact
-Console DLL directly with `dotnet <Console.dll> --output-root <isolated-root>`; they never call
+Ninja, dotnet, and `clang++` version probes. The exact `clang++.exe` path and hash are bound because
+the generator launches it by name for its native compiler probe. Prepare rechecks these identities
+outside material timing; no PATH-only tool identity is accepted. Generator stages temporarily prepend
+only that executable's directory to `PATH`, verify name resolution, set the variant's private
+`VCPKG_ROOT`, invoke the exact Console DLL with `dotnet <Console.dll> --output-root <isolated-root>`,
+and restore both environment variables. Prepare and verify stages also validate the complete live
+private-triplet inventory. Generator stages never call
 `Build/GenerateWindowsBindings.ps1` and therefore cannot be hidden by its generation cache.
 The full compiler/version probes remain in preparation; configure/build only recheck the already
 bound vcvars environment immediately before launching the pinned native tool, with the same check
@@ -268,8 +278,9 @@ infrastructure only and grants no production-adoption authority.
 ```
 
 The verifier publishes only a tiny managed Console-shaped fixture, generates cryptographically valid
-receipts and oracles, exercises pre-existing/stale/mismatched-output and
-junction/case/shared-target/nested-reparse failures, and runs matrix `-PlanOnly`. An external-process
+receipts and oracles, exercises pre-existing/stale/mismatched-output, missing `lib`/`bin`, mismatched
+`clang++`, hard-link alias, junction/case/shared-target/nested-reparse failures, and runs matrix
+`-PlanOnly`. An external-process
 formal Prepare fixture transports manifest root/file arrays as JSON and verifies both root categories;
 the verifier does not run the OCCT generator, compile native code, or collect timing.
 

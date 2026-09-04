@@ -146,24 +146,58 @@ function Assert-RootMarker {
 function Assert-FrozenInputs {
     param([hashtable] $VariantPlan, [ValidateSet('original', 'changed')] [string] $HeaderState)
     $manifest = Read-Json $plan.FrozenInputManifest
-    $reparse = Get-ChildItem -LiteralPath $VariantPlan.IncludeRoot -Recurse -Force |
+    if ($manifest.SchemaVersion -ne 2 -or
+        $manifest.TripletRelativePath -cne "installed/$($plan.Triplet)" -or
+        $manifest.StatusRelativePath -cne 'installed/vcpkg/status') {
+        throw 'The complete private-vcpkg input manifest contract changed.'
+    }
+    Assert-NoReparseComponents $VariantPlan.InputVcpkgRoot
+    $expectedTripletRoot = Assert-WithinRoot (Join-Path $VariantPlan.InputVcpkgRoot $manifest.TripletRelativePath) `
+        $VariantPlan.InputVcpkgRoot
+    $expectedStatusFile = Assert-WithinRoot (Join-Path $VariantPlan.InputVcpkgRoot $manifest.StatusRelativePath) `
+        $VariantPlan.InputVcpkgRoot
+    if (-not (Test-BenchmarkPathEqual $expectedTripletRoot $VariantPlan.TripletRoot) -or
+        -not (Test-BenchmarkPathEqual $expectedStatusFile $VariantPlan.StatusFile)) {
+        throw 'The private triplet or vcpkg status path changed.'
+    }
+    Assert-NoReparseComponents $VariantPlan.TripletRoot
+    Assert-NoReparseComponents $VariantPlan.StatusFile
+    $reparse = Get-ChildItem -LiteralPath $VariantPlan.TripletRoot -Recurse -Force |
         Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } |
         Select-Object -First 1
     if ($null -ne $reparse) { throw "Private input tree contains a reparse point: $($reparse.FullName)" }
-    $entries = @($manifest.Entries | Where-Object Variant -CEQ $Variant)
-    $actual = @(Get-ChildItem -LiteralPath $VariantPlan.IncludeRoot -Recurse -File)
-    if ($actual.Count -ne $entries.Count + 1) { throw 'Private include inventory changed; rebaseline.' }
-    foreach ($entry in $entries) {
-        $path = Assert-WithinRoot (Join-Path $VariantPlan.IncludeRoot $entry.Path) $VariantPlan.IncludeRoot
-        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item $path).Length -ne $entry.Bytes) {
-            throw "Private include inventory changed: $($entry.Path)"
+    foreach ($requiredDirectory in @('include', 'lib', 'bin')) {
+        $path = Assert-WithinRoot (Join-Path $VariantPlan.TripletRoot $requiredDirectory) $VariantPlan.InputVcpkgRoot
+        if (-not (Test-Path -LiteralPath $path -PathType Container)) {
+            throw "Private triplet directory is missing: $requiredDirectory"
         }
+    }
+    $entries = @($manifest.Entries | Where-Object Variant -CEQ $Variant)
+    $actual = @(
+        Get-ChildItem -LiteralPath $VariantPlan.TripletRoot -Recurse -File
+        Get-Item -LiteralPath $VariantPlan.StatusFile
+    )
+    if ($actual.Count -ne $entries.Count + 1) { throw 'Private vcpkg input inventory changed; rebaseline.' }
+    foreach ($entry in $entries) {
+        $path = Assert-WithinRoot (Join-Path $VariantPlan.InputVcpkgRoot $entry.Path) $VariantPlan.InputVcpkgRoot
+        if (-not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item $path).Length -ne $entry.Bytes) {
+            throw "Private vcpkg input inventory changed: $($entry.Path)"
+        }
+        Assert-PrivateInputFile $path $entry.FileIdentity 'Private vcpkg input'
         Assert-Hash $path $entry.Sha256
     }
     $expectedHeaderHash = if ($HeaderState -eq 'original') { $manifest.OriginalHeaderSha256 } else { $manifest.ChangedHeaderSha256 }
     Assert-PrivateInputFile $VariantPlan.HeaderPath $VariantPlan.HeaderFileIdentity 'Mutable declaration header'
     Assert-PrivateInputFile $VariantPlan.StatusFile $VariantPlan.StatusFileIdentity 'Private vcpkg status file'
     Assert-Hash $VariantPlan.HeaderPath $expectedHeaderHash
+    Assert-Hash $VariantPlan.StatusFile $VariantPlan.StatusFileSha256
+}
+
+function Assert-MutablePrivateInputs {
+    param([hashtable] $VariantPlan, [string] $ExpectedHeaderHash)
+    Assert-PrivateInputFile $VariantPlan.HeaderPath $VariantPlan.HeaderFileIdentity 'Mutable declaration header'
+    Assert-PrivateInputFile $VariantPlan.StatusFile $VariantPlan.StatusFileIdentity 'Private vcpkg status file'
+    Assert-Hash $VariantPlan.HeaderPath $ExpectedHeaderHash
     Assert-Hash $VariantPlan.StatusFile $VariantPlan.StatusFileSha256
 }
 
@@ -235,14 +269,28 @@ function Invoke-Generation {
     $generatorHost = if ($ChangedHost) { $VariantPlan.ChangedHost } else { $VariantPlan.OriginalHost }
     $expected = if ($ChangedHost) { $VariantPlan.ChangedHostSha256 } else { $VariantPlan.OriginalHostSha256 }
     Assert-Hash $generatorHost $expected
-    $prior = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process')
+    Assert-Hash $plan.Tools.Clang $plan.ToolchainSnapshot.ClangSha256
+    $priorVcpkgRoot = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process')
+    $priorPath = [Environment]::GetEnvironmentVariable('PATH', 'Process')
     try {
         [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $VariantPlan.InputVcpkgRoot, 'Process')
+        $clangDirectory = [IO.Path]::GetDirectoryName($plan.Tools.Clang)
+        $generationPath = if ([string]::IsNullOrEmpty($priorPath)) {
+            $clangDirectory
+        }
+        else { $clangDirectory + [IO.Path]::PathSeparator + $priorPath }
+        [Environment]::SetEnvironmentVariable('PATH', $generationPath, 'Process')
+        $resolvedClang = (Get-Command clang++ -CommandType Application -ErrorAction Stop).Source
+        if (-not (Test-BenchmarkPathEqual $resolvedClang $plan.Tools.Clang)) {
+            throw 'The generation environment resolved a different clang++ executable.'
+        }
         Invoke-Checked $plan.Tools.DotNet @($generatorHost, '--output-root', $generatedRoot)
     }
     finally {
-        $value = if ($null -eq $prior) { [NullString]::Value } else { $prior }
-        [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $value, 'Process')
+        $vcpkgRoot = if ($null -eq $priorVcpkgRoot) { [NullString]::Value } else { $priorVcpkgRoot }
+        $path = if ($null -eq $priorPath) { [NullString]::Value } else { $priorPath }
+        [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $vcpkgRoot, 'Process')
+        [Environment]::SetEnvironmentVariable('PATH', $path, 'Process')
     }
 }
 
@@ -348,10 +396,14 @@ function Assert-ToolchainSnapshot {
         $cmakeVersion = @(& $plan.Tools.CMake --version 2>&1)
         $ninjaVersion = @(& $plan.Tools.Ninja --version 2>&1)
         $dotnetInfo = @(& $plan.Tools.DotNet --info 2>&1)
+        $clangVersion = @(& $plan.Tools.Clang --version 2>&1)
         if (($cmakeVersion -join "`n") -cne $plan.ToolchainSnapshot.CMakeVersion -or
             ($ninjaVersion -join "`n") -cne $plan.ToolchainSnapshot.NinjaVersion -or
-            ($dotnetInfo -join "`n") -cne $plan.ToolchainSnapshot.DotNetInfo) {
-            throw 'The pinned CMake, Ninja, or dotnet environment changed.'
+            ($dotnetInfo -join "`n") -cne $plan.ToolchainSnapshot.DotNetInfo -or
+            ($clangVersion -join "`n") -cne $plan.ToolchainSnapshot.ClangVersion -or
+            (Get-FileHash -LiteralPath $plan.Tools.Clang -Algorithm SHA256).Hash -cne
+                $plan.ToolchainSnapshot.ClangSha256) {
+            throw 'The pinned CMake, Ninja, dotnet, or clang++ environment changed.'
         }
     }
     finally { Restore-Environment $previous }
@@ -441,7 +493,8 @@ switch ($Action) {
         Get-Manifest $beforeManifest $null
         Copy-NewFile $ninjaLog $beforeNinja
         if ($Workload -eq 'declaration-edit') {
-            Assert-PrivateInputFile $variantPlan.HeaderPath $variantPlan.HeaderFileIdentity 'Mutable declaration header'
+            $inputManifest = Read-Json $plan.FrozenInputManifest
+            Assert-MutablePrivateInputs $variantPlan $inputManifest.OriginalHeaderSha256
             [IO.File]::Copy($plan.ChangedHeaderFile, $variantPlan.HeaderPath, $true)
             Assert-FrozenInputs $variantPlan changed
         }
@@ -537,7 +590,8 @@ switch ($Action) {
             throw 'Only declaration-edit and generator-change samples require settlement.'
         }
         if ($Workload -eq 'declaration-edit') {
-            Assert-PrivateInputFile $variantPlan.HeaderPath $variantPlan.HeaderFileIdentity 'Mutable declaration header'
+            $inputManifest = Read-Json $plan.FrozenInputManifest
+            Assert-MutablePrivateInputs $variantPlan $inputManifest.ChangedHeaderSha256
             [IO.File]::Copy($plan.OriginalHeaderFile, $variantPlan.HeaderPath, $true)
         }
         Assert-FrozenInputs $variantPlan original

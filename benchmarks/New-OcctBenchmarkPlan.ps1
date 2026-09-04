@@ -25,6 +25,7 @@ param(
     [Parameter(Mandatory)] [string] $CMakePath,
     [Parameter(Mandatory)] [string] $NinjaPath,
     [Parameter(Mandatory)] [string] $CompilerPath,
+    [Parameter(Mandatory)] [string] $ClangPath,
     [Parameter(Mandatory)] [string] $VcVarsPath,
     [Parameter(Mandatory)] [DateTimeOffset] $DeadlineUtc,
     [Parameter(Mandatory)] [long] $MemoryLimitBytes,
@@ -160,6 +161,15 @@ function Assert-PrivateSingleLinkFile {
 function Assert-DistinctFileIdentities {
     param($Left, $Right, [string] $Label)
     if ($Left.Identity -ceq $Right.Identity) { throw "$Label must have distinct physical file identities." }
+}
+
+function Get-PrivateInputFiles {
+    param([string] $InputRoot, [string] $TripletRoot, [string] $StatusFile)
+
+    $files = [Collections.Generic.List[IO.FileInfo]]::new()
+    foreach ($file in Get-ChildItem -LiteralPath $TripletRoot -Recurse -File) { $files.Add($file) }
+    $files.Add((Get-Item -LiteralPath $StatusFile))
+    return @($files | Sort-Object { [IO.Path]::GetRelativePath($InputRoot, $_.FullName) })
 }
 
 function Read-HostReceipt {
@@ -395,6 +405,8 @@ function Get-ToolchainSnapshot {
         if ($LASTEXITCODE -ne 0 -or $ninjaVersion.Count -ne 1) { throw 'The pinned Ninja version probe failed.' }
         $dotnetInfo = @(& $dotnet --info 2>&1)
         if ($LASTEXITCODE -ne 0 -or $dotnetInfo.Count -eq 0) { throw 'The pinned dotnet --info probe failed.' }
+        $clangVersion = @(& $clang --version 2>&1)
+        if ($LASTEXITCODE -ne 0 -or $clangVersion.Count -eq 0) { throw 'The pinned clang++ --version probe failed.' }
     }
     finally {
         foreach ($entry in $previous.GetEnumerator()) {
@@ -415,6 +427,8 @@ function Get-ToolchainSnapshot {
         CMakeVersion = $cmakeVersion -join "`n"
         NinjaVersion = $ninjaVersion -join "`n"
         DotNetInfo = $dotnetInfo -join "`n"
+        ClangSha256 = (Get-FileHash -LiteralPath $clang -Algorithm SHA256).Hash
+        ClangVersion = $clangVersion -join "`n"
     }
 }
 
@@ -483,13 +497,26 @@ Assert-SafeArtifactRoot $baselineArtifact @($baselineRepository, $candidateRepos
 Assert-SafeArtifactRoot $candidateArtifact @($baselineRepository, $candidateRepository) @($baselineInput,
     $candidateInput, $toolchainVcpkg)
 
-$includeRoots = [ordered]@{
-    baseline = Join-Path $baselineInput "installed/$triplet/include"
-    candidate = Join-Path $candidateInput "installed/$triplet/include"
+$tripletRoots = [ordered]@{
+    baseline = Join-Path $baselineInput "installed/$triplet"
+    candidate = Join-Path $candidateInput "installed/$triplet"
 }
-foreach ($includeRoot in $includeRoots.Values) {
-    $null = Resolve-ExistingPath $includeRoot directory
-    Assert-OrdinaryTree $includeRoot
+foreach ($variant in @('baseline', 'candidate')) {
+    Assert-NoReparseComponents $tripletRoots[$variant]
+    $tripletRoot = Resolve-ExistingPath $tripletRoots[$variant] directory
+    $tripletRoots[$variant] = $tripletRoot
+    Assert-OrdinaryTree $tripletRoot
+    foreach ($requiredDirectory in @('include', 'lib', 'bin')) {
+        $requiredPath = Join-Path $tripletRoot $requiredDirectory
+        if (-not (Test-Path -LiteralPath $requiredPath -PathType Container)) {
+            throw "Private triplet required directory is missing: $requiredDirectory"
+        }
+        $null = Resolve-ExistingPath $requiredPath directory
+    }
+}
+$includeRoots = [ordered]@{
+    baseline = Join-Path $tripletRoots.baseline 'include'
+    candidate = Join-Path $tripletRoots.candidate 'include'
 }
 $baselineHeader = Resolve-ExistingPath (Join-Path $includeRoots.baseline $DeclarationHeaderRelativePath) file
 $candidateHeader = Resolve-ExistingPath (Join-Path $includeRoots.candidate $DeclarationHeaderRelativePath) file
@@ -503,15 +530,31 @@ if ((Get-FileHash $baselineHeader).Hash -ceq (Get-FileHash $changedHeader).Hash)
 
 $toolchainFile = Resolve-ExistingPath (Join-Path $toolchainVcpkg 'scripts/buildsystems/vcpkg.cmake') file
 $toolchainStatus = Resolve-ExistingPath (Join-Path $toolchainVcpkg 'installed/vcpkg/status') file
-$statusFiles = [ordered]@{
-    baseline = Resolve-ExistingPath (Join-Path $baselineInput 'installed/vcpkg/status') file
-    candidate = Resolve-ExistingPath (Join-Path $candidateInput 'installed/vcpkg/status') file
+$statusFiles = [ordered]@{}
+foreach ($variant in @('baseline', 'candidate')) {
+    $root = if ($variant -eq 'baseline') { $baselineInput } else { $candidateInput }
+    $statusPath = Join-Path $root 'installed/vcpkg/status'
+    Assert-NoReparseComponents $statusPath
+    $statusFiles[$variant] = Resolve-ExistingPath $statusPath file
+}
+$privateInputFiles = [ordered]@{
+    baseline = @(Get-PrivateInputFiles $baselineInput $tripletRoots.baseline $statusFiles.baseline)
+    candidate = @(Get-PrivateInputFiles $candidateInput $tripletRoots.candidate $statusFiles.candidate)
+}
+$privateInputIdentities = [ordered]@{ baseline = @{}; candidate = @{} }
+foreach ($variant in @('baseline', 'candidate')) {
+    $root = if ($variant -eq 'baseline') { $baselineInput } else { $candidateInput }
+    foreach ($file in $privateInputFiles[$variant]) {
+        $relative = [IO.Path]::GetRelativePath($root, $file.FullName).Replace('\', '/')
+        $privateInputIdentities[$variant][$relative] =
+            Assert-PrivateSingleLinkFile $file.FullName "$variant private vcpkg input"
+    }
 }
 $privateFileIdentities = [ordered]@{
-    baselineHeader = Assert-PrivateSingleLinkFile $baselineHeader 'Baseline mutable declaration header'
-    candidateHeader = Assert-PrivateSingleLinkFile $candidateHeader 'Candidate mutable declaration header'
-    baselineStatus = Assert-PrivateSingleLinkFile $statusFiles.baseline 'Baseline private vcpkg status file'
-    candidateStatus = Assert-PrivateSingleLinkFile $statusFiles.candidate 'Candidate private vcpkg status file'
+    baselineHeader = $privateInputIdentities.baseline[[IO.Path]::GetRelativePath($baselineInput, $baselineHeader).Replace('\', '/')]
+    candidateHeader = $privateInputIdentities.candidate[[IO.Path]::GetRelativePath($candidateInput, $candidateHeader).Replace('\', '/')]
+    baselineStatus = $privateInputIdentities.baseline['installed/vcpkg/status']
+    candidateStatus = $privateInputIdentities.candidate['installed/vcpkg/status']
 }
 Assert-DistinctFileIdentities $privateFileIdentities.baselineHeader $privateFileIdentities.candidateHeader `
     'Baseline and candidate mutable declaration headers'
@@ -615,6 +658,10 @@ $dotnet = Resolve-ExistingPath $DotNetPath file
 $cmake = Resolve-ExistingPath $CMakePath file
 $ninja = Resolve-ExistingPath $NinjaPath file
 $compiler = Resolve-ExistingPath $CompilerPath file
+$clang = Resolve-ExistingPath $ClangPath file
+if ([IO.Path]::GetFileName($clang) -cne 'clang++.exe') {
+    throw 'ClangPath must select the exact clang++.exe launched by the OCCT compiler probe.'
+}
 $vcvars = Resolve-ExistingPath $VcVarsPath file
 $powerShellPath = (Get-Process -Id $PID).Path
 $adapterPath = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Invoke-OcctBenchmarkWorkload.ps1') file
@@ -678,33 +725,38 @@ $changedHeaderCopy = Join-Path $inputDirectory 'declaration-changed.hxx'
 $inputManifestPath = Join-Path $inputDirectory 'private-input-manifest.json'
 $inputEntries = [Collections.Generic.List[object]]::new()
 foreach ($variant in @('baseline', 'candidate')) {
-    $root = $includeRoots[$variant]
-    foreach ($file in Get-ChildItem -LiteralPath $root -Recurse -File | Sort-Object FullName) {
+    $root = if ($variant -eq 'baseline') { $baselineInput } else { $candidateInput }
+    $header = if ($variant -eq 'baseline') { $baselineHeader } else { $candidateHeader }
+    $headerRelative = [IO.Path]::GetRelativePath($root, $header).Replace('\', '/')
+    foreach ($file in $privateInputFiles[$variant]) {
         $relative = [IO.Path]::GetRelativePath($root, $file.FullName).Replace('\', '/')
-        if ($relative -ceq $DeclarationHeaderRelativePath.Replace('\', '/')) { continue }
+        if ($relative -ceq $headerRelative) { continue }
         $inputEntries.Add([ordered]@{
             Variant = $variant
             Path = $relative
             Bytes = $file.Length
             Sha256 = (Get-FileHash -LiteralPath $file.FullName -Algorithm SHA256).Hash
+            FileIdentity = $privateInputIdentities[$variant][$relative].Identity
         })
     }
 }
 $baselineInputEntries = @($inputEntries | Where-Object Variant -CEQ baseline)
 $candidateInputEntries = @($inputEntries | Where-Object Variant -CEQ candidate)
 if ($baselineInputEntries.Count -ne $candidateInputEntries.Count) {
-    throw 'The private baseline and candidate include inventories differ.'
+    throw 'The private baseline and candidate vcpkg input inventories differ.'
 }
 for ($index = 0; $index -lt $baselineInputEntries.Count; $index++) {
     $left = $baselineInputEntries[$index]
     $right = $candidateInputEntries[$index]
     if ($left.Path -cne $right.Path -or $left.Bytes -ne $right.Bytes -or $left.Sha256 -cne $right.Sha256) {
-        throw "The private baseline and candidate include inventories differ: $($left.Path) / $($right.Path)"
+        throw "The private baseline and candidate vcpkg input inventories differ: $($left.Path) / $($right.Path)"
     }
 }
 Write-NewJson $inputManifestPath ([ordered]@{
-    SchemaVersion = 1
-    HeaderRelativePath = $DeclarationHeaderRelativePath.Replace('\', '/')
+    SchemaVersion = 2
+    TripletRelativePath = "installed/$triplet"
+    HeaderRelativePath = "installed/$triplet/include/$($DeclarationHeaderRelativePath.Replace('\', '/'))"
+    StatusRelativePath = 'installed/vcpkg/status'
     OriginalHeaderSha256 = (Get-FileHash $originalHeaderCopy).Hash
     ChangedHeaderSha256 = (Get-FileHash $changedHeaderCopy).Hash
     Entries = @($inputEntries.ToArray())
@@ -771,7 +823,7 @@ foreach ($entry in $sameVolumeRoots.GetEnumerator()) {
 $fileBindings = [Collections.Generic.List[object]]::new()
 foreach ($path in @($inputManifestPath, $originalHeaderCopy, $changedHeaderCopy, $adapterPath,
         $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool, $pathTool,
-        $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
+        $dotnet, $cmake, $ninja, $compiler, $clang, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate, $hosts.baseline.original, $hosts.baseline.changed,
         $hosts.candidate.original, $hosts.candidate.changed, $hostReceipts.baseline.original.Path,
         $hostReceipts.baseline.changed.Path, $hostReceipts.candidate.original.Path, $hostReceipts.candidate.changed.Path,
@@ -857,14 +909,15 @@ $plan = [ordered]@{
         FixtureOnly = $gateSpec.FixtureOnly
     }
     Tools = [ordered]@{
-        DotNet = $dotnet; CMake = $cmake; Ninja = $ninja; Compiler = $compiler; VcVars = $vcvars
+        DotNet = $dotnet; CMake = $cmake; Ninja = $ninja; Compiler = $compiler; Clang = $clang; VcVars = $vcvars
         Manifest = $manifestTool; NinjaMetrics = $ninjaMetricsTool; ExportInventory = $exportInventoryTool
         HostPublisher = $hostPublisher; HostReceipt = $hostReceiptTool; PathIdentity = $pathTool
     }
     Variants = [ordered]@{
         baseline = [ordered]@{
             RepositoryRoot = $baselineRepository; ArtifactRoot = $baselineArtifact; InputVcpkgRoot = $baselineInput
-            IncludeRoot = $includeRoots.baseline; HeaderPath = $baselineHeader; StatusFile = $statusFiles.baseline
+            TripletRoot = $tripletRoots.baseline; IncludeRoot = $includeRoots.baseline
+            HeaderPath = $baselineHeader; StatusFile = $statusFiles.baseline
             HeaderFileIdentity = $privateFileIdentities.baselineHeader.Identity
             StatusFileIdentity = $privateFileIdentities.baselineStatus.Identity
             StatusFileSha256 = (Get-FileHash $statusFiles.baseline).Hash
@@ -875,7 +928,8 @@ $plan = [ordered]@{
         }
         candidate = [ordered]@{
             RepositoryRoot = $candidateRepository; ArtifactRoot = $candidateArtifact; InputVcpkgRoot = $candidateInput
-            IncludeRoot = $includeRoots.candidate; HeaderPath = $candidateHeader; StatusFile = $statusFiles.candidate
+            TripletRoot = $tripletRoots.candidate; IncludeRoot = $includeRoots.candidate
+            HeaderPath = $candidateHeader; StatusFile = $statusFiles.candidate
             HeaderFileIdentity = $privateFileIdentities.candidateHeader.Identity
             StatusFileIdentity = $privateFileIdentities.candidateStatus.Identity
             StatusFileSha256 = (Get-FileHash $statusFiles.candidate).Hash

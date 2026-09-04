@@ -62,6 +62,7 @@ function New-HostReceiptFixture {
 try {
     $null = [IO.Directory]::CreateDirectory($proofRoot)
     $dotnet = (Get-Command dotnet -CommandType Application).Source
+    $clang = (Get-Command clang++ -CommandType Application -ErrorAction Stop).Source
     $visualStudioRoot = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'Microsoft Visual Studio'
     $toolchain = Get-ChildItem -LiteralPath $visualStudioRoot -Directory |
         ForEach-Object { Get-ChildItem -LiteralPath $_.FullName -Directory } |
@@ -186,6 +187,8 @@ try {
     foreach ($path in @($baselineInput, $candidateInput)) {
         Write-TextFile (Join-Path $path 'installed/x64-windows/include/opencascade/Fixture.hxx') "enum class Fixture { Original };`n"
         Write-TextFile (Join-Path $path 'installed/x64-windows/include/opencascade/Stable.hxx') "struct Stable {};`n"
+        Write-TextFile (Join-Path $path 'installed/x64-windows/lib/Fixture.lib') 'fixture import library'
+        Write-TextFile (Join-Path $path 'installed/x64-windows/bin/Fixture.dll') 'fixture runtime library'
         Write-TextFile (Join-Path $path 'installed/vcpkg/status') "Package: occt`nVersion: fixture`n"
     }
     Write-TextFile (Join-Path $vcpkgToolchain 'scripts/buildsystems/vcpkg.cmake') '# fixture toolchain'
@@ -253,7 +256,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
         CanonicalDeclarationExportInventory = $declarationExports; NativeGateSpecification = $gateSpecification
         DeclarationHeaderRelativePath = 'opencascade/Fixture.hxx'; DeclarationChangedFile = $changedHeader
         MissingOutputRelativePath = 'cpp/Fixture.cpp'; DotNetPath = $dotnet; CMakePath = $toolchain.CMake
-        NinjaPath = $toolchain.Ninja; CompilerPath = $toolchain.Compiler; VcVarsPath = $toolchain.VcVars
+        NinjaPath = $toolchain.Ninja; CompilerPath = $toolchain.Compiler; ClangPath = $clang; VcVarsPath = $toolchain.VcVars
         DeadlineUtc = [DateTimeOffset]::UtcNow.AddHours(2); MemoryLimitBytes = 1073741824; MemoryReserveBytes = 1073741824
     }
 
@@ -261,9 +264,34 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $wrongDotNetArguments.SpecificationDirectory = Join-Path $proofRoot 'wrong-dotnet-spec'
     $wrongDotNetArguments.BaselineOriginalHostReceipt = $wrongDotNetReceiptPath
     $wrongDotNetRejected = $false
+    $wrongDotNetError = $null
     try { & $builder @wrongDotNetArguments }
-    catch { $wrongDotNetRejected = $_.Exception.Message -like '*plan-resolved dotnet path and SHA-256*' }
-    Require $wrongDotNetRejected 'A host publish from a different dotnet executable was accepted by the plan.'
+    catch {
+        $wrongDotNetError = $_.Exception.Message
+        $wrongDotNetRejected = $wrongDotNetError -like '*plan-resolved dotnet path and SHA-256*'
+    }
+    Require $wrongDotNetRejected "A host publish from a different dotnet executable was accepted by the plan. Error: $wrongDotNetError"
+
+    foreach ($requiredDirectory in @('lib', 'bin')) {
+        $missingBaseline = Join-Path $proofRoot "missing-$requiredDirectory-a"
+        $missingCandidate = Join-Path $proofRoot "missing-$requiredDirectory-b"
+        Copy-Item -LiteralPath $baselineInput -Destination $missingBaseline -Recurse
+        Copy-Item -LiteralPath $candidateInput -Destination $missingCandidate -Recurse
+        Remove-Item -LiteralPath (Join-Path $missingBaseline "installed/x64-windows/$requiredDirectory") -Recurse -Force
+        $missingArguments = $arguments.Clone()
+        $missingArguments.SpecificationDirectory = Join-Path $proofRoot "missing-$requiredDirectory-spec"
+        $missingArguments.BaselineInputVcpkgRoot = $missingBaseline
+        $missingArguments.CandidateInputVcpkgRoot = $missingCandidate
+        $missingRejected = $false
+        $missingError = $null
+        try { & $builder @missingArguments }
+        catch {
+            $missingError = $_.Exception.Message
+            $missingRejected = $missingError -like "*required directory is missing: $requiredDirectory*"
+        }
+        Require $missingRejected `
+            "A private input without the complete $requiredDirectory directory was accepted. Error: $missingError"
+    }
 
     & $builder @arguments
     $specification = $arguments.SpecificationDirectory
@@ -272,8 +300,21 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     Require $plan.FixtureOnly 'Synthetic receipts did not force a fixture-only plan.'
     Require ($plan.HarnessBinding -ceq 'commit:PENDING-FINAL-HARNESS-COMMIT') 'Pending harness binding was lost.'
     Require ($plan.ToolchainSnapshot.CompilerBv.Length -gt 0 -and $plan.ToolchainSnapshot.WindowsSDKVersion.Length -gt 0) 'Exact vcvars/compiler/SDK identity was not pinned.'
+    Require ($plan.Tools.Clang -ceq $clang -and $plan.ToolchainSnapshot.ClangSha256.Length -eq 64 -and
+        $plan.ToolchainSnapshot.ClangVersion.Length -gt 0) 'Exact clang++ identity was not pinned.'
     Require ($plan.ArtifactVolumeIdentity.Length -gt 0) 'Artifact physical volume was not pinned.'
     Require ($plan.NativeGate.SpecificationPath -ceq $gateSpecification) 'Native boundary gate was not bound.'
+    $privateInputManifest = Get-Content -LiteralPath $plan.FrozenInputManifest -Raw | ConvertFrom-Json
+    $baselinePrivatePaths = @($privateInputManifest.Entries | Where-Object Variant -CEQ baseline | ForEach-Object Path)
+    foreach ($expectedPath in @('installed/x64-windows/include/opencascade/Stable.hxx',
+            'installed/x64-windows/lib/Fixture.lib', 'installed/x64-windows/bin/Fixture.dll',
+            'installed/vcpkg/status')) {
+        Require ($expectedPath -cin $baselinePrivatePaths) "The complete private input manifest omitted $expectedPath."
+    }
+    Require ('installed/x64-windows/include/opencascade/Fixture.hxx' -cnotin $baselinePrivatePaths) `
+        'The selected mutable declaration header was not the sole manifest exclusion.'
+    Require (@($privateInputManifest.Entries | Where-Object { [string]::IsNullOrWhiteSpace($_.FileIdentity) }).Count -eq 0) `
+        'A frozen private input file lacks its physical-copy identity.'
     foreach ($receiptPath in $receipts.Values) {
         $receipt = Get-Content -LiteralPath $receiptPath -Raw | ConvertFrom-Json
         foreach ($hostFile in $receipt.HostFiles) {
@@ -418,6 +459,30 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     Remove-Item -LiteralPath $executablePlanPath
     $executablePlan.NativeGate.FixtureOnly = $false
     Write-JsonFile $executablePlanPath $executablePlan
+
+    $mismatchedClangPlanPath = Join-Path $specification 'occt-plan-mismatched-clang.json'
+    $mismatchedClangPlan = $executablePlan.Clone()
+    $mismatchedClangPlan.Tools = $executablePlan.Tools.Clone()
+    $mismatchedClangPlan.Tools.Clang = $executablePlan.Tools.Compiler
+    Write-JsonFile $mismatchedClangPlanPath $mismatchedClangPlan
+    $mismatchedClangRejected = $false
+    try { & $adapter -PlanPath $mismatchedClangPlanPath -Action Prepare -Variant baseline -Workload artifact-cold -SampleRoot $proofRoot }
+    catch { $mismatchedClangRejected = $_.Exception.Message -like '*clang++*' }
+    Require $mismatchedClangRejected 'A generation environment with a different clang++ executable was accepted.'
+
+    $stablePrivateInput = Join-Path $baselineInput 'installed/x64-windows/lib/Fixture.lib'
+    $stableHardlink = Join-Path $proofRoot 'stable-private-input-alias.lib'
+    try {
+        $null = New-Item -ItemType HardLink -Path $stableHardlink -Target $stablePrivateInput
+        $runtimeHardlinkRejected = $false
+        try { & $adapter -PlanPath $executablePlanPath -Action Prepare -Variant baseline -Workload artifact-cold -SampleRoot $proofRoot }
+        catch { $runtimeHardlinkRejected = $_.Exception.Message -like '*hard-link count 1*' }
+        Require $runtimeHardlinkRejected 'A hard-link alias added after freeze bypassed complete-triplet runtime validation.'
+    }
+    finally {
+        if (Test-Path -LiteralPath $stableHardlink) { Remove-Item -LiteralPath $stableHardlink -Force }
+    }
+
     $formalPrepareSample = Join-Path $proofRoot 'formal-prepare-sample'
     $null = [IO.Directory]::CreateDirectory($formalPrepareSample)
     & $powerShellPath -NoProfile -File $adapter -PlanPath $executablePlanPath -Action Prepare `
@@ -428,6 +493,24 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     Require ($formalManifest.Roots.Count -eq 2 -and $formalManifest.AdditionalFiles.Count -eq 1) `
         'Formal Prepare lost an array-valued manifest argument across the PowerShell process boundary.'
 
+    $priorVcpkgRoot = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process')
+    $priorPath = [Environment]::GetEnvironmentVariable('PATH', 'Process')
+    try {
+        [Environment]::SetEnvironmentVariable('VCPKG_ROOT', 'fixture-prior-vcpkg-root', 'Process')
+        & $adapter -PlanPath $executablePlanPath -Action Generate -Variant baseline -Workload unchanged `
+            -SampleRoot $formalPrepareSample
+        Require ([Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process') -ceq 'fixture-prior-vcpkg-root') `
+            'Generation did not restore the prior VCPKG_ROOT.'
+        Require ([Environment]::GetEnvironmentVariable('PATH', 'Process') -ceq $priorPath) `
+            'Generation did not restore the prior PATH.'
+    }
+    finally {
+        $vcpkgRoot = if ($null -eq $priorVcpkgRoot) { [NullString]::Value } else { $priorVcpkgRoot }
+        $path = if ($null -eq $priorPath) { [NullString]::Value } else { $priorPath }
+        [Environment]::SetEnvironmentVariable('VCPKG_ROOT', $vcpkgRoot, 'Process')
+        [Environment]::SetEnvironmentVariable('PATH', $path, 'Process')
+    }
+
     $nestedTarget = Join-Path $proofRoot 'nested-target'; $null = [IO.Directory]::CreateDirectory($nestedTarget)
     $nestedJunction = Join-Path $arguments.BaselineArtifactRoot 'nested/reparse'
     $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($nestedJunction))
@@ -437,7 +520,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     catch { $nestedRejected = $_.Exception.Message -like '*nested reparse point*' }
     Require $nestedRejected 'A nested artifact junction reached cleanup.'
 
-    Write-Output "OCCT benchmark plan proof passed: fresh managed host publishes, exact patch provenance, formal Prepare array transport, physical isolation, volume/path shape, vcvars compiler identity, canonical oracles, native gate, five workloads, and plan-only guards. Evidence: $proofRoot"
+    Write-Output "OCCT benchmark plan proof passed: fresh managed host publishes, exact patch provenance, complete private triplet inputs, exact clang++ and vcvars compiler identities, formal Prepare array transport, physical isolation, volume/path shape, canonical oracles, native gate, five workloads, and plan-only guards. Evidence: $proofRoot"
 }
 finally {
     if (Test-Path -LiteralPath $proofRoot) { Remove-Item -LiteralPath $proofRoot -Recurse -Force }
