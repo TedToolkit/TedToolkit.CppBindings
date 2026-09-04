@@ -327,7 +327,7 @@ function Assert-ToolchainSnapshot {
         if (-not $selectedCompiler.Equals($plan.Tools.Compiler, [StringComparison]::OrdinalIgnoreCase)) {
             throw 'VCToolsInstallDir selected a different compiler.'
         }
-        $compilerBv = @(& $plan.Tools.Compiler /Bv 2>&1)
+        $compilerBv = @(& $plan.Tools.Compiler /Bv /c NUL 2>&1)
         if ($LASTEXITCODE -ne 0 -or ($compilerBv -join "`n") -cne $plan.ToolchainSnapshot.CompilerBv) {
             throw 'The selected compiler /Bv identity changed.'
         }

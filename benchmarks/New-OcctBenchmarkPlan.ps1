@@ -352,7 +352,8 @@ function Get-ToolchainSnapshot {
             $previous[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, 'Process')
             [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process')
         }
-        $compilerBv = @(& $compiler /Bv 2>&1)
+        # NUL gives cl.exe a no-op input so /Bv reports identity with a successful exit code.
+        $compilerBv = @(& $compiler /Bv /c NUL 2>&1)
         if ($LASTEXITCODE -ne 0 -or $compilerBv.Count -eq 0) { throw 'The selected compiler /Bv probe failed.' }
         $cmakeVersion = @(& $cmake --version 2>&1)
         if ($LASTEXITCODE -ne 0 -or $cmakeVersion.Count -eq 0) { throw 'The pinned CMake version probe failed.' }
