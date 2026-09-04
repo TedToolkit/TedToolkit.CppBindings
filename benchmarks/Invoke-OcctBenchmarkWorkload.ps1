@@ -33,6 +33,17 @@ function Assert-Hash {
     }
 }
 
+function Assert-PrivateInputFile {
+    param([string] $Path, [string] $ExpectedIdentity, [string] $Label)
+    $identity = Get-BenchmarkFileIdentity $Path
+    if ($identity.LinkCount -ne 1) {
+        throw "$Label must remain a private file with hard-link count 1: $Path"
+    }
+    if ([string]::IsNullOrWhiteSpace($ExpectedIdentity) -or $identity.Identity -cne $ExpectedIdentity) {
+        throw "$Label physical file identity changed; rebaseline before sampling."
+    }
+}
+
 function Assert-FrozenBindings {
     foreach ($binding in $plan.FrozenFileBindings) {
         Assert-Hash $binding.Path $binding.Sha256
@@ -150,6 +161,8 @@ function Assert-FrozenInputs {
         Assert-Hash $path $entry.Sha256
     }
     $expectedHeaderHash = if ($HeaderState -eq 'original') { $manifest.OriginalHeaderSha256 } else { $manifest.ChangedHeaderSha256 }
+    Assert-PrivateInputFile $VariantPlan.HeaderPath $VariantPlan.HeaderFileIdentity 'Mutable declaration header'
+    Assert-PrivateInputFile $VariantPlan.StatusFile $VariantPlan.StatusFileIdentity 'Private vcpkg status file'
     Assert-Hash $VariantPlan.HeaderPath $expectedHeaderHash
     Assert-Hash $VariantPlan.StatusFile $VariantPlan.StatusFileSha256
 }
@@ -428,6 +441,7 @@ switch ($Action) {
         Get-Manifest $beforeManifest $null
         Copy-NewFile $ninjaLog $beforeNinja
         if ($Workload -eq 'declaration-edit') {
+            Assert-PrivateInputFile $variantPlan.HeaderPath $variantPlan.HeaderFileIdentity 'Mutable declaration header'
             [IO.File]::Copy($plan.ChangedHeaderFile, $variantPlan.HeaderPath, $true)
             Assert-FrozenInputs $variantPlan changed
         }
@@ -523,6 +537,7 @@ switch ($Action) {
             throw 'Only declaration-edit and generator-change samples require settlement.'
         }
         if ($Workload -eq 'declaration-edit') {
+            Assert-PrivateInputFile $variantPlan.HeaderPath $variantPlan.HeaderFileIdentity 'Mutable declaration header'
             [IO.File]::Copy($plan.OriginalHeaderFile, $variantPlan.HeaderPath, $true)
         }
         Assert-FrozenInputs $variantPlan original

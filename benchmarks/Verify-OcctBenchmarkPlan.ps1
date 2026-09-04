@@ -346,7 +346,11 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $junctionArguments.BaselineInputVcpkgRoot = $junctionInput; $junctionArguments.CandidateInputVcpkgRoot = $junctionTarget
     $junctionRejected = $false
     try { & $builder @junctionArguments }
-    catch { $junctionRejected = $_.Exception.Message -like '*reparse*' -or $_.Exception.Message -like '*overlap*' }
+    catch {
+        $junctionRejected = $_.Exception.Message -like '*reparse*' -or
+            $_.Exception.Message -like '*overlap*' -or
+            $_.Exception.Message -like '*must remain separate*'
+    }
     Require $junctionRejected 'A junction/shared physical input target was accepted.'
 
     $shortAlias = $null
@@ -377,6 +381,29 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     try { & $builder @crossVolumeArguments }
     catch { $crossVolumeRejected = $_.Exception.Message -like '*must share one physical volume*candidateInput*' }
     Require $crossVolumeRejected 'A cross-volume measured input was accepted.'
+
+    $baselineMutableHeader = Join-Path $baselineInput 'installed/x64-windows/include/opencascade/Fixture.hxx'
+    $toolchainHardlink = Join-Path $vcpkgToolchain 'installed/x64-windows/include/opencascade/Fixture.hxx'
+    $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($toolchainHardlink))
+    $headerHashBefore = (Get-FileHash -LiteralPath $baselineMutableHeader).Hash
+    try {
+        $null = New-Item -ItemType HardLink -Path $toolchainHardlink -Target $baselineMutableHeader
+        $hardlinkArguments = $arguments.Clone()
+        $hardlinkArguments.SpecificationDirectory = Join-Path $proofRoot 'hardlink-spec'
+        $hardlinkArguments.BaselineArtifactRoot = Join-Path $proofRoot 'artifact-hb'
+        $hardlinkArguments.CandidateArtifactRoot = Join-Path $proofRoot 'artifact-hc'
+        $hardlinkRejected = $false
+        try { & $builder @hardlinkArguments }
+        catch { $hardlinkRejected = $_.Exception.Message -like '*hard-link count 1*' }
+        Require $hardlinkRejected 'A mutable private declaration header hardlinked to the toolchain was accepted.'
+        Require ((Get-FileHash -LiteralPath $toolchainHardlink).Hash -ceq $headerHashBefore) `
+            'Hardlink rejection allowed the toolchain declaration header to be mutated.'
+        Require ((Get-FileHash -LiteralPath $baselineMutableHeader).Hash -ceq $headerHashBefore) `
+            'Hardlink rejection mutated the private declaration header.'
+    }
+    finally {
+        if (Test-Path -LiteralPath $toolchainHardlink) { Remove-Item -LiteralPath $toolchainHardlink -Force }
+    }
 
     $executablePlanPath = Join-Path $specification 'occt-plan-executable-fixture.json'
     $executablePlan = Get-Content -LiteralPath (Join-Path $specification 'occt-plan.json') -Raw | ConvertFrom-Json -AsHashtable
