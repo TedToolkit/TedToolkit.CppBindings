@@ -1,6 +1,7 @@
 param(
     [Parameter(Mandatory)] [string[]] $Roots,
     [Parameter(Mandatory)] [string] $ReportPath,
+    [string[]] $Files = @(),
     [string] $CompareTo
 )
 
@@ -9,7 +10,8 @@ Set-StrictMode -Version Latest
 $report = [IO.Path]::GetFullPath($ReportPath)
 if (Test-Path -LiteralPath $report) { throw 'Refusing to overwrite an artifact manifest.' }
 $resolvedRoots = @($Roots | ForEach-Object { (Resolve-Path -LiteralPath $_).Path })
-$files = [Collections.Generic.SortedDictionary[string, object]]::new([StringComparer]::Ordinal)
+$resolvedFiles = @($Files | ForEach-Object { (Resolve-Path -LiteralPath $_).Path })
+$artifactEntries = [Collections.Generic.SortedDictionary[string, object]]::new([StringComparer]::Ordinal)
 $index = 0
 foreach ($root in $resolvedRoots) {
     if (-not (Test-Path -LiteralPath $root -PathType Container)) { throw "Not an artifact directory: $root" }
@@ -31,7 +33,7 @@ foreach ($root in $resolvedRoots) {
         $stream = [IO.File]::Open($file.FullName, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
         try {
             $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream))
-            $files.Add($key, [ordered]@{
+            $artifactEntries.Add($key, [ordered]@{
                 Path = $key
                 Bytes = $stream.Length
                 Sha256 = $digest
@@ -42,12 +44,43 @@ foreach ($root in $resolvedRoots) {
     }
     $index++
 }
+foreach ($path in $resolvedFiles) {
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Not an artifact file: $path" }
+    if ($path -ceq $report) { throw 'The report cannot also be an artifact input.' }
+    if ((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) {
+        throw 'Artifact manifests do not follow symbolic links or junctions.'
+    }
+    foreach ($root in $resolvedRoots) {
+        $prefix = $root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
+        if ($path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'Additional artifact files must be outside the measured artifact roots.'
+        }
+    }
+    $stream = [IO.File]::Open($path, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $key = "$index/$([IO.Path]::GetFileName($path))"
+        $digest = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($stream))
+        $artifactEntries.Add($key, [ordered]@{
+            Path = $key
+            Bytes = $stream.Length
+            Sha256 = $digest
+            LastWriteTimeUtcTicks = [IO.File]::GetLastWriteTimeUtc($path).Ticks
+        })
+    }
+    finally { $stream.Dispose() }
+    $index++
+}
 
 $comparison = $null
 if ($CompareTo) {
     $previous = Get-Content -LiteralPath $CompareTo -Raw | ConvertFrom-Json
-    if ($previous.SchemaVersion -ne 1 -or $previous.Roots.Count -ne $resolvedRoots.Count) {
-        throw 'The comparison manifest has an incompatible schema or root count.'
+    $previousAdditionalFileCount = if ($previous.PSObject.Properties.Name -contains 'AdditionalFiles') {
+        $previous.AdditionalFiles.Count
+    }
+    else { 0 }
+    if ($previous.SchemaVersion -ne 1 -or $previous.Roots.Count -ne $resolvedRoots.Count -or
+        $previousAdditionalFileCount -ne $resolvedFiles.Count) {
+        throw 'The comparison manifest has an incompatible schema or artifact category count.'
     }
     $oldFiles = [Collections.Generic.Dictionary[string, object]]::new([StringComparer]::Ordinal)
     foreach ($file in $previous.Files) { $oldFiles.Add($file.Path, $file) }
@@ -55,7 +88,7 @@ if ($CompareTo) {
     $removed = [Collections.Generic.List[string]]::new()
     $changed = [Collections.Generic.List[string]]::new()
     $rewritten = [Collections.Generic.List[string]]::new()
-    foreach ($entry in $files.GetEnumerator()) {
+    foreach ($entry in $artifactEntries.GetEnumerator()) {
         if (-not $oldFiles.ContainsKey($entry.Key)) { $added.Add($entry.Key); continue }
         $old = $oldFiles[$entry.Key]
         $contentChanged = $old.Sha256 -cne $entry.Value.Sha256 -or $old.Bytes -ne $entry.Value.Bytes
@@ -65,7 +98,7 @@ if ($CompareTo) {
         }
     }
     foreach ($key in $oldFiles.Keys) {
-        if (-not $files.ContainsKey($key)) { $removed.Add($key) }
+        if (-not $artifactEntries.ContainsKey($key)) { $removed.Add($key) }
     }
     $removed.Sort([StringComparer]::Ordinal)
     $comparison = [ordered]@{
@@ -79,14 +112,15 @@ if ($CompareTo) {
 }
 
 [long] $bytes = 0
-foreach ($file in $files.Values) { $bytes += $file.Bytes }
+foreach ($file in $artifactEntries.Values) { $bytes += $file.Bytes }
 $snapshot = [ordered]@{
     SchemaVersion = 1
     CapturedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
     Roots = $resolvedRoots
-    FileCount = $files.Count
+    AdditionalFiles = $resolvedFiles
+    FileCount = $artifactEntries.Count
     TotalBytes = $bytes
-    Files = @($files.Values)
+    Files = @($artifactEntries.Values)
     Comparison = $comparison
     Limitations = @(
         'Root positions are semantic identities; compare the same ordered categories even when absolute paths differ.',

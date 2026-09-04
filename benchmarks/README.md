@@ -78,14 +78,15 @@ Capture sources before and after each sample, outside the timed interval and wit
 stopped. Store manifests outside the measured roots. Keep category order identical in both runs:
 
 ```powershell
-./benchmarks/Get-ArtifactManifest.ps1 -Roots @('./out/baseline/csharp', './out/baseline/cpp') -ReportPath ./out/benchmark/before.json
-./benchmarks/Get-ArtifactManifest.ps1 -Roots @('./out/candidate/csharp', './out/candidate/cpp') -ReportPath ./out/benchmark/after.json -CompareTo ./out/benchmark/before.json
+./benchmarks/Get-ArtifactManifest.ps1 -Roots @('./out/baseline/csharp', './out/baseline/cpp') -Files @('./out/baseline/unsupported-headers.txt') -ReportPath ./out/benchmark/before.json
+./benchmarks/Get-ArtifactManifest.ps1 -Roots @('./out/candidate/csharp', './out/candidate/cpp') -Files @('./out/candidate/unsupported-headers.txt') -ReportPath ./out/benchmark/after.json -CompareTo ./out/benchmark/before.json
 ./benchmarks/Verify-ArtifactManifest.ps1
 ```
 
 The manifest records sorted relative names, sizes, SHA-256 content hashes, modification times, total
 bytes, and file count. Comparison separates added, removed, changed-content, and observed rewritten
-files. An unchanged warm source set needs equal content and zero observed rewrites. Timestamp-based
+files. Explicit files are ordered semantic categories after the directory roots and must be outside
+those roots. An unchanged warm source set needs equal content and zero observed rewrites. Timestamp-based
 rewrite detection is not a filesystem write trace; a writer that restores timestamps can hide an
 identical rewrite. Byte equality supports unchanged-partition prototypes, not ABI/lifetime proof
 for sharding or other repartitioning. Hashing itself warms the OS file cache: claims remain
@@ -121,6 +122,9 @@ object has nonempty `Prepare`, `Measure`, and `Verify` arrays of stage-specifica
 Each stage file supplies `Executable`, string-array `Arguments`, existing `WorkingDirectory`, and
 integer `TimeLimitSeconds`. The matrix supplies the label, common deadline, and memory ceiling.
 Paths resolve against the invocation directory; prefer absolute paths in a frozen specification.
+An argument that is exactly `{SampleRoot}`, `{Sequence}`, `{Workload}`, `{Variant}`, `{Repetition}`,
+or `{IsWarmup}` is replaced with that sample's context. Placeholders embedded in a larger argument
+and unknown whole-argument placeholders are rejected; pass paths and values as separate arguments.
 
 Preparation must reset the disposable variant to the declared cache/edit state for every sample,
 including artifact removal for independent cold samples. Verification commands must fail nonzero
