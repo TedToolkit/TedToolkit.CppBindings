@@ -3,11 +3,11 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: migration -->
-<!-- change-status: draft -->
+<!-- change-status: approved -->
 <!-- delivery-shape: multi-item -->
 
 - Priority: P1
-<!-- approval-source: none -->
+<!-- approval-source: Maintainer approved the additional provider extension family and requested continuation with "继续" on 2026-09-04, following approval of the migration and identity dispositions. -->
 <!-- candidate-binding: none -->
 
 <!-- section: goal-rationale -->
@@ -88,6 +88,8 @@ Scenario: Inspect and build the migrated project graph
   And provider-specific source generation remains separate from consumer diagnostics
   And every production or package project introduced by this migration has one documented responsibility and no forbidden dependency edge
   And every current public Generator, source-generator, and analyzer API family matches the approved identity disposition table
+  And a tiny provider-neutral generation fixture runs without loading any OCCT provider assembly
+  And that fixture registers through the public provider extension boundary without friend access or reflection
 ```
 
 <!-- acceptance-case: AC-03 -->
@@ -129,6 +131,9 @@ Scenario: Generate and run the representative OCCT binding after migration
   When the Release generator, runtime, analyzer, and native integration gates run
   Then the same supported OCCT declarations produce deterministic exact-layout bindings
   And representative Value, Handle, and Owned operations call and clean up through the matching native artifact
+  And transient operations expose separate direct Handle<T> and in handle<T> receiver overloads calling the same NativeApi slot
+  And no common public handle receiver interface or generated Core forwarding method is introduced
+  And owner liveness is applied only to the owning Handle<T> overload
   And unsupported declarations and unsupported RIDs still fail before native access
   And no generic core artifact depends on OCCT
   And no CGAL or generic Windows package is required for the proof
@@ -145,6 +150,12 @@ Scenario: Generate and run the representative OCCT binding after migration
 - `TedToolkit.CppBindings.Runtime` owns only declaration-agnostic mechanisms. OCCT-specific
   intrusive reference counting, exception types, classifications, symbols, layouts, and generated
   sets stay in `TedToolkit.CppBindings.Occt.*`.
+- The repository's `AGENTS.md` receiver rule is authoritative: generate separate direct
+  `Handle<T>` and `in handle<T>` overloads, not a shared owner-interface receiver. Both use the
+  same `NativeApi` slot; only the owning overload has owner-liveness machinery. Lowercase
+  `handle<T>` does not implement an owner interface. Existing source and durable documentation
+  that contradict this rule must be corrected and verified within the selected migration baseline;
+  a namespace-only rewrite of the current dirty interface-receiver emission is not acceptable.
 - `TedToolkit.CppBindings.Analyzers` is a separate NuGet package and a direct consumer dependency;
   it is not embedded in Runtime and is not assumed to flow transitively. The OCCT header source
   generator remains a distinct non-packable build component distributed with the OCCT Generator.
@@ -167,10 +178,12 @@ Scenario: Generate and run the representative OCCT binding after migration
 | --- | --- | --- |
 | `TedToolkit.Occt.Owned<T>` | `TedToolkit.CppBindings.Owned<T>` in `TedToolkit.CppBindings.Runtime` | Rename and move; preserve direct-storage RAII behavior |
 | `TedToolkit.Occt.IOcctRaii` | `TedToolkit.CppBindings.ICppRaii` in `TedToolkit.CppBindings.Runtime` | Replace with provider-neutral eligibility marker |
+| `TedToolkit.Occt.IOcctOwner<T>` | `TedToolkit.CppBindings.ICppOwner<T>` in `TedToolkit.CppBindings.Runtime` | Rename and move; preserve its single non-owning `ref T Value` member, without using it as a common generated handle receiver |
 | `TedToolkit.Occt.Attributes.NativeTypeNameAttribute` | `TedToolkit.CppBindings.NativeTypeNameAttribute` in `TedToolkit.CppBindings.Runtime` | Rename namespace and generalize documentation |
 | `TedToolkit.Occt.Runtime.GeneratedCodeOnlyAttribute` | `TedToolkit.CppBindings.GeneratedCodeOnlyAttribute` in `TedToolkit.CppBindings.Runtime` | Rename namespace and generalize documentation |
 | `TedToolkit.Occt.NativeError` | `TedToolkit.CppBindings.NativeError` in `TedToolkit.CppBindings.Runtime` | Move the provider-neutral ABI carrier |
 | `TedToolkit.Occt.Handle<T>` and `IStandard_Transient` | Same type names under `TedToolkit.CppBindings.Occt` in `TedToolkit.CppBindings.Occt.Runtime` | Rename namespace; preserve intrusive ownership |
+| `TedToolkit.Occt.handle<T>` | Same lowercase type name under `TedToolkit.CppBindings.Occt` in `TedToolkit.CppBindings.Occt.Runtime` | Rename namespace; preserve only its private pointer field and public non-owning `ref T Value` property |
 | `TedToolkit.Occt.NativeErrorProjection` and `Occt*Exception` / `IOcctException` | Same type names under `TedToolkit.CppBindings.Occt` in `TedToolkit.CppBindings.Occt.Runtime` | Rename namespace; preserve OCCT error semantics |
 | `TTOCCT001` generated-only usage diagnostic | `TTCB001` in `TedToolkit.CppBindings.Analyzers` | Rename ID and update suppression/documentation references |
 | `TTOCCT002` non-owning reference lifetime diagnostic | `TTCB002` in `TedToolkit.CppBindings.Analyzers` | Rename ID and update suppression/documentation references |
@@ -179,16 +192,55 @@ Scenario: Generate and run the representative OCCT binding after migration
 | `DeclOptions` | `OcctDeclarationOptions` in `TedToolkit.CppBindings.Occt.Generator` | Rename and keep OCCT declaration selection provider-owned |
 | `CleanGenerationOutputModule`, `GenerateCppModule`, and `GenerateCSharpModule` | Same type names under `TedToolkit.CppBindings.Generator` | Move the provider-neutral pipeline stages; provider emitters enter through generic contracts |
 | `ParseModule` | `OcctParseModule` under `TedToolkit.CppBindings.Occt.Generator` | Rename and keep OCCT/vcpkg header acquisition and classification provider-owned |
+| `CompilerProbeModule` | `OcctCompilerProbeModule` under `TedToolkit.CppBindings.Occt.Generator` | Rename and keep OCCT-specific native traits, handle-layout proof, and unsupported-export classification in the provider |
 | `PipelineBuilderExtension.AddOcctGenerators` | `OcctPipelineBuilderExtensions.AddOcctGenerators` under `TedToolkit.CppBindings.Occt.Generator` | Rename the extension container and preserve the OCCT registration entry point |
 | Current internal Generator models and services | Generic internals move to `TedToolkit.CppBindings.Generator`; OCCT parsing/classification internals move to `TedToolkit.CppBindings.Occt.Generator` | Preserve non-public visibility unless a separately approved contract requires exposure |
 | `TedToolkit.Occt.Analyzer.OcctHeaderTypeGenerator` | `TedToolkit.CppBindings.Occt.SourceGenerators.OcctHeaderTypeGenerator` in the non-packable OCCT SourceGenerators component | Rename namespace; remain public only for Roslyn discovery and ship only as an analyzer asset of the OCCT Generator package |
 | Generated `TedToolkit.Occt.Generator.OcctHeaderType` | `TedToolkit.CppBindings.Occt.Generator.OcctHeaderType` | Rename namespace and preserve the generated OCCT header-selection enum role |
 | `GeneratedCodeOnlyUsageAnalyzer` and `ValueLifetimeAnalyzer` | Same type names under `TedToolkit.CppBindings.Analyzers` | Rename namespace; remain public only for Roslyn discovery and ship only as analyzer assets |
 
-The table is exhaustive for the current public Runtime, Generator, generated header-selector,
-source-generator, and analyzer families found on the approved baseline. A newly discovered material
+The maintainer approved all identity dispositions above, including the owner interface, lowercase
+handle storage, and OCCT compiler-probe module, on 2026-09-04. Verify the table against the chosen
+baseline's public Runtime, Generator, generated header-selector, source-generator, and analyzer
+families before implementation. A newly discovered material
 public contract or a request to retain an old identity is an escalation trigger and requires renewed
 change approval; work-item planning cannot decide it.
+
+### Approved provider extension boundary
+
+The maintainer approved the following new public family on 2026-09-04
+to satisfy ADR-002's exportable provider boundary without exposing OCCT's internal model graph.
+All four API families belong to `TedToolkit.CppBindings.Generator`:
+
+| Public family | Contract |
+| --- | --- |
+| `IGenerationProvider` | Supplies prerequisite pipeline module types and asynchronously creates one completed `GenerationPlan` for a pipeline run; receives cancellation, and propagates preparation failures |
+| `GenerationPlan` | Read-only snapshot of provider-generated C# and C++ sources and the exact ordered native export names shared by both sides of the binding; contains no Clang, OCCT, or provider declaration types |
+| `GeneratedSource` | One output-relative path and a cancellation-aware asynchronous source renderer; carries no native ownership or lifetime wrapper |
+| `CppBindingsPipelineBuilderExtensions.AddCppGenerators` | Registers a `GenerationOptions` instance and one `IGenerationProvider` with `PipelineBuilder`; keeps stage constructors and execution services internal |
+
+The generic stages depend dynamically on the supplied preparation modules, obtain the plan once,
+validate output paths/collisions and duplicate export names, and generate both language outputs from
+that same plan. Provider callbacks preserve the existing rendering execution policy; this migration
+does not authorize adopting benchmark strategies. Failed or cancelled preparation cannot be
+represented as an empty successful plan, and no render starts before native facts and the export
+ordering are finalized. Output paths must remain within the configured generation roots.
+
+The OCCT registration entry point implements this public boundary using its private parser,
+compiler-probe, classification, template model, and emitters. Shared function-table/loading emission
+and source-publication mechanics belong to the core; OCCT error projection, handle operations,
+required native headers, and native package dependencies remain provider-owned. A second provider
+can register through the same boundary without changing the generic assembly or obtaining friend
+access. Do not widen the existing `RecordModel`, `TypeModel`, or `IGeneratorService` families.
+
+AC-02 must compile and run a separate test-only provider consumer through these public APIs. The
+consumer must reference only the generic package, have no `InternalsVisibleTo` grant, and exercise
+preparation ordering, deterministic export sharing, path/collision rejection, and cancellation or
+failure propagation. This fixture is not a second production provider or a new platform claim.
+
+Approval covers this extension family and execution contract, not exposure of the
+existing implementation graph. Exact private adapter names, file moves, and test organization
+remain implementation choices.
 
 ### GitHub repository rename handoff
 
@@ -223,11 +275,18 @@ The repository maintainer executes this ordered handoff using GitHub's documente
 <!-- section: start-conditions -->
 ## Start conditions
 
-<!-- change-prerequisite: PRE-01 source=../generate-unversioned-model-driven-bindings/change.md contract=AC-06 -->
+<!-- change-prerequisite: none -->
 
-| ID | Required input or guarantee | Source change outcome | Required readiness evidence |
-| --- | --- | --- | --- |
-| PRE-01 | The generated exact-layout managed/native OCCT replacement builds and runs against real pinned OCCT without an active ABI-v1 path | `../generate-unversioned-model-driven-bindings/change.md`, AC-06 | Source contract is completed on the exact Git baseline selected for migration implementation |
+No active cross-change prerequisite remains. The exact-layout managed/native OCCT replacement is
+part of baseline `ce469d5cfa1befc8a9466638836463daff916c92`; its historical delivery record was
+removed after completion. Build-reliability commit `2b622887a561827a4c6a2a6f02d615cfb2e34eb3`
+retains the completed verification evidence in Git history: full Windows pipeline, all 141 managed
+tests, native Handle CTest, and retirement of the active ABI-v1 fixture paths. Do not restore a
+completed record merely to satisfy a stale prerequisite link.
+
+Before implementation, bind the chosen baseline and preserve the same real pinned-OCCT guarantee.
+Existing uncommitted template-projection work must be preserved and verified if included in that
+baseline; the earlier isolated verification does not cover those edits.
 
 <!-- section: delivery-brief -->
 ## Delivery disposition
@@ -240,8 +299,13 @@ The GitHub rename remains an operational handoff rather than a development work 
 
 Likely touchpoints are the solution and project tree under `src/` and `tests/`, package/build props,
 generator and Runtime public namespaces, analyzer packaging, README and durable architecture records,
-CI/repository metadata, and the current OCCT package change. Exact private file moves, internal type
+CI/repository metadata, and the existing OCCT Windows package. Exact private file moves, internal type
 names, and extraction mechanics remain implementation choices inside the approved boundaries.
+
+The provider extension boundary above is approved. The maintainer separately approved the complete
+delivery map and item set in [work-items.md](work-items.md) on 2026-09-04.
+Planning preserves internal stage constructors and the private provider model graph behind that
+boundary. A friend-assembly arrangement is not a substitute for the neutral public-consumer proof.
 
 <!-- section: proof-plan -->
 ## Proof
@@ -255,7 +319,7 @@ names, and extraction mechanics remain implementation choices inside the approve
 | Contract | Role | Observable assertion | Command or bounded procedure |
 | --- | --- | --- | --- |
 | AC-01 | Primary | The new GitHub identity, local remote, repository metadata, CI, history, and settings are authoritative and operational | From the exact verified candidate, perform the maintainer-owned rename checklist and record the new URL plus post-rename validation |
-| AC-02 | Primary | The `.slnx` and production/package `.csproj` inventory gives every introduced project one documented responsibility, contains no generic-core-to-provider edge, and maps every public Generator, source-generator, and analyzer family to its approved owner; the renamed solution builds | Enumerate solution membership, public Generator/source-generator/analyzer surfaces, and `ProjectReference`/package edges; fail on a missing disposition, core-to-provider edge, or undocumented introduced project; then run `dotnet build TedToolkit.CppBindings.slnx -c Release` |
+| AC-02 | Primary | The project graph, source/metadata inventory, and tiny provider-neutral fixture establish that the generic core has no provider knowledge; every introduced project and public family has its approved responsibility | Enumerate solution membership, public surfaces, and dependency edges; inspect core source and metadata for provider classifications, symbols, and support emitters with explicit reviewed exceptions for example strings; run a test-only neutral generation fixture without OCCT assemblies, then `dotnet build TedToolkit.CppBindings.slnx -c Release`; do not introduce a second production provider |
 | AC-03 | Primary | Public Runtime API and lifetime contracts expose every approved identity disposition plus Value, Owned, and OCCT Handle categories with no Borrowed wrapper | Run public API contract tests and the Runtime and OCCT Runtime TUnit projects in Release |
 | AC-04 | Primary | An isolated consumer receives the standalone analyzer assets, expected diagnostics, suppressions, and no analyzer runtime dependency | Pack to an isolated feed and build the analyzer contract consumer matrix |
 | AC-05 | Primary | The migrated generator and Windows defaults reproduce deterministic OCCT bindings and real native lifetime behavior without a core-to-OCCT dependency | Run Generator, Runtime, analyzer, and representative native integration projects in Release against the pinned `win-x64` matrix |
@@ -267,8 +331,8 @@ names, and extraction mechanics remain implementation choices inside the approve
 AC-01 through AC-05 pass; the generic core and OCCT provider boundaries, dependency direction,
 ownership policy, analyzer distribution, Windows default profile, and new identities are reflected
 in code, tests, packages, the solution, current documentation, architecture, and principles; the
-GitHub repository and local remote use `TedToolkit.CppBindings`; the existing OCCT package delivery
-record is revised or superseded so it cannot reintroduce old identities; no compatibility alias,
+GitHub repository and local remote use `TedToolkit.CppBindings`; any remaining active delivery
+records are reconciled so they cannot reintroduce old identities; no compatibility alias,
 Borrowed wrapper, CGAL implementation, unsupported platform claim, or remote package publication is
 included. After merge and durable-record extraction, this completed change record is removed under
 the repository retention policy.
