@@ -15,7 +15,7 @@ namespace TedToolkit.CppBindings.Generator;
 /// </summary>
 internal static class GenerationOutput
 {
-    private static readonly Regex Identifier = new("^[A-Za-z_][A-Za-z0-9_]*$", RegexOptions.CultureInvariant);
+    private static readonly Regex Identifier = new(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant);
 
     private static readonly Regex DeviceName = new(
         "^(CON|PRN|AUX|NUL|COM[1-9¹²³]|LPT[1-9¹²³])(?:\\.|$)",

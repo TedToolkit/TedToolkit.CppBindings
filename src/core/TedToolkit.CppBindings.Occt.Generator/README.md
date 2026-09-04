@@ -78,6 +78,11 @@ such as `void` are fixed into the family name. A shared managed family requires 
 graph. Each selected closed native specialization retains direct invocation slots without runtime
 generic native dispatch.
 
+Explicit full specializations retain their own closed declarations. Template families with distinct
+native base identities also remain closed; fixed-base families can share a managed type while
+retaining the exact base interface. Generic base dependence is not inferred from coincident type
+spellings. Family compatibility is finalized only after native ownership classification.
+
 ## Fail-closed limitations
 
 The installed headers and DLLs are authoritative. Incomplete/inaccessible declarations,

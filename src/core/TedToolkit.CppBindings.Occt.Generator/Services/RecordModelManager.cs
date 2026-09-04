@@ -313,7 +313,8 @@ internal sealed class RecordModelManager(
             "\n",
             record.ObjectKind,
             record.IsStandardTransient,
-            record.Bases.Count(static relation => relation.IsPublic),
+            string.Join("|", record.Bases.Where(static relation => relation.IsPublic)
+                .Select(static relation => relation.Base.Type.CppTypeName)),
             string.Join("|", record.FieldModels.Select(static field =>
                 string.Join(":", field.Name, field.CppTemplateType, field.CSharpTemplateType))));
     }

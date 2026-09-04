@@ -1324,6 +1324,51 @@ internal sealed class AddTest
         await Assert.That(record.FieldModels.Single().Type.CSharpTypeName).IsEqualTo("float");
     }
 
+    /// <summary>
+    /// Verifies shared templates retain fixed bases and differing native bases remain closed.
+    /// </summary>
+    /// <param name="dependent">Whether each specialization has a distinct native base.</param>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Should_preserve_exact_template_base_relationships_Async(bool dependent)
+    {
+        var baseArgument = dependent ? "T" : "float";
+        using var translationUnit = ParseTranslationUnit($$"""
+            template<class T> struct Base { int Read() const { return 7; } };
+            template<class T> struct Box : Base<{{baseArgument}}> { T Value; };
+            struct Owner { Box<float> First; Box<int> Second; };
+            """, "__occt__/test.cpp");
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner"));
+        var records = manager.RecordModels.ToArray();
+        var boxes = records.Where(static record => record.Type.CppTypeName.StartsWith("Box<", StringComparison.Ordinal)).ToArray();
+        await Assert.That(boxes.Length).IsEqualTo(2);
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            DeclOptions = [], CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var slots = NativeExportInventory.GetExports(records).Select(static (name, index) => (name, index))
+            .ToDictionary(static entry => entry.name, static entry => entry.index, StringComparer.Ordinal);
+        foreach (var record in boxes)
+        {
+            await Assert.That(record.TemplateProjection is null).IsEqualTo(dependent);
+            var relation = record.Bases.Single();
+            await Assert.That(relation.Base.MethodModels.Any(static method => method.MethodName == "Read")).IsTrue();
+            var source = await new CSharpGenerator(record, options, nativeFunctionIndices: slots)
+                .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+            await Assert.That(source).Contains(relation.Base.Type.CSharpInterfaceName);
+            await Assert.That(source).DoesNotContain("IBase<T>");
+        }
+
+        var owner = records.Single(static record => record.Type.CppTypeName == "Owner");
+        string[] expectedFields = dependent ? ["Box_float", "Box_int",] : ["Box<float>", "Box<int>",];
+        await Assert.That(owner.FieldModels.Select(static field => field.Type.CSharpTypeName))
+            .IsEquivalentTo(expectedFields);
+    }
+
     private static RecordModelManager CreateManager()
     {
         return new(

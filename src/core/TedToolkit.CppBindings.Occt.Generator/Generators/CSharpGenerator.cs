@@ -7,7 +7,6 @@
 
 using System.Runtime.InteropServices;
 using System.Text;
-using System.Text.RegularExpressions;
 
 using Microsoft.Extensions.Options;
 
@@ -109,10 +108,10 @@ internal sealed class CSharpGenerator(
                      relation.IsPublic
                      && recordCatalog?.ContainsKey(relation.Base.Type.CppTypeName) is not false))
         {
-            interfaceDeclaration.AddBaseType(new DataType(GeneralizeManagedType(
+            interfaceDeclaration.AddBaseType(new DataType(
                 baseRelation.Base.Type.CSharpInterfaceName is "IStandard_Transient"
                     ? "global::TedToolkit.CppBindings.Occt.IStandard_Transient"
-                    : baseRelation.Base.Type.CSharpInterfaceName)));
+                    : baseRelation.Base.Type.CSharpInterfaceName));
         }
 
         if (recordDecl.ObjectKind is NativeObjectKind.Handle
@@ -153,29 +152,6 @@ internal sealed class CSharpGenerator(
         return record.TemplateProjection is null
             ? record.Type.CSharpInterfaceName
             : "I" + record.TemplateProjection.DeclarationTypeName;
-    }
-
-    private string GeneralizeManagedType(string closedType)
-    {
-        if (recordDecl.TemplateProjection is null || string.IsNullOrEmpty(closedType))
-        {
-            return closedType;
-        }
-
-        foreach (var arguments in recordDecl.TemplateProjection.GenericArguments
-                     .GroupBy(static argument => argument.ClosedCSharpType, StringComparer.Ordinal)
-                     .Where(static group => group.Count() is 1)
-                     .OrderByDescending(static group => group.Key.Length))
-        {
-            var argument = arguments.Single();
-            closedType = Regex.Replace(
-                closedType,
-                $"(?<![A-Za-z0-9_]){Regex.Escape(argument.ClosedCSharpType)}(?![A-Za-z0-9_])",
-                argument.ParameterName,
-                RegexOptions.CultureInvariant);
-        }
-
-        return closedType;
     }
 
     private bool UsesExplicitLayout()

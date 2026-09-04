@@ -19,6 +19,7 @@ internal static class Program
         "reserved_managed", "reserved_native", "duplicate_export", "invalid_export",
         "plan_failure", "plan_cancellation", "module_failure", "render_failure", "render_cancellation",
         "unsupported_rid", "overlapping_roots", "invalid_basename", "namespace_keyword", "device_path", "reserved_export",
+        "export_trailing_lf", "duplicate_export_trailing_lf", "reserved_export_trailing_lf", "namespace_trailing_lf",
     ];
 
     private static async Task Main(string[] args)
@@ -47,6 +48,7 @@ internal static class Program
             if (scenario == "overlapping_roots") options = options with { CppFolder = options.CSharpFolder };
             if (scenario == "invalid_basename") options = options with { NativeLibraryBaseName = "fixture.dll" };
             if (scenario == "namespace_keyword") options = options with { CSharpNamespace = "Independent.class" };
+            if (scenario == "namespace_trailing_lf") options = options with { CSharpNamespace = "Independent.Generated\n" };
             var provider = new Provider(scenario);
             Exception? failure = null;
             try
@@ -76,7 +78,8 @@ internal static class Program
                     "path_escape" or "absolute_path" or "device_path" => "Invalid output-relative source path",
                     "case_collision" or "reserved_managed" or "reserved_native" => "Generated source path collision",
                     "file_directory_collision" => "Generated file/directory collision",
-                    "duplicate_export" or "invalid_export" or "reserved_export" => "Invalid or duplicate native export",
+                    "duplicate_export" or "invalid_export" or "reserved_export" or "export_trailing_lf"
+                        or "duplicate_export_trailing_lf" or "reserved_export_trailing_lf" => "Invalid or duplicate native export",
                     "plan_failure" => "fixture plan failure",
                     "plan_cancellation" => "fixture plan cancellation",
                     "module_failure" => "fixture preparation failure",
@@ -84,12 +87,12 @@ internal static class Program
                     "render_cancellation" => "fixture render cancellation",
                     "unsupported_rid" => "Only the proved win-x64",
                     "overlapping_roots" => "distinct and non-overlapping",
-                    "namespace_keyword" => "portable C# identifiers",
+                    "namespace_keyword" or "namespace_trailing_lf" => "portable C# identifiers",
                     "invalid_basename" => "basename",
                     _ => throw new InvalidOperationException("Unclassified negative proof."),
                 };
                 Require(failure!.ToString().Contains(expectedFailure, StringComparison.OrdinalIgnoreCase), $"Wrong failure for {scenario}: {failure}");
-                var registrationFailure = scenario is "unsupported_rid" or "overlapping_roots" or "invalid_basename" or "namespace_keyword";
+                var registrationFailure = scenario is "unsupported_rid" or "overlapping_roots" or "invalid_basename" or "namespace_keyword" or "namespace_trailing_lf";
                 Require(provider.PlanCalls == (registrationFailure || scenario == "module_failure" ? 0 : 1), $"Wrong plan count for {scenario}.");
                 Require(provider.Prepared != (registrationFailure || scenario == "module_failure"), $"Wrong preparation result for {scenario}.");
             }
@@ -186,6 +189,9 @@ public sealed class Provider(string scenario) : IGenerationProvider
             "duplicate_export" => ["Zebra", "Zebra"],
             "invalid_export" => ["invalid();"],
             "reserved_export" => ["NativeApi_GetFunctionTable"],
+            "export_trailing_lf" => ["Zebra\n"],
+            "duplicate_export_trailing_lf" => ["Zebra", "Zebra\n"],
+            "reserved_export_trailing_lf" => ["NativeApi_GetFunctionTable\n"],
             _ => ["Zebra", "Alpha"],
         };
         var native = new[] { new GeneratedSource(Scenario == "reserved_native" ? "NativeFunctionTable.cpp" : "Provider.cpp", (writer, token) => RenderAsync(writer, "extern \"C\" void Zebra() {}\nextern \"C\" void Alpha() {}", token)) };

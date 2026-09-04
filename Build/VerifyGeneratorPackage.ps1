@@ -40,7 +40,7 @@ $evidence = Join-Path $report 'scenarios'
 & dotnet (Join-Path $consumer 'bin/Release/net10.0/PackageConsumer.dll') $evidence *> $runLog
 if ($LASTEXITCODE -ne 0) { throw "Independent consumer behavior failed; see $runLog" }
 $result = Get-Content -LiteralPath (Join-Path $evidence 'result.json') -Raw | ConvertFrom-Json
-if (-not $result.passed -or $result.count -ne 21 -or @($result.results | Where-Object { -not $_.passed }).Count -ne 0) {
+if (-not $result.passed -or $result.count -ne 25 -or @($result.results | Where-Object { -not $_.passed }).Count -ne 0) {
     throw 'The complete intended neutral consumer matrix did not pass.'
 }
 [ordered]@{
