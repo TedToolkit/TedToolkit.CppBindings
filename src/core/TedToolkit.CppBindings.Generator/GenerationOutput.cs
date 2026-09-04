@@ -213,10 +213,12 @@ internal static class GenerationOutput
         CancellationToken cancellationToken)
     {
         await ComparisonSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
-        var firstBuffer = ArrayPool<byte>.Shared.Rent(ComparisonBufferSize);
-        var secondBuffer = ArrayPool<byte>.Shared.Rent(ComparisonBufferSize);
+        byte[]? firstBuffer = null;
+        byte[]? secondBuffer = null;
         try
         {
+            firstBuffer = ArrayPool<byte>.Shared.Rent(ComparisonBufferSize);
+            secondBuffer = ArrayPool<byte>.Shared.Rent(ComparisonBufferSize);
             var first = new FileStream(
                 firstPath,
                 FileMode.Open,
@@ -240,31 +242,56 @@ internal static class GenerationOutput
                         return false;
                     }
 
-                    while (true)
-                    {
-                        var firstRead = await first.ReadAsync(
-                            firstBuffer.AsMemory(0, ComparisonBufferSize), cancellationToken).ConfigureAwait(false);
-                        var secondRead = await second.ReadAsync(
-                            secondBuffer.AsMemory(0, ComparisonBufferSize), cancellationToken).ConfigureAwait(false);
-                        if (firstRead != secondRead
-                            || !firstBuffer.AsSpan(0, firstRead).SequenceEqual(secondBuffer.AsSpan(0, secondRead)))
-                        {
-                            return false;
-                        }
-
-                        if (firstRead == 0)
-                        {
-                            return true;
-                        }
-                    }
+                    return await StreamsEqualAsync(
+                        first, second, firstBuffer, secondBuffer, cancellationToken).ConfigureAwait(false);
                 }
             }
         }
         finally
         {
-            ArrayPool<byte>.Shared.Return(firstBuffer);
-            ArrayPool<byte>.Shared.Return(secondBuffer);
+            if (firstBuffer is not null)
+            {
+                ArrayPool<byte>.Shared.Return(firstBuffer);
+            }
+
+            if (secondBuffer is not null)
+            {
+                ArrayPool<byte>.Shared.Return(secondBuffer);
+            }
+
             _ = ComparisonSlots.Release();
+        }
+    }
+
+    private static async Task<bool> StreamsEqualAsync(
+        Stream first,
+        Stream second,
+        byte[] firstBuffer,
+        byte[] secondBuffer,
+        CancellationToken cancellationToken)
+    {
+        while (true)
+        {
+            var firstRead = await first.ReadAtLeastAsync(
+                firstBuffer.AsMemory(0, ComparisonBufferSize),
+                ComparisonBufferSize,
+                throwOnEndOfStream: false,
+                cancellationToken).ConfigureAwait(false);
+            var secondRead = await second.ReadAtLeastAsync(
+                secondBuffer.AsMemory(0, ComparisonBufferSize),
+                ComparisonBufferSize,
+                throwOnEndOfStream: false,
+                cancellationToken).ConfigureAwait(false);
+            if (firstRead != secondRead
+                || !firstBuffer.AsSpan(0, firstRead).SequenceEqual(secondBuffer.AsSpan(0, secondRead)))
+            {
+                return false;
+            }
+
+            if (firstRead == 0)
+            {
+                return true;
+            }
         }
     }
 
