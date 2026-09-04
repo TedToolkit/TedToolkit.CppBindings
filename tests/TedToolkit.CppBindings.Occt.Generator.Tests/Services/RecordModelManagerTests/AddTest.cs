@@ -87,6 +87,7 @@ internal sealed class AddTest
                     {
                         Storage value = default;
                         Container container = default;
+                        if (!Aliases(in value)) return false;
                         if (sizeof(Storage) != {{storage.Size}} || sizeof(Container) != {{container.Size}}
                             || (byte*)&container.Value - (byte*)&container != {{storage.Alignment}}
                             || (byte*)&container.Suffix - (byte*)&container != {{suffixOffset}})
@@ -132,6 +133,14 @@ internal sealed class AddTest
                             && typeof(Container).GetField("Prefix") is not null
                             && typeof(Container).GetField("Suffix") is not null;
                     }
+                    private static bool Aliases(in Storage value)
+                    {
+                        ref readonly var view = ref value.First;
+                        return System.Runtime.CompilerServices.Unsafe.AreSame(
+                            ref System.Runtime.CompilerServices.Unsafe.AsRef(in view),
+                            ref System.Runtime.CompilerServices.Unsafe.As<Storage, {{managedType}}>(
+                                ref System.Runtime.CompilerServices.Unsafe.AsRef(in value)));
+                    }
                     private static {{managedType}} Read(in {{managedType}} value) => value;
                     [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
                     private static nint Address(in {{managedType}} value)
@@ -175,6 +184,7 @@ internal sealed class AddTest
                     {
                         Storage value = default;
                         {{write}}
+                        if (!Aliases(in value)) return false;
                         value.Number = 0;
                         ref readonly var slot = ref value.Pointer;
                         if (slot != null || sizeof(Storage) != {{record.Size}}) return false;
@@ -183,6 +193,14 @@ internal sealed class AddTest
                             && System.Array.Exists(property.GetMethod!.ReturnParameter.GetRequiredCustomModifiers(),
                                 type => type.FullName == "System.Runtime.InteropServices.InAttribute")
                                 == {{(constantPointer ? "true" : "false")}};
+                    }
+                    private static bool Aliases(in Storage value)
+                    {
+                        fixed (Storage* original = &value)
+                        {
+                            ref readonly var view = ref value.Pointer;
+                            fixed (int** slot = &view) return (void*)slot == original;
+                        }
                     }
                 }
             }
@@ -315,6 +333,7 @@ internal sealed class AddTest
                         _ = typeof(Storage).Assembly.GetTypes();
                         Storage value = default;
                         Node node = default;
+                        if (!Aliases(in value)) return false;
                         *(Node**)((byte*)&value + {{headOffset}}) = &node;
                         ref readonly var head = ref value.Head;
                         head.Value.Value = 79;
@@ -343,6 +362,15 @@ internal sealed class AddTest
                             && typeof(Storage).GetField("Other") is not null
                             && typeof(Self).GetField("Next") is not null;
                     }
+                    private static bool Aliases(in Storage value)
+                    {
+                        ref readonly var view = ref value.Head;
+                        return System.Runtime.CompilerServices.Unsafe.ByteOffset(
+                            ref System.Runtime.CompilerServices.Unsafe.As<Storage, byte>(
+                                ref System.Runtime.CompilerServices.Unsafe.AsRef(in value)),
+                            ref System.Runtime.CompilerServices.Unsafe.As<TedToolkit.CppBindings.Occt.handle<Node>, byte>(
+                                ref System.Runtime.CompilerServices.Unsafe.AsRef(in view))) == {{headOffset}};
+                    }
                 }
             }
             """;
@@ -353,7 +381,7 @@ internal sealed class AddTest
 
     private static async Task AssertNet8StorageAsync(string source, string probe)
     {
-        var directory = Directory.CreateTempSubdirectory("CppBindings.Cycles.Net8.");
+        var directory = Directory.CreateTempSubdirectory("CppBindings.Storage.Net8.");
         try
         {
             var runtime = System.Security.SecurityElement.Escape(typeof(NativeTypeNameAttribute).Assembly.Location);
@@ -375,12 +403,12 @@ internal sealed class AddTest
             await File.WriteAllTextAsync(Path.Combine(directory.FullName, "Storage.cs"), source).ConfigureAwait(false);
             await File.WriteAllTextAsync(Path.Combine(directory.FullName, "Probe.cs"), probe).ConfigureAwait(false);
             await File.WriteAllTextAsync(Path.Combine(directory.FullName, "Program.cs"), """
-                if (!LayoutProbe.Probe.Check()) throw new System.InvalidOperationException("Cycle probe failed.");
-                System.Console.WriteLine("net8 cycle probe passed");
+                if (!LayoutProbe.Probe.Check()) throw new System.InvalidOperationException("Generated storage probe failed.");
+                System.Console.WriteLine("net8 storage probe passed");
                 """).ConfigureAwait(false);
             var output = await RunBitFieldProbeAsync("dotnet",
                 ["run", "--project", projectPath, "-c", "Release", "--disable-build-servers",], 90).ConfigureAwait(false);
-            await Assert.That(output).Contains("net8 cycle probe passed");
+            await Assert.That(output).Contains("net8 storage probe passed");
         }
         finally
         {

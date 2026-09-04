@@ -251,7 +251,10 @@ remain value properties without an address/ref surface. Native-name metadata and
 size, alignment, offsets, padding and neighboring storage remain authoritative.
 
 These views are interior managed references across relocation, not copied values, escaping raw
-pointers or owners. They introduce no allocation, retain/release or lifetime extension. The caller
+pointers or owners. Field-reference accessors, including cyclic handle views, are readonly members
+independently of their ref/ref-readonly return shape: an in/ref-readonly containing receiver must
+not trigger a defensive copy. Return constness still follows the native field storage qualification.
+They introduce no allocation, retain/release or lifetime extension. The caller
 remains responsible for native union active-member rules, explicit construction/destruction, owner
 lifetime and invalidation; generated accessors do not select or activate a member. Reflection and
 field-specific source syntax must account for the field-to-property distinction. A supported

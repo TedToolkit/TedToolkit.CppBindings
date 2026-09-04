@@ -349,7 +349,7 @@ internal sealed class CSharpGenerator(
             .AddAttribute(Attribute(new DataType("global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")))
             .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
                 .AddArgument(Argument(field.Type.CppTypeName.ToLiteral())));
-        property.IsReadonly = readOnly;
+        property.IsReadonly = true;
         var getter = Accessor(AccessorType.GET);
         getter.Statements.Add(new Custom($"return ref {target};"));
         property.AddAccessor(getter);
@@ -489,10 +489,8 @@ internal sealed class CSharpGenerator(
             .AddAttribute(Attribute(new DataType("global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")))
             .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
                 .AddArgument(Argument(field.Type.CppTypeName.ToLiteral())));
-        property.IsReadonly = readOnly;
-        var storageReference = readOnly
-            ? $"global::System.Runtime.CompilerServices.Unsafe.AsRef(in {storage})"
-            : storage;
+        property.IsReadonly = true;
+        var storageReference = $"global::System.Runtime.CompilerServices.Unsafe.AsRef(in {storage})";
         var getter = Accessor(AccessorType.GET);
         getter.Statements.Add(new Custom(
             $"return ref global::System.Runtime.CompilerServices.Unsafe.As<nint, {type}>(ref {storageReference});"));

@@ -76,7 +76,8 @@ RAII uses generic `Owned<T>`.
 Overlapping ordinary fields, including union members, use same-named `ref T` properties over shared
 sequential storage (`ref readonly T` for const storage). References alias native bytes without
 copying, retaining or allocating. Non-overlapping fields remain fields; bitfields remain value
-properties. Reflection and field-specific syntax must account for the property distinction.
+properties. Reference accessors also preserve aliasing through `in` or `ref readonly` containing
+receivers, without defensive copies. Reflection and field-specific syntax must account for the property distinction.
 Callers must obey native union active-member, construction/destruction, owner-lifetime and
 invalidation rules; accessing a generated property does not activate a union member.
 
