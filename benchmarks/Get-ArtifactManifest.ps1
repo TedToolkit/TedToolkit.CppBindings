@@ -7,6 +7,22 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+function Assert-NoReparsePointInPath {
+    param([string] $Path)
+
+    $current = [IO.Path]::GetFullPath($Path)
+    while (-not [string]::IsNullOrEmpty($current)) {
+        $item = Get-Item -LiteralPath $current -Force
+        if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+            throw 'Artifact manifests do not follow symbolic links or junctions.'
+        }
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrEmpty($parent) -or $parent -ceq $current) { break }
+        $current = $parent
+    }
+}
+
 $report = [IO.Path]::GetFullPath($ReportPath)
 if (Test-Path -LiteralPath $report) { throw 'Refusing to overwrite an artifact manifest.' }
 $resolvedRoots = @($Roots | ForEach-Object { (Resolve-Path -LiteralPath $_).Path })
@@ -47,9 +63,7 @@ foreach ($root in $resolvedRoots) {
 foreach ($path in $resolvedFiles) {
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) { throw "Not an artifact file: $path" }
     if ($path -ceq $report) { throw 'The report cannot also be an artifact input.' }
-    if ((Get-Item -LiteralPath $path).Attributes -band [IO.FileAttributes]::ReparsePoint) {
-        throw 'Artifact manifests do not follow symbolic links or junctions.'
-    }
+    Assert-NoReparsePointInPath $path
     foreach ($root in $resolvedRoots) {
         $prefix = $root.TrimEnd([IO.Path]::DirectorySeparatorChar) + [IO.Path]::DirectorySeparatorChar
         if ($path.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {

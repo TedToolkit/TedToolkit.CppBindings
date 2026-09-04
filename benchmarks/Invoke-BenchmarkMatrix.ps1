@@ -7,6 +7,34 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$jsonSnapshots = @{}
+
+function Read-JsonSnapshot {
+    param([string] $Path)
+
+    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    if ($jsonSnapshots.ContainsKey($resolved)) { return $jsonSnapshots[$resolved] }
+
+    $stream = [IO.File]::Open($resolved, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
+    try {
+        $memory = [IO.MemoryStream]::new()
+        try {
+            $stream.CopyTo($memory)
+            $bytes = $memory.ToArray()
+        }
+        finally { $memory.Dispose() }
+    }
+    finally { $stream.Dispose() }
+
+    $text = [Text.UTF8Encoding]::new($false, $true).GetString($bytes)
+    $snapshot = [pscustomobject]@{
+        Path = $resolved
+        Sha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($bytes))
+        Value = $text | ConvertFrom-Json -AsHashtable -DateKind String
+    }
+    $jsonSnapshots.Add($resolved, $snapshot)
+    return $snapshot
+}
 
 function Assert-StageArgumentTemplates {
     param([string[]] $Arguments)
@@ -31,8 +59,8 @@ function Read-StageGroup {
         throw "Every workload variant requires a nonempty $Group stage array."
     }
     foreach ($path in $Paths) {
-        $resolved = (Resolve-Path -LiteralPath $path).Path
-        $value = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+        $snapshot = Read-JsonSnapshot $path
+        $value = $snapshot.Value
         foreach ($member in @('Executable', 'Arguments', 'WorkingDirectory', 'TimeLimitSeconds')) {
             if (-not $value.ContainsKey($member)) { throw "Missing stage member: $member" }
         }
@@ -45,7 +73,11 @@ function Read-StageGroup {
             $value.TimeLimitSeconds -gt 43200) { throw 'Invalid stage time limit.' }
         $null = Get-Command $value.Executable -CommandType Application -ErrorAction Stop
         $null = Resolve-Path -LiteralPath $value.WorkingDirectory
-        [pscustomobject]@{ Path = $resolved; Specification = $value }
+        [pscustomobject]@{
+            Path = $snapshot.Path
+            Sha256 = $snapshot.Sha256
+            Specification = $value
+        }
     }
 }
 
@@ -141,8 +173,9 @@ function Invoke-Sample {
     return $measurement
 }
 
-$specPath = (Resolve-Path -LiteralPath $SpecificationPath).Path
-$spec = Get-Content -LiteralPath $specPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+$specSnapshot = Read-JsonSnapshot $SpecificationPath
+$specPath = $specSnapshot.Path
+$spec = $specSnapshot.Value
 foreach ($member in @('RepositoryRoot', 'Scope', 'DeadlineUtc', 'MemoryLimitBytes', 'MemoryReserveBytes',
         'InputFiles', 'Workloads')) {
     if (-not $spec.ContainsKey($member)) { throw "Missing matrix member: $member" }
@@ -161,8 +194,8 @@ $destination = [IO.Path]::GetFullPath($ReportDirectory)
 if (Test-Path -LiteralPath $destination) { throw 'Use a new matrix report directory; evidence is never overwritten.' }
 $stageRunner = Join-Path $PSScriptRoot 'Measure-BenchmarkStage.ps1'
 $environmentRunner = Join-Path $PSScriptRoot 'Get-BenchmarkEnvironment.ps1'
-$bindings = @{}
-foreach ($path in @($specPath, $PSCommandPath, $stageRunner, $environmentRunner)) {
+$bindings = @{ $specPath = $specSnapshot.Sha256 }
+foreach ($path in @($PSCommandPath, $stageRunner, $environmentRunner)) {
     $bindings[$path] = (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash
 }
 if ($spec.InputFiles -isnot [array] -or $spec.InputFiles.Count -eq 0) {
@@ -198,7 +231,10 @@ foreach ($workload in $spec.Workloads) {
             $stages = @(Read-StageGroup $workload[$variantName][$group] $group)
             $groups[$group] = $stages
             foreach ($stage in $stages) {
-                $bindings[$stage.Path] = (Get-FileHash -LiteralPath $stage.Path -Algorithm SHA256).Hash
+                if ($bindings.ContainsKey($stage.Path) -and $bindings[$stage.Path] -cne $stage.Sha256) {
+                    throw "Conflicting stage bindings: $($stage.Path)"
+                }
+                $bindings[$stage.Path] = $stage.Sha256
             }
         }
         $variants[$variantName] = $groups
