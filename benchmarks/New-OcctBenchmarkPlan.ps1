@@ -650,9 +650,8 @@ $canonicalUnsupported = Resolve-ExistingPath (Join-Path $canonicalGenerated 'uns
 $canonicalLibrary = Resolve-ExistingPath (Join-Path $canonicalRoot "native-build/$Configuration/ted_toolkit_occt.dll") file
 if ((Get-Item -LiteralPath $canonicalLibrary).Length -eq 0) { throw 'The canonical native boundary library is empty.' }
 $canonicalCheckManifest = Join-Path $inputDirectory 'canonical-original-validated.json'
-& $powerShellPath -NoProfile -File $manifestTool -Roots $canonicalCSharp $canonicalCpp -Files $canonicalUnsupported `
+$null = & $manifestTool -Roots @($canonicalCSharp, $canonicalCpp) -Files @($canonicalUnsupported) `
     -ReportPath $canonicalCheckManifest
-if ($LASTEXITCODE -ne 0) { throw 'The canonical baseline artifact root could not be inventoried.' }
 $canonicalActual = Get-Content -LiteralPath $canonicalCheckManifest -Raw | ConvertFrom-Json -AsHashtable -DateKind String
 Assert-ManifestContentEqual $canonicalActual $canonicalManifests.original.Value 'Canonical baseline root'
 $canonicalCheckExports = Join-Path $inputDirectory 'canonical-exports-validated.json'
