@@ -7,6 +7,7 @@ $baselineRepository = (Resolve-Path (Join-Path $repository '../wic-base')).Path
 $proofRoot = Join-Path ([IO.Path]::GetTempPath()) "occt-plan-proof-$([Guid]::NewGuid().ToString('N'))"
 $builder = Join-Path $PSScriptRoot 'New-OcctBenchmarkPlan.ps1'
 $receiptBuilder = Join-Path $PSScriptRoot 'New-OcctBenchmarkHostReceipt.ps1'
+$hostPublisher = Join-Path $PSScriptRoot 'Publish-OcctBenchmarkHost.ps1'
 $matrixRunner = Join-Path $PSScriptRoot 'Invoke-BenchmarkMatrix.ps1'
 $manifestTool = Join-Path $PSScriptRoot 'Get-ArtifactManifest.ps1'
 $exportTool = Join-Path $PSScriptRoot 'Get-OcctExportInventory.ps1'
@@ -36,37 +37,22 @@ function Invoke-Git {
     return $output
 }
 
-function New-SyntheticBuildReceipt {
-    param([string] $Directory, [string] $SourceRoot, [string] $DotNet, [string] $Project)
-    $null = [IO.Directory]::CreateDirectory($Directory)
-    $specPath = Join-Path $Directory 'build-specification.json'
-    $resultPath = Join-Path $Directory 'build-result.json'
-    $arguments = @('build', $Project, '-c', 'Release', '--no-restore')
-    $specification = [ordered]@{ Executable = $DotNet; Arguments = $arguments; WorkingDirectory = $SourceRoot }
-    Write-JsonFile $specPath $specification
-    Write-JsonFile $resultPath ([ordered]@{
-        SchemaVersion = 1; Succeeded = $true; ExitCode = 0
-        SpecificationSha256 = (Get-FileHash $specPath).Hash
-        Command = [ordered]@{ Executable = $DotNet; Arguments = $arguments; WorkingDirectory = $SourceRoot }
-    })
-    return [pscustomobject]@{ Specification = $specPath; Result = $resultPath }
-}
-
 function New-HostReceiptFixture {
     param(
         [string] $Name, [string] $Variant, [string] $State, [string] $SourceRoot,
-        [string] $BaseRevision, [string] $SeedHost, [string] $DotNet, [string] $Project,
-        [string] $PatchPath
+        [string] $BaseRevision, [string] $DotNet, [string] $PatchPath
     )
     $hostRoot = Join-Path $proofRoot "hosts/$Name"
-    Copy-Item -LiteralPath $SeedHost -Destination $hostRoot -Recurse
-    $build = New-SyntheticBuildReceipt (Join-Path $proofRoot "builds/$Name") $SourceRoot $DotNet $Project
+    $sourceRevision = ((Invoke-Git $SourceRoot @('rev-parse', 'HEAD')) -join '').Trim()
+    $publishReceipt = Join-Path $proofRoot "publishes/$Name.json"
+    & $hostPublisher -CompletionReceiptPath $publishReceipt -SourceRepositoryRoot $SourceRoot `
+        -ExpectedSourceRevision $sourceRevision -HostDirectory $hostRoot -DotNetPath $DotNet -FixtureOnly | Out-Null
     $receiptPath = Join-Path $proofRoot "receipts/$Name.json"
     $arguments = @{
         ReceiptPath = $receiptPath; Variant = $Variant; State = $State
         SourceRepositoryRoot = $SourceRoot; SourceBaseRevision = $BaseRevision
         HostDirectory = $hostRoot; HostEntryPointRelativePath = 'TedToolkit.CppBindings.Occt.Console.dll'
-        BuildSpecificationPath = $build.Specification; BuildResultPath = $build.Result; FixtureOnly = $true
+        PublishCompletionReceiptPath = $publishReceipt; FixtureOnly = $true
     }
     if ($PatchPath) { $arguments.FrozenPatchPath = $PatchPath }
     & $receiptBuilder @arguments | Out-Null
@@ -97,7 +83,8 @@ try {
     $sourceOriginal = Join-Path $proofRoot 'source-original'
     $null = [IO.Directory]::CreateDirectory($sourceOriginal)
     Write-TextFile (Join-Path $sourceOriginal '.gitignore') "bin/`nobj/`n"
-    Write-TextFile (Join-Path $sourceOriginal 'Fixture.csproj') @'
+    $fixtureProjectRelativePath = 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'
+    Write-TextFile (Join-Path $sourceOriginal $fixtureProjectRelativePath) @'
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
@@ -106,7 +93,7 @@ try {
   </PropertyGroup>
 </Project>
 '@
-    Write-TextFile (Join-Path $sourceOriginal 'Program.cs') "System.Console.WriteLine(`"fixture`");`n"
+    Write-TextFile (Join-Path $sourceOriginal 'tests/TedToolkit.CppBindings.Occt.Console/Program.cs') "System.Console.WriteLine(`"fixture`");`n"
     $null = Invoke-Git $sourceOriginal @('init', '--quiet')
     $null = Invoke-Git $sourceOriginal @('config', 'user.name', 'OCCT benchmark fixture')
     $null = Invoke-Git $sourceOriginal @('config', 'user.email', 'fixture@example.invalid')
@@ -118,27 +105,69 @@ try {
     $null = Invoke-Git $proofRoot @('clone', '--quiet', $sourceOriginal, $sourceChanged)
     $null = Invoke-Git $sourceChanged @('config', 'user.name', 'OCCT benchmark fixture')
     $null = Invoke-Git $sourceChanged @('config', 'user.email', 'fixture@example.invalid')
-    Add-Content -LiteralPath (Join-Path $sourceChanged 'Program.cs') -Value '// harmless generator-host delta'
-    $null = Invoke-Git $sourceChanged @('add', 'Program.cs')
+    $changedProgram = 'tests/TedToolkit.CppBindings.Occt.Console/Program.cs'
+    Add-Content -LiteralPath (Join-Path $sourceChanged $changedProgram) -Value '// harmless generator-host delta'
+    $null = Invoke-Git $sourceChanged @('add', $changedProgram)
     $null = Invoke-Git $sourceChanged @('commit', '--quiet', '-m', 'fixture change')
     $changedRevision = ((Invoke-Git $sourceChanged @('rev-parse', 'HEAD')) -join '').Trim()
     $patchLines = @(Invoke-Git $sourceChanged @('diff', '--binary', '--full-index', '--no-ext-diff', $baseRevision, $changedRevision, '--'))
     $patchPath = Join-Path $proofRoot 'generator-change.patch'
     Write-TextFile $patchPath (($patchLines -join "`n") + "`n")
 
-    $originalSeed = Join-Path $proofRoot 'seed-original'
-    $changedSeed = Join-Path $proofRoot 'seed-changed'
-    & $dotnet build (Join-Path $sourceOriginal 'Fixture.csproj') -c Release -o $originalSeed --nologo -v:q
-    if ($LASTEXITCODE -ne 0) { throw 'The lightweight original managed-host fixture failed to build.' }
-    & $dotnet build (Join-Path $sourceChanged 'Fixture.csproj') -c Release -o $changedSeed --nologo -v:q
-    if ($LASTEXITCODE -ne 0) { throw 'The lightweight changed managed-host fixture failed to build.' }
+    & $dotnet restore (Join-Path $sourceOriginal $fixtureProjectRelativePath) --nologo -v:q
+    if ($LASTEXITCODE -ne 0) { throw 'The lightweight original managed-host fixture failed to restore.' }
+    & $dotnet restore (Join-Path $sourceChanged $fixtureProjectRelativePath) --nologo -v:q
+    if ($LASTEXITCODE -ne 0) { throw 'The lightweight changed managed-host fixture failed to restore.' }
+
+    $preexistingHost = Join-Path $proofRoot 'hosts/preexisting'
+    $null = [IO.Directory]::CreateDirectory($preexistingHost)
+    $preexistingRejected = $false
+    try {
+        & $hostPublisher -CompletionReceiptPath (Join-Path $proofRoot 'publishes/preexisting.json') `
+            -SourceRepositoryRoot $sourceOriginal -ExpectedSourceRevision $baseRevision `
+            -HostDirectory $preexistingHost -DotNetPath $dotnet -FixtureOnly
+    }
+    catch { $preexistingRejected = $_.Exception.Message -like '*provably fresh*' }
+    Require $preexistingRejected 'A pre-existing host directory reached dotnet publish.'
 
     $receipts = [ordered]@{
-        baselineOriginal = New-HostReceiptFixture bo baseline original $sourceOriginal $baseRevision $originalSeed $dotnet (Join-Path $sourceOriginal 'Fixture.csproj') $null
-        baselineChanged = New-HostReceiptFixture bc baseline changed $sourceChanged $baseRevision $changedSeed $dotnet (Join-Path $sourceChanged 'Fixture.csproj') $patchPath
-        candidateOriginal = New-HostReceiptFixture co candidate original $sourceOriginal $baseRevision $originalSeed $dotnet (Join-Path $sourceOriginal 'Fixture.csproj') $null
-        candidateChanged = New-HostReceiptFixture cc candidate changed $sourceChanged $baseRevision $changedSeed $dotnet (Join-Path $sourceChanged 'Fixture.csproj') $patchPath
+        baselineOriginal = New-HostReceiptFixture bo baseline original $sourceOriginal $baseRevision $dotnet $null
+        baselineChanged = New-HostReceiptFixture bc baseline changed $sourceChanged $baseRevision $dotnet $patchPath
+        candidateOriginal = New-HostReceiptFixture co candidate original $sourceOriginal $baseRevision $dotnet $null
+        candidateChanged = New-HostReceiptFixture cc candidate changed $sourceChanged $baseRevision $dotnet $patchPath
     }
+
+    $validReceipt = Get-Content -LiteralPath $receipts.baselineOriginal -Raw | ConvertFrom-Json -AsHashtable
+    $validPublishPath = $validReceipt.PublishCompletionReceiptPath
+    $stalePublish = Get-Content -LiteralPath $validPublishPath -Raw | ConvertFrom-Json -AsHashtable
+    $stalePublish.SourceRevision = '0000000000000000000000000000000000000000'
+    $stalePublishPath = Join-Path $proofRoot 'publishes/stale.json'
+    Write-JsonFile $stalePublishPath $stalePublish
+    $staleRejected = $false
+    try {
+        & $receiptBuilder -ReceiptPath (Join-Path $proofRoot 'receipts/stale.json') -Variant baseline -State original `
+            -SourceRepositoryRoot $sourceOriginal -SourceBaseRevision $baseRevision -HostDirectory $validReceipt.HostDirectory `
+            -HostEntryPointRelativePath $validReceipt.HostEntryPointRelativePath `
+            -PublishCompletionReceiptPath $stalePublishPath -FixtureOnly
+    }
+    catch { $staleRejected = $_.Exception.Message -like '*fresh build relationship*' }
+    Require $staleRejected 'A stale source revision in a publish receipt was accepted.'
+
+    $runtimeConfig = Join-Path $validReceipt.HostDirectory 'TedToolkit.CppBindings.Occt.Console.runtimeconfig.json'
+    $runtimeConfigBytes = [IO.File]::ReadAllBytes($runtimeConfig)
+    try {
+        [IO.File]::AppendAllText($runtimeConfig, "`n", $utf8)
+        $mismatchRejected = $false
+        try {
+            & $receiptBuilder -ReceiptPath (Join-Path $proofRoot 'receipts/mismatch.json') -Variant baseline -State original `
+                -SourceRepositoryRoot $sourceOriginal -SourceBaseRevision $baseRevision -HostDirectory $validReceipt.HostDirectory `
+                -HostEntryPointRelativePath $validReceipt.HostEntryPointRelativePath `
+                -PublishCompletionReceiptPath $validPublishPath -FixtureOnly
+        }
+        catch { $mismatchRejected = $_.Exception.Message -like '*fresh publish output changed*' }
+        Require $mismatchRejected 'Output modified after publish satisfied host provenance.'
+    }
+    finally { [IO.File]::WriteAllBytes($runtimeConfig, $runtimeConfigBytes) }
 
     $baselineInput = Join-Path $proofRoot 'in-base'
     $candidateInput = Join-Path $proofRoot 'in-cand'
@@ -295,6 +324,16 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     Remove-Item -LiteralPath $executablePlanPath
     $executablePlan.NativeGate.FixtureOnly = $false
     Write-JsonFile $executablePlanPath $executablePlan
+    $formalPrepareSample = Join-Path $proofRoot 'formal-prepare-sample'
+    $null = [IO.Directory]::CreateDirectory($formalPrepareSample)
+    & $powerShellPath -NoProfile -File $adapter -PlanPath $executablePlanPath -Action Prepare `
+        -Variant baseline -Workload artifact-cold -SampleRoot $formalPrepareSample
+    Require ($LASTEXITCODE -eq 0) 'Formal Prepare failed in its external PowerShell process.'
+    $formalManifest = Get-Content -LiteralPath (Join-Path $formalPrepareSample 'canonical-pre-artifacts.json') `
+        -Raw | ConvertFrom-Json
+    Require ($formalManifest.Roots.Count -eq 2 -and $formalManifest.AdditionalFiles.Count -eq 1) `
+        'Formal Prepare lost an array-valued manifest argument across the PowerShell process boundary.'
+
     $nestedTarget = Join-Path $proofRoot 'nested-target'; $null = [IO.Directory]::CreateDirectory($nestedTarget)
     $nestedJunction = Join-Path $arguments.BaselineArtifactRoot 'nested/reparse'
     $null = [IO.Directory]::CreateDirectory([IO.Path]::GetDirectoryName($nestedJunction))
@@ -304,7 +343,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     catch { $nestedRejected = $_.Exception.Message -like '*nested reparse point*' }
     Require $nestedRejected 'A nested artifact junction reached cleanup.'
 
-    Write-Output "OCCT benchmark plan proof passed: managed host receipts, exact patch provenance, physical isolation, volume/path shape, vcvars compiler identity, canonical oracles, native gate, five workloads, and plan-only guards. Evidence: $proofRoot"
+    Write-Output "OCCT benchmark plan proof passed: fresh managed host publishes, exact patch provenance, formal Prepare array transport, physical isolation, volume/path shape, vcvars compiler identity, canonical oracles, native gate, five workloads, and plan-only guards. Evidence: $proofRoot"
 }
 finally {
     if (Test-Path -LiteralPath $proofRoot) { Remove-Item -LiteralPath $proofRoot -Recurse -Force }

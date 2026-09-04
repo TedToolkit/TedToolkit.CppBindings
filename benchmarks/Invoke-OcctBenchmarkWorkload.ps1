@@ -316,9 +316,13 @@ function Invoke-NativeGate {
 function Assert-CanonicalBoundary {
     $manifestPath = Join-Path $sample 'canonical-pre-artifacts.json'
     $canonicalGenerated = Join-Path $plan.Canonical.ArtifactRoot 'generated'
-    $arguments = @('-NoProfile', '-File', $plan.Tools.Manifest, '-Roots',
-        (Join-Path $canonicalGenerated 'csharp'), (Join-Path $canonicalGenerated 'cpp'), '-Files',
-        (Join-Path $canonicalGenerated 'unsupported-headers.txt'), '-ReportPath', $manifestPath)
+    $jsonOptions = [Text.Json.JsonSerializerOptions]::new()
+    $rootsJson = [Text.Json.JsonSerializer]::Serialize([string[]]@(
+        (Join-Path $canonicalGenerated 'csharp'), (Join-Path $canonicalGenerated 'cpp')), $jsonOptions)
+    $filesJson = [Text.Json.JsonSerializer]::Serialize([string[]]@(
+        (Join-Path $canonicalGenerated 'unsupported-headers.txt')), $jsonOptions)
+    $arguments = @('-NoProfile', '-File', $plan.Tools.Manifest, '-RootsJson', $rootsJson,
+        '-FilesJson', $filesJson, '-ReportPath', $manifestPath)
     Invoke-Checked (Get-Process -Id $PID).Path $arguments
     Assert-ManifestOracle (Read-Json $manifestPath) $plan.Canonical.OriginalManifest
     $exportsPath = Join-Path $sample 'canonical-pre-exports.json'

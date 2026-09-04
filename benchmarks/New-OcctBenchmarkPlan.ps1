@@ -166,7 +166,7 @@ function Read-HostReceipt {
 
     $resolved = Resolve-ExistingPath $Path file
     $receipt = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json -AsHashtable -DateKind String
-    if ($receipt.SchemaVersion -ne 1 -or $receipt.ReceiptKind -cne 'occt-console-host' -or
+    if ($receipt.SchemaVersion -ne 2 -or $receipt.ReceiptKind -cne 'occt-console-host' -or
         $receipt.Variant -cne $ExpectedVariant -or $receipt.State -cne $ExpectedState -or
         -not $receipt.SourceClean -or $receipt.HostFiles -isnot [array] -or $receipt.HostFiles.Count -lt 3) {
         throw "Invalid Console host receipt: $resolved"
@@ -195,17 +195,49 @@ function Read-HostReceipt {
             throw "The complete-host receipt changed: $relative"
         }
     }
-    foreach ($bindingName in @('BuildSpecification', 'BuildResult')) {
-        $boundPath = Resolve-ExistingPath $receipt["${bindingName}Path"] file
-        if ((Get-FileHash -LiteralPath $boundPath -Algorithm SHA256).Hash -cne $receipt["${bindingName}Sha256"]) {
-            throw "The host $bindingName receipt changed."
+    $publishPath = Resolve-ExistingPath $receipt.PublishCompletionReceiptPath file
+    if ((Get-FileHash -LiteralPath $publishPath -Algorithm SHA256).Hash -cne $receipt.PublishCompletionReceiptSha256) {
+        throw 'The host publish completion receipt changed.'
+    }
+    $publish = Get-Content -LiteralPath $publishPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+    $sourceRoot = Resolve-ExistingPath $receipt.SourceRepositoryRoot directory
+    $expectedProject = [IO.Path]::GetFullPath((Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'))
+    $expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net10.0',
+        '--no-restore', '--output', $hostRoot, '--nologo')
+    if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-host-publish' -or
+        -not $publish.Succeeded -or $publish.ExitCode -ne 0 -or -not $publish.FreshHostDirectory -or
+        -not $publish.SourceCleanBeforeAndAfter -or $publish.FixtureOnly -ne $receipt.FixtureOnly -or
+        $publish.SourceRevision -cne $receipt.SourceRevision -or
+        -not [IO.Path]::GetFullPath($publish.SourceRepositoryRoot).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [IO.Path]::GetFullPath($publish.ProjectPath).Equals($expectedProject, [StringComparison]::OrdinalIgnoreCase) -or
+        (Get-FileHash -LiteralPath $expectedProject -Algorithm SHA256).Hash -cne $publish.ProjectSha256 -or
+        -not [IO.Path]::GetFullPath($publish.HostDirectory).Equals($hostRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        -not [IO.Path]::GetFullPath($publish.Command.WorkingDirectory).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        $publish.Command.Executable -cne $publish.DotNetPath -or
+        (@($publish.Command.Arguments) -join "`n") -cne ($expectedArguments -join "`n") -or
+        $publish.Output -isnot [hashtable] -or $publish.Output.StandardOutput -isnot [string] -or
+        $publish.Output.StandardError -isnot [string] -or $publish.HostFiles -isnot [array] -or
+        $publish.HostAssemblyIdentity -cne $receipt.HostAssemblyIdentity -or
+        $publish.HostFiles.Count -ne $receipt.HostFiles.Count) {
+        throw 'The Console host receipt is not bound to an exact fresh publish.'
+    }
+    for ($index = 0; $index -lt $receipt.HostFiles.Count; $index++) {
+        if ($receipt.HostFiles[$index].Path -cne $publish.HostFiles[$index].Path -or
+            $receipt.HostFiles[$index].Bytes -ne $publish.HostFiles[$index].Bytes -or
+            $receipt.HostFiles[$index].Sha256 -cne $publish.HostFiles[$index].Sha256) {
+            throw 'The Console host receipt and fresh publish inventories differ.'
+        }
+    }
+    foreach ($bindingName in @('DotNet', 'PublishWrapper')) {
+        $boundPath = Resolve-ExistingPath $publish["${bindingName}Path"] file
+        if ((Get-FileHash -LiteralPath $boundPath -Algorithm SHA256).Hash -cne $publish["${bindingName}Sha256"]) {
+            throw "The host publish $bindingName binding changed."
         }
     }
     if (-not $receipt.FixtureOnly) {
         if ($receipt.SourceBaseRevision -cne $ExpectedBase) {
             throw "$ExpectedVariant/$ExpectedState host provenance has the wrong exact source base."
         }
-        $sourceRoot = Resolve-ExistingPath $receipt.SourceRepositoryRoot directory
         Assert-NoReparseComponents $sourceRoot
         if ((Get-GitOutput $sourceRoot @('rev-parse', 'HEAD')) -cne $receipt.SourceRevision -or
             (Get-GitOutput $sourceRoot @('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=all'))) {
@@ -565,6 +597,8 @@ $adapterPath = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Invoke-OcctBenchma
 $manifestTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-ArtifactManifest.ps1') file
 $ninjaMetricsTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-NinjaBuildMetrics.ps1') file
 $exportInventoryTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-OcctExportInventory.ps1') file
+$hostPublisher = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Publish-OcctBenchmarkHost.ps1') file
+$hostReceiptTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'New-OcctBenchmarkHostReceipt.ps1') file
 $toolchainSnapshot = Get-ToolchainSnapshot
 
 $isolationRoots = [ordered]@{
@@ -688,7 +722,8 @@ $receiptValues = @($hostReceipts.baseline.original.Value, $hostReceipts.baseline
 $fixtureOnlyPlan = [bool] ($gateSpec.FixtureOnly -or @($receiptValues | Where-Object FixtureOnly).Count -gt 0)
 $fileBindings = [Collections.Generic.List[object]]::new()
 foreach ($path in @($inputManifestPath, $originalHeaderCopy, $changedHeaderCopy, $adapterPath,
-        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
+        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool,
+        $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate, $hosts.baseline.original, $hosts.baseline.changed,
         $hosts.candidate.original, $hosts.candidate.changed, $hostReceipts.baseline.original.Path,
         $hostReceipts.baseline.changed.Path, $hostReceipts.candidate.original.Path, $hostReceipts.candidate.changed.Path,
@@ -698,7 +733,11 @@ foreach ($path in @($inputManifestPath, $originalHeaderCopy, $changedHeaderCopy,
     $fileBindings.Add((Get-FileBinding $path))
 }
 foreach ($receipt in $receiptValues) {
-    foreach ($path in @($receipt.BuildSpecificationPath, $receipt.BuildResultPath, $receipt.FrozenPatchPath) |
+    if (-not [IO.Path]::GetFullPath($receipt.PublishWrapperPath).Equals($hostPublisher,
+            [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'Host receipts must be produced by the bound benchmark host publisher.'
+    }
+    foreach ($path in @($receipt.PublishCompletionReceiptPath, $receipt.PublishWrapperPath, $receipt.FrozenPatchPath) |
         Where-Object { $_ }) { $fileBindings.Add((Get-FileBinding $path)) }
     foreach ($hostFile in $receipt.HostFiles) {
         $fileBindings.Add((Get-FileBinding (Resolve-ExistingPath (Join-Path $receipt.HostDirectory $hostFile.Path) file)))
@@ -756,6 +795,7 @@ $plan = [ordered]@{
     Tools = [ordered]@{
         DotNet = $dotnet; CMake = $cmake; Ninja = $ninja; Compiler = $compiler; VcVars = $vcvars
         Manifest = $manifestTool; NinjaMetrics = $ninjaMetricsTool; ExportInventory = $exportInventoryTool
+        HostPublisher = $hostPublisher; HostReceipt = $hostReceiptTool
     }
     Variants = [ordered]@{
         baseline = [ordered]@{
@@ -804,7 +844,8 @@ foreach ($workload in @('artifact-cold', 'unchanged', 'declaration-edit', 'gener
 
 $boundFiles = [Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($path in @($planPath, $inputManifestPath, $originalHeaderCopy, $changedHeaderCopy, $adapterPath,
-        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
+        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool,
+        $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate)) { $null = $boundFiles.Add($path) }
 foreach ($binding in $fileBindings) { $null = $boundFiles.Add($binding.Path) }
 
