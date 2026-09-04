@@ -230,12 +230,16 @@ if ((Get-FileHash $baselineHeader).Hash -ceq (Get-FileHash $changedHeader).Hash)
 }
 
 $toolchainFile = Resolve-ExistingPath (Join-Path $toolchainVcpkg 'scripts/buildsystems/vcpkg.cmake') file
+$toolchainStatus = Resolve-ExistingPath (Join-Path $toolchainVcpkg 'installed/vcpkg/status') file
 $statusFiles = [ordered]@{
     baseline = Resolve-ExistingPath (Join-Path $baselineInput 'installed/vcpkg/status') file
     candidate = Resolve-ExistingPath (Join-Path $candidateInput 'installed/vcpkg/status') file
 }
 if ((Get-FileHash $statusFiles.baseline).Hash -cne (Get-FileHash $statusFiles.candidate).Hash) {
     throw 'The private input roots must use the same vcpkg status file.'
+}
+if ((Get-FileHash $statusFiles.baseline).Hash -cne (Get-FileHash $toolchainStatus).Hash) {
+    throw 'Private header inputs and the real vcpkg toolchain must describe the same installed packages.'
 }
 
 $hosts = [ordered]@{
@@ -331,7 +335,7 @@ $planPath = Join-Path $destination 'occt-plan.json'
 $fileBindings = [Collections.Generic.List[object]]::new()
 foreach ($path in @($inputManifestPath, $originalHeaderCopy, $changedHeaderCopy, $generatorPatch, $adapterPath,
         $manifestTool, $ninjaMetricsTool, $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
-        $statusFiles.baseline, $statusFiles.candidate, $hosts.baseline.original, $hosts.baseline.changed,
+        $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate, $hosts.baseline.original, $hosts.baseline.changed,
         $hosts.candidate.original, $hosts.candidate.changed)) {
     $fileBindings.Add((Get-FileBinding $path))
 }
@@ -357,6 +361,7 @@ $plan = [ordered]@{
     FrozenFileBindings = @($fileBindings.ToArray())
     ToolchainVcpkgRoot = $toolchainVcpkg
     ToolchainFile = $toolchainFile
+    ToolchainStatusFile = $toolchainStatus
     Tools = [ordered]@{
         DotNet = $dotnet; CMake = $cmake; Ninja = $ninja; Compiler = $compiler; VcVars = $vcvars
         Manifest = $manifestTool; NinjaMetrics = $ninjaMetricsTool
@@ -405,7 +410,7 @@ foreach ($workload in @('artifact-cold', 'unchanged', 'declaration-edit', 'gener
 $boundFiles = [Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($path in @($planPath, $inputManifestPath, $originalHeaderCopy, $changedHeaderCopy, $generatorPatch, $adapterPath,
         $manifestTool, $ninjaMetricsTool, $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
-        $statusFiles.baseline, $statusFiles.candidate)) { $null = $boundFiles.Add($path) }
+        $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate)) { $null = $boundFiles.Add($path) }
 foreach ($variant in @('baseline', 'candidate')) {
     foreach ($generatorHost in @($hosts[$variant].original, $hosts[$variant].changed)) {
         foreach ($file in Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($generatorHost)) -Recurse -File) {

@@ -34,6 +34,7 @@ try {
         Write-TextFile (Join-Path $path 'installed/vcpkg/status') "Package: occt`nVersion: fixture`n"
     }
     Write-TextFile (Join-Path $toolchain 'scripts/buildsystems/vcpkg.cmake') '# fixture toolchain'
+    Write-TextFile (Join-Path $toolchain 'installed/vcpkg/status') "Package: occt`nVersion: fixture`n"
     $changedHeader = Join-Path $proofRoot 'Fixture.changed.hxx'
     Write-TextFile $changedHeader "enum class Fixture { Original, AddedForBenchmark };`n"
     $generatorPatch = Join-Path $proofRoot 'generator-change.patch'
