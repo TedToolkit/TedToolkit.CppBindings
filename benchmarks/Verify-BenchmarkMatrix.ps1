@@ -65,6 +65,30 @@ function Invoke-Fixture {
     elseif ($actualError -notlike $ExpectedError) { throw "Unexpected fixture result: $actualError" }
 }
 
+function Assert-CompleteBindings {
+    param($Evidence, $Fixture)
+
+    $expected = @(
+        $Fixture.Path,
+        $runner,
+        (Join-Path $toolRoot 'Measure-BenchmarkStage.ps1'),
+        (Join-Path $toolRoot 'Get-BenchmarkEnvironment.ps1'),
+        (Join-Path $Fixture.Root 'input.txt'),
+        (Join-Path $Fixture.Root 'success-stage.json'),
+        (Join-Path $Fixture.Root 'verify-stage.json')
+    ) | ForEach-Object { (Resolve-Path -LiteralPath $_).Path } | Sort-Object -Unique
+    $actual = @($Evidence.Bindings.PSObject.Properties.Name | Sort-Object -Unique)
+    if (@(Compare-Object $expected $actual).Count -ne 0) {
+        throw 'Evidence did not bind the complete and exact matrix input set.'
+    }
+    foreach ($path in $expected) {
+        if ($Evidence.Bindings.PSObject.Properties[$path].Value -cne
+            (Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash) {
+            throw "Evidence did not bind the exact parsed file bytes: $path"
+        }
+    }
+}
+
 $happy = New-MatrixFixture 'happy'
 Invoke-Fixture $happy ''
 $plan = Get-Content -LiteralPath (Join-Path $happy.Report 'plan.json') -Raw | ConvertFrom-Json -DateKind String
@@ -83,6 +107,8 @@ foreach ($binding in $planBindings) {
         throw 'The final result changed a plan binding.'
     }
 }
+Assert-CompleteBindings $plan $happy
+Assert-CompleteBindings $result $happy
 $warmupPhase = Get-Content -LiteralPath (Join-Path $happy.Report '000-artifact-cold-baseline/Prepare-00.json') -Raw |
     ConvertFrom-Json
 $nextVariantPhase = Get-Content -LiteralPath (Join-Path $happy.Report '001-artifact-cold-candidate/Prepare-00.json') -Raw |
@@ -129,6 +155,10 @@ $planOnly = New-MatrixFixture 'plan-only'
 Invoke-Fixture $planOnly '' -PlanOnly
 if (Test-Path -LiteralPath (Join-Path $planOnly.Report 'result.json')) { throw 'Planning produced a measurement result.' }
 if (@(Get-ChildItem -LiteralPath $planOnly.Report -Directory).Count -ne 0) { throw 'Planning ran a sample.' }
+$planOnlyEvidence = Get-Content -LiteralPath (Join-Path $planOnly.Report 'plan.json') -Raw |
+    ConvertFrom-Json -DateKind String
+if (-not $planOnlyEvidence.PlanOnly) { throw 'Plan-only evidence did not identify itself.' }
+Assert-CompleteBindings $planOnlyEvidence $planOnly
 
 foreach ($case in @('few-warm', 'few-cold', 'duplicate', 'no-verify', 'wrong-hash', 'expired', 'extended',
         'unknown-placeholder', 'embedded-placeholder')) {

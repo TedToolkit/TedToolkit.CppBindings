@@ -17,6 +17,37 @@ $initial = Get-Content -LiteralPath $baseline -Raw | ConvertFrom-Json
 if ($initial.FileCount -ne 3 -or $initial.TotalBytes -ne 20 -or
     $initial.AdditionalFiles[0] -cne $support) { throw 'The artifact inventory is incorrect.' }
 
+$rootOnly = Join-Path $proofRoot 'root-only.json'
+& $script -Roots @($artifacts) -ReportPath $rootOnly
+$legacy = Join-Path $proofRoot 'legacy-schema-1.json'
+$legacyValue = Get-Content -LiteralPath $rootOnly -Raw | ConvertFrom-Json
+$legacyValue.PSObject.Properties.Remove('AdditionalFiles')
+$legacyValue | ConvertTo-Json -Depth 7 | Set-Content -LiteralPath $legacy -Encoding utf8
+$legacyComparison = Join-Path $proofRoot 'legacy-comparison.json'
+& $script -Roots @($artifacts) -ReportPath $legacyComparison -CompareTo $legacy
+$legacyResult = Get-Content -LiteralPath $legacyComparison -Raw | ConvertFrom-Json
+if (-not $legacyResult.Comparison.EqualContent) {
+    throw 'Schema-1 manifests without AdditionalFiles must remain compatible with root-only comparisons.'
+}
+$rejected = $false
+try { & $script -Roots @($artifacts) -ReportPath (Join-Path $proofRoot 'category-mismatch.json') -CompareTo $baseline }
+catch { $rejected = $_.Exception.Message -eq 'The comparison manifest has an incompatible schema or artifact category count.' }
+if (-not $rejected) { throw 'Artifact category-count mismatch was accepted.' }
+
+$junctionTarget = Join-Path $proofRoot 'junction-target'
+$junctionPath = Join-Path $proofRoot 'junction-alias'
+$null = New-Item -ItemType Directory -Path $junctionTarget
+$junctionFile = Join-Path $junctionTarget 'aliased.txt'
+[IO.File]::WriteAllText($junctionFile, 'aliased')
+$null = New-Item -ItemType Junction -Path $junctionPath -Target $junctionTarget
+$rejected = $false
+try {
+    & $script -Roots @($artifacts) -Files @((Join-Path $junctionPath 'aliased.txt')) `
+        -ReportPath (Join-Path $proofRoot 'junction-parent.json')
+}
+catch { $rejected = $_.Exception.Message -eq 'Artifact manifests do not follow symbolic links or junctions.' }
+if (-not $rejected) { throw 'An explicit artifact file traversed a reparse-point parent.' }
+
 $unchanged = Join-Path $proofRoot 'unchanged.json'
 & $script -Roots @($artifacts) -Files @($support) -ReportPath $unchanged -CompareTo $baseline
 $result = Get-Content -LiteralPath $unchanged -Raw | ConvertFrom-Json
@@ -65,4 +96,4 @@ $rejected = $false
 try { & $script -Roots @($artifacts) -Files @($first) -ReportPath (Join-Path $proofRoot 'duplicate-input.json') }
 catch { $rejected = $_.Exception.Message -eq 'Additional artifact files must be outside the measured artifact roots.' }
 if (-not $rejected) { throw 'An additional file duplicated content already covered by an artifact root.' }
-Write-Output "Artifact manifest proof passed: directory and explicit-file inventory, unchanged, timestamp-only, changed/added/removed, non-overwrite, duplicate-input rejection, and output isolation. Evidence: $proofRoot"
+Write-Output "Artifact manifest proof passed: directory and explicit-file inventory, legacy schema, category mismatch, junction-parent rejection, unchanged, timestamp-only, changed/added/removed, non-overwrite, duplicate-input rejection, and output isolation. Evidence: $proofRoot"
