@@ -306,15 +306,27 @@ function Assert-CanonicalBoundary {
 function Assert-ToolchainSnapshot {
     $previous = Use-CompilerEnvironment
     try {
-        foreach ($name in @('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')) {
-            if ([Environment]::GetEnvironmentVariable($name, 'Process') -cne $plan.ToolchainSnapshot[$name]) {
+        $environmentBindings = [ordered]@{
+            VCToolsInstallDir = 'VCToolsInstallDir'
+            WindowsSdkDir = 'WindowsSdkDir'
+            WindowsSDKVersion = 'WindowsSDKVersion'
+            HostArchitecture = 'VSCMD_ARG_HOST_ARCH'
+            TargetArchitecture = 'VSCMD_ARG_TGT_ARCH'
+            Include = 'INCLUDE'
+            Lib = 'LIB'
+            LibPath = 'LIBPATH'
+        }
+        foreach ($binding in $environmentBindings.GetEnumerator()) {
+            $name = $binding.Value
+            if ([Environment]::GetEnvironmentVariable($name, 'Process') -cne
+                $plan.ToolchainSnapshot[$binding.Key]) {
                 throw "vcvars-selected toolchain changed: $name"
             }
         }
-        $selectedCompiler = @(& where.exe cl.exe 2>$null | Select-Object -First 1)
-        if ($LASTEXITCODE -ne 0 -or $selectedCompiler.Count -ne 1 -or
-            -not [IO.Path]::GetFullPath($selectedCompiler[0]).Equals($plan.Tools.Compiler,
-                [StringComparison]::OrdinalIgnoreCase)) { throw 'vcvars64 selected a different compiler.' }
+        $selectedCompiler = [IO.Path]::GetFullPath((Join-Path $plan.ToolchainSnapshot.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe'))
+        if (-not $selectedCompiler.Equals($plan.Tools.Compiler, [StringComparison]::OrdinalIgnoreCase)) {
+            throw 'VCToolsInstallDir selected a different compiler.'
+        }
         $compilerBv = @(& $plan.Tools.Compiler /Bv 2>&1)
         if ($LASTEXITCODE -ne 0 -or ($compilerBv -join "`n") -cne $plan.ToolchainSnapshot.CompilerBv) {
             throw 'The selected compiler /Bv identity changed.'
