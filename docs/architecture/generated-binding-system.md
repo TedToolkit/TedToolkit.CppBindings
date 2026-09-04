@@ -1,7 +1,7 @@
 # Generated binding system architecture
 
 - Status: Active
-- Owner: TedToolkit.Occt maintainers
+- Owner: TedToolkit maintainers
 - Scope and system boundary: Generation, native interop, managed representation, ownership,
   diagnostics, and packaging for generated OCCT bindings.
 - Applicable product intent: None
@@ -32,8 +32,9 @@ generated C/C++ boundary   generated C# binding
                          v
      platform binding package (initially Windows win-x64)
 
-generated C# binding --> TedToolkit.Occt.Runtime
-consumer compilation --> Runtime package embedded analyzer
+generated C# binding --> TedToolkit.CppBindings.Runtime
+generated OCCT binding --> TedToolkit.CppBindings.Occt.Runtime
+consumer compilation --> TedToolkit.CppBindings.Analyzers
 ```
 
 The normalized Model is the only declaration authority. C# and C++ emitters consume it
@@ -50,11 +51,13 @@ inputs, comparison authorities, fallbacks, or compatibility targets. A legacy bo
 physically present only as an inactive migration recovery artifact until the generated replacement
 passes, after which current source, build, fixtures, output, and documentation remove it.
 
-`TedToolkit.Occt.Runtime` contains only handwritten, declaration-agnostic managed mechanisms.
-Concrete OCCT layouts, imports, exports, function tables, operation bodies, closed-generic
-registrations, and release functions belong to generated wrapper assemblies such as
-`TedToolkit.Occt.Windows`. A wrapper uses Runtime's ordinary public API. Runtime grants no wrapper
-friend access, caller identity privilege, `InternalsVisibleTo`, or Windows-specific capability.
+`TedToolkit.CppBindings.Runtime` contains only handwritten, declaration-agnostic managed
+mechanisms. `TedToolkit.CppBindings.Occt.Runtime` contains the declaration-agnostic OCCT-specific
+runtime surface. Concrete OCCT layouts, imports, exports, function tables, operation bodies,
+closed-generic registrations, and release functions belong to generated wrapper assemblies such as
+`TedToolkit.CppBindings.Occt.Windows`. A wrapper uses the runtime packages' ordinary public API.
+The runtime packages grant no wrapper friend access, caller identity privilege,
+`InternalsVisibleTo`, or Windows-specific capability.
 
 ### Native boundary and generated loading
 
@@ -81,12 +84,15 @@ not create a Cartesian product of exports. Base conversion adjusts a pointer int
 native object storage; it does not copy fields or map the object into another representation.
 
 The native and managed outputs form one unversioned, inseparable artifact set produced and packaged
-together. The generated binding loads only its package-owned native module, resolves every required
-operation and cleanup export into a private static managed `IntPtr[]`, validates the complete table,
-and publishes it once. The generated table is the compiled operation inventory; no separate binding
-manifest or fingerprint is required at runtime. No generated call observes a partially initialized
-table. The boundary does not support independent native upgrades, module substitution, or
-major/minor ABI compatibility.
+together. The generated binding calls `NativeLibrary.Load` with its generated assembly context and
+package-owned native library base name, resolves only the `NativeApi_GetFunctionTable` bootstrap
+export, and stores the returned immutable native `nint*` table. Managed and native generators assign
+the same deterministic slot order from the same completed generation plan. The package does not
+publish or validate a table length, ABI fingerprint, or per-operation export name at runtime;
+exact-match packaging and verification establish that invariant before distribution. Static
+initialization publishes the table once, so no generated call observes a partially initialized
+table. The boundary does not support independent native upgrades, module substitution, unloading,
+or major/minor ABI compatibility.
 
 Every native allocation is destroyed and freed by the same native artifact that created it. Owned
 object bytes are the exception: they reside directly in managed storage whose address is stabilized
@@ -170,7 +176,7 @@ The ownership categories are:
   returned cannot be revoked. Normal OCCT operations use Handle extension methods rather than
   `Value`.
 - A supported non-transient object with native RAII state is owned by a separate sealed invariant
-  `Owned<T>` constrained by `where T : unmanaged, IOcctRaii`. Runtime's empty `IOcctRaii` marker
+  `Owned<T>` constrained by `where T : unmanaged, ICppRaii`. Runtime's empty `ICppRaii` marker
   identifies only generated exact-layout structs classified as supported non-`Standard_Transient`
   RAII; eligible `TCollection_*` types implement it, while trivial values and
   `Standard_Transient` projections do not. The owner object contains one private `T` field as the
@@ -184,8 +190,9 @@ The ownership categories are:
   created only through an explicit generated clone or copy operation. Its public `ref T Value` is
   the same simple non-owning data view: it throws when the owner is already disposed, does not
   extend lifetime, and must not overlap disposal. `Owned<T>` and `Handle<T>` both implement
-  `IOcctOwner<T>`, which exposes only that `ref T Value` access for generated invocation. They have
-  no ownership inheritance or conversion, and the interface defines no cleanup semantics.
+  `ICppOwner<T>`, which exposes only that `ref T Value` access for diagnostics and explicit
+  low-level access. They have no ownership inheritance or conversion, and the interface defines no
+  cleanup semantics. Generated operations do not use `ICppOwner<T>` as a common receiver.
 
 Model normalization assigns exactly one of those three categories before any emitter runs. A
 proved `Standard_Transient` descendant is eligible for `Handle<T>` only when its complete intrusive
@@ -204,7 +211,7 @@ Borrowing remains an operation-level fact and does not create a fourth public ob
 Generated bindings preserve direct C++-like non-owning access through the applicable exact-layout
 value, `ref T` view, or already-approved low-level native-pointer boundary. They do not generate
 `Borrowed<T>`, a per-declaration borrowed reference class, an owner-retaining facade, a lease, or a
-managed object per native pointer, iterator, or subobject. The Runtime Analyzer reports supported
+managed object per native pointer, iterator, or subobject. The standalone analyzer reports supported
 suspicious lifetime patterns, but it is suppressible and incomplete; callers remain responsible
 for keeping the native owner live and for avoiding use-after-free or native invalidation.
 
@@ -263,10 +270,11 @@ or reference guarantees cannot be established; do not silently drop representabl
 Explicit layout to bypass the sequential-storage boundary.
 
 Each applicable transient operation is generated as two direct extension overloads: one accepts
-`IOcctOwner<T>` and therefore supports owning `Handle<T>` or `Owned<T>`, and one accepts borrowed
-`in handle<T>`. Both call the same generated `NativeApi` slot directly; no generated `Core`
-forwarding method is emitted. The owner overload performs the required `GC.KeepAlive`, while the
-borrowed overload introduces no ownership, boxing, retention, or allocation.
+owning `Handle<T>` and one accepts borrowed `in handle<T>`. Both call the same generated `NativeApi`
+slot directly; no common public handle receiver and no generated `Core` forwarding method is
+emitted. The `Handle<T>` overload performs the required `GC.KeepAlive`, while the borrowed overload
+introduces no ownership, boxing, retention, or allocation. Operations for non-transient RAII
+objects use `Owned<T>` directly.
 
 `Owned<T>` has no public construction-completion state or method. Its only declared public members
 are the generated-only
@@ -281,7 +289,7 @@ Suppressing the generated-only constructor diagnostic and using the unconstructe
 is outside the supported Runtime contract.
 
 The constructor is public solely for ordinary cross-assembly access from generated wrappers and is
-marked `GeneratedCodeOnly`. `TTOCCT001` reports handwritten `new Owned<T>(...)` as an error. Normal
+marked `GeneratedCodeOnly`. `TTCB001` reports handwritten `new Owned<T>(...)` as an error. Normal
 consumers have no direct construction path and receive `Owned<T>` only from generated projections of
 C++ factories or copy operations. The marker is compiler guidance rather than authentication, so
 the constructor still validates the destructor input available at runtime.
@@ -303,10 +311,10 @@ header requirements do not imply managed representation dependency. Do not erase
 to void pointers or introduce allocation/copying fallbacks. Reconsider admission only when stronger
 target storage guarantees are established or a new ownership architecture is explicitly approved.
 
-Generated operations obtain every owner-derived pointer inside a lexical `fixed` scope over
-`owner.Value` through `IOcctOwner<T>` and keep that pointer inside the scope. For `Owned<T>`, the
-scope pins its managed backing storage for the native call; for `Handle<T>`, it provides the same
-generated syntax over an already-stable native address. Generated code does not call
+Generated operations obtain every owner-derived pointer inside a lexical `fixed` scope over the
+direct receiver's `Value` and keep that pointer inside the scope. For `Owned<T>`, the scope pins its
+managed backing storage for the native call; for `Handle<T>`, it provides the same generated syntax
+over an already-stable native address. Generated code does not call
 `Unsafe.AsPointer` or expose another
 pointer member. Immediately after each finalizable owner's last unmanaged use, and before managed
 error projection can throw, generated code calls
@@ -340,21 +348,21 @@ never participate in managed error projection.
 Generated wrappers in independent assemblies access the Runtime error carrier and projection entry
 point through public contracts marked `GeneratedCodeOnlyAttribute`. Public visibility provides CLR
 accessibility only: these contracts never appear in consumer-facing generated operation signatures,
-and handwritten operational use is reported by the Runtime analyzer. The carrier is a direct
+and handwritten operational use is reported by the standalone analyzer. The carrier is a direct
 sequential ABI record: it exposes only the native discriminator and three diagnostic-pointer fields
 in layout order and declares no managed construction, reset, property, or other behavior. The public
 projection entry point accepts the originating native error-clear export as an unmanaged `cdecl`
 function pointer. It does not introduce a managed cleanup delegate, friend assembly, or
 declaration-specific Runtime import.
 
-The existing `TedToolkit.Occt.Analyzer` remains an OCCT-header source generator. Consumer compiler
-guardrails are built by an internal, non-packable Analyzer project and embedded directly in the
-Runtime package. Runtime does not load them while compiling itself. They report handwritten use of
-unavoidable public Runtime hooks reserved for generated implementations and supported suspicious
-lifetime uses of non-owning `Handle<T>.Value` or `Owned<T>.Value` references. They remain
-declaration-agnostic and do not attempt complete alias, concurrency, or lifetime proof. The detailed
-boundary is recorded in the active
-[Runtime analyzer architecture](runtime-analyzer-boundary.md).
+`TedToolkit.CppBindings.Occt.SourceGenerators` remains the OCCT-header source generator. Consumer
+compiler guardrails are shipped separately in `TedToolkit.CppBindings.Analyzers` and consumed with
+`PrivateAssets="all"`; they are not embedded in a runtime package. They report handwritten use of
+unavoidable public runtime hooks reserved for generated implementations (`TTCB001`) and supported
+suspicious lifetime uses of non-owning `Handle<T>.Value` or `Owned<T>.Value` references
+(`TTCB002`). They remain declaration-agnostic and do not attempt complete alias, concurrency, or
+lifetime proof. The detailed boundary is recorded in the active
+[runtime analyzer architecture](runtime-analyzer-boundary.md).
 
 The analyzer is suppressible developer guidance, not authorization. Independently generated
 wrappers use the same public Runtime contracts and generated-code convention without assembly-name
@@ -368,8 +376,9 @@ Runtime, generated managed bindings, their managed verification projects, and th
 package compile only for `net8.0`. Generator tooling may use its own build target.
 
 The first ready-to-use binding package and managed assembly are named
-`TedToolkit.Occt.Windows`; generated APIs retain the default `TedToolkit.Occt` namespace. Its first
-and only current support matrix is the independently proved `win-x64` artifact set. The package
+`TedToolkit.CppBindings.Occt.Windows`; generated APIs use the
+`TedToolkit.CppBindings.Occt` namespace. Its first and only current support matrix is the
+independently proved `win-x64` artifact set. The package
 ships the complete native runtime closure and requires no consumer-side OCCT, vcpkg, Clang, CMake,
 or Generator installation. Another OS, architecture, compiler ABI, or RID requires a separately
 generated and proved platform binding artifact; replacing only the native asset is invalid.
@@ -390,8 +399,10 @@ generated and proved platform binding artifact; replacing only the native asset 
   return and transport its source result through a result slot; keep release and cleanup exports
   non-throwing `void` functions.
 - Derive one deterministic generated function-table slot for every required operation and cleanup
-  export. Load the package-owned module, validate all required exports privately, and publish one
-  complete static managed table. Do not emit a separate binding manifest or fingerprint protocol.
+  export. Load the package-owned module through the generated assembly context, resolve only
+  `NativeApi_GetFunctionTable`, and publish its immutable native table once through static
+  initialization. Do not emit a separate binding manifest, table-length handshake, fingerprint
+  protocol, or per-operation export lookup.
 - Invoke ordinary generated operations through their exact typed table slots. Copy release and
   destructor pointers into finalizable owners at construction; never make Runtime owners retain a
   table, index a mutable global table during cleanup, or depend on generated table types.
@@ -403,7 +414,7 @@ generated and proved platform binding artifact; replacing only the native asset 
 - Prove complete native and managed layout equality for every shipped type and supported closed
   generic specialization on its exact target matrix.
 - Keep layout structs non-owning and non-disposable. Mark only supported non-transient RAII layouts
-  with `IOcctRaii`, and keep transient and non-transient ownership in their distinct Runtime
+  with `ICppRaii`, and keep transient and non-transient ownership in their distinct Runtime
   reference owners.
 - Preserve `Handle<T>`'s exact three-member public surface and direct `T*` release contract unless
   this architecture is explicitly revised first.
@@ -417,16 +428,18 @@ generated and proved platform binding artifact; replacing only the native asset 
   pointer surface and leave its lifetime obligations with the caller.
 - Preserve reference-return semantics exactly: `const T&` becomes `ref readonly T` and `T&`
   becomes `ref T`. Do not insert an implicit copy, clone, retain, allocation, or ownership wrapper.
-- Generate owner pointer use with a lexical `fixed` scope over `owner.Value`. Keep every derived
-  pointer inside that scope; do not call `Unsafe.AsPointer` or introduce a generated-only pointer
-  method or static pointer gateway. Use the value-only `IOcctOwner<T>` interface for owner receivers.
+- Generate owner pointer use with a lexical `fixed` scope over the direct receiver's `Value`. Keep
+  every derived pointer inside that scope; do not call `Unsafe.AsPointer` or introduce a
+  generated-only pointer method or static pointer gateway. Generate separate direct `Handle<T>` and
+  borrowed `in handle<T>` overloads for transient operations; call the same slot and apply owner
+  liveness only to `Handle<T>`. Do not use `ICppOwner<T>` as a generated receiver.
 - Keep each finalizable owner alive through every generated unmanaged use with `GC.KeepAlive`
   immediately after that owner's last such use and before error projection. Do not treat `fixed` as
   a substitute for owner liveness or claim either mechanism protects against explicit concurrent
   disposal.
 - Keep Runtime declaration-agnostic and wrappers equally capable through public API only.
 - Contain all native exceptions and perform every cleanup through the originating native artifact.
-- Use Runtime analyzers for unavoidable public generated-only hooks and best-effort `Value` lifetime
+- Use binding analyzers for unavoidable public generated-only hooks and best-effort `Value` lifetime
   diagnostics. Keep layout validation, owner-state checks, native safety, and behavior expressible
   by API shape in their owning compiler or runtime layers; analyzer suppression transfers the
   low-level lifetime risk to the caller.
@@ -436,7 +449,9 @@ generated and proved platform binding artifact; replacing only the native asset 
 ## Decision links and exceptions
 
 This record is the current architecture authority. The native-loader and function-table direction
-is approved by [ADR-001](../adr/ADR-001-native-release-binding/README.md). A proposed exception to a Required principle or to this architecture
+is approved by [ADR-003](../adr/ADR-003-native-function-table-bootstrap.md); the superseded
+[ADR-001](../adr/ADR-001-native-release-binding/README.md) retains historical benchmark and
+compatibility evidence. A proposed exception to a Required principle or to this architecture
 must update the affected current-truth document and receive explicit maintainer approval before
 implementation; a change record alone cannot redefine the architecture.
 

@@ -9,7 +9,7 @@
 Example:
 
 ```powershell
-dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj --no-build -- --report-trx
+dotnet run --project tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj --no-build -- --report-trx
 ```
 
 ## Documentation language

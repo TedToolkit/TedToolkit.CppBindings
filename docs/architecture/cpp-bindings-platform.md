@@ -6,16 +6,15 @@
   analyzer, and provider boundaries for generated object-oriented C++ bindings.
 - Applicable product intent: None
 - Governing principles: [Repository design principles](../principles/README.md)
-- Related ADRs: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md) and
+- Related ADRs: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md),
+  [ADR-003](../adr/ADR-003-native-function-table-bootstrap.md), and superseded
   [ADR-001](../adr/ADR-001-native-release-binding/README.md)
 - Approval source: The maintainer explicitly approved this direction in the Codex task on
   2026-08-26.
 
-## Approved target architecture
+## Current architecture
 
-`TedToolkit.CppBindings` is the approved product and repository family. The repository remains
-implemented under `TedToolkit.Occt` until the controlled migration completes. In the target
-architecture, generic mechanisms occupy the root
+`TedToolkit.CppBindings` is the product and repository family. Generic mechanisms occupy the root
 namespace and provider semantics occupy a provider segment:
 
 ```text
@@ -69,10 +68,9 @@ failure boundaries until the migration updates their terminology.
 
 ## Decision links and exceptions
 
-[ADR-002](../adr/ADR-002-cpp-bindings-platform.md) selects the platform/provider organization and
-supersedes older identity and analyzer-packaging statements, but does not claim the migration is
-implemented. [ADR-001](../adr/ADR-001-native-release-binding/README.md) continues to govern the
-Windows native loader and function-table lifetime.
+[ADR-002](../adr/ADR-002-cpp-bindings-platform.md) selects the platform/provider organization.
+[ADR-003](../adr/ADR-003-native-function-table-bootstrap.md) governs native loading and
+function-table lifetime; ADR-001 remains historical evidence for the superseded loader decision.
 
 ## Review triggers
 

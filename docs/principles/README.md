@@ -2,7 +2,7 @@
 
 ## Scope and precedence
 
-- Governed scope: architecture, implementation, and review decisions for TedToolkit.Occt source
+- Governed scope: architecture, implementation, and review decisions for TedToolkit.CppBindings source
   generation and generated native and managed binding artifacts.
 - External hard constraints that take precedence: supported toolchain and platform requirements,
   C11 interoperability, explicit ownership and lifetime contracts, and same-library cleanup.
@@ -14,11 +14,11 @@
 
 | ID | Title | Strength | Status | Owner | Review trigger | Document |
 | --- | --- | --- | --- | --- | --- | --- |
-| GEN-01 | Generate every binding layer from one semantic source | Required | Active | TedToolkit.Occt maintainers | A binding artifact cannot be derived without declaration-specific code or a generated output requires a manual patch | This file |
-| GEN-02 | Reproduce every supported native object layout exactly | Required | Active | TedToolkit.Occt maintainers | A generated type cannot prove native size, alignment, or physical segment placement for the supported toolchain | This file |
-| GEN-03 | Separate native representation from ownership and behavior | Required | Active | TedToolkit.Occt maintainers | A generated API would place lifetime behavior in a native-layout struct, use a transient handle for a non-transient type, require routine handle operations through `.Value`, or expose instance behavior through a copied native value | This file |
-| GEN-04 | Keep the shared Runtime minimal and declaration-agnostic | Required | Active | TedToolkit.Occt maintainers | Runtime would gain a declaration-specific type, symbol, import, layout, specialization, or generated-set constant | This file |
-| GEN-05 | Support every representable native capability | Required | Active | TedToolkit.Occt maintainers | A declaration is excluded because of its library, template, smart-pointer, stream, or other broad type category | This file |
+| GEN-01 | Generate every binding layer from one semantic source | Required | Active | TedToolkit maintainers | A binding artifact cannot be derived without declaration-specific code or a generated output requires a manual patch | This file |
+| GEN-02 | Reproduce every supported native object layout exactly | Required | Active | TedToolkit maintainers | A generated type cannot prove native size, alignment, or physical segment placement for the supported toolchain | This file |
+| GEN-03 | Separate native representation from ownership and behavior | Required | Active | TedToolkit maintainers | A generated API would place lifetime behavior in a native-layout struct, use a transient handle for a non-transient type, require routine handle operations through `.Value`, or expose instance behavior through a copied native value | This file |
+| GEN-04 | Keep the shared Runtime minimal and declaration-agnostic | Required | Active | TedToolkit maintainers | Runtime would gain a declaration-specific type, symbol, import, layout, specialization, or generated-set constant | This file |
+| GEN-05 | Support every representable native capability | Required | Active | TedToolkit maintainers | A declaration is excluded because of its library, template, smart-pointer, stream, or other broad type category | This file |
 
 ## Principles
 
@@ -28,7 +28,7 @@
 - Strength: Required
 - Scope: The Generator and every generated C declaration, C++ adapter, managed transport/import,
   and public C# binding.
-- Owner: TedToolkit.Occt maintainers
+- Owner: TedToolkit maintainers
 - Review trigger: A new output language or ABI backend is introduced; an operation appears to
   require declaration-specific executable code; or any generated artifact requires a manual patch.
 
@@ -102,7 +102,7 @@ removing the exception.
 - Scope: Every generated C# type that corresponds to a C++ object type, including values,
   `Standard_Transient` descendants, non-transient RAII objects, template specializations, base
   subobjects, and compiler-generated object state.
-- Owner: TedToolkit.Occt maintainers
+- Owner: TedToolkit maintainers
 - Review trigger: The supported OCCT version, compiler ABI, architecture, runtime layout behavior,
   native packing, or generated package platform matrix changes; a layout requires an
   unrepresentable alignment or `T`-dependent physical segment; or managed and native layout proof
@@ -183,7 +183,7 @@ generated layout proof.
 - Strength: Required
 - Scope: Construction, ownership, copying, disposal, low-level storage access,
   inheritance-facing behavior, and generated method syntax for every projected OCCT object type.
-- Owner: TedToolkit.Occt maintainers
+- Owner: TedToolkit maintainers
 - Review trigger: A supported type does not fit the trivial-value, `Standard_Transient`, or owned
   non-transient categories; an operation requires ownership transfer not expressible by the
   selected owner; routine use requires a caller to reach through an owner to its native-layout
@@ -217,9 +217,10 @@ stabilized by `fixed`. `Owned<T>` invokes deterministic
 same-library destruction but does not use intrusive `Release` and does not ask native code to free
 its managed backing storage. `Owned<T>.Value` provides the same kind of public, non-owning `ref T`
 view as `Handle<T>.Value`; it does not change the object's ownership or lifetime. Both owners
-implement `IOcctOwner<T>`, whose sole member is `ref T Value`, so generated invocation can share one
-receiver contract. The interface defines no construction, cleanup, disposal, conversion, or
-ownership semantics; intrusive release and direct destruction remain distinct.
+implement `ICppOwner<T>`, whose sole member is `ref T Value`, for declaration-agnostic diagnostics
+and explicit low-level access. The interface is not a shared generated receiver and defines no
+construction, cleanup, disposal, conversion, or ownership semantics; intrusive release and direct
+destruction remain distinct.
 
 Borrowing is an operation-level lifetime fact, not another ownership or public representation
 category. A non-owning native reference remains a direct, C++-like `ref T` view or an exact native
@@ -227,7 +228,7 @@ pointer at an already-approved low-level boundary. The binding does not introduc
 per-declaration borrowed reference class, an owner-retaining facade, or a lease solely to prevent
 use-after-free. Such wrappers add managed allocation, identity, and state to a native relationship
 that remains non-owning and still cannot be made safe against explicit disposal or native
-invalidation. Supported suspicious uses belong to suppressible Runtime Analyzer guidance; the
+invalidation. Supported suspicious uses belong to suppressible binding-analyzer guidance; the
 caller remains responsible for the referenced owner's lifetime.
 
 The completed Model classifies every supported C++ object into exactly one representation and
@@ -278,8 +279,8 @@ the lifetime.
   invokes the matching C++ destructor exactly once. It never calls the OCCT intrusive-reference
   `Release` operation or a native storage-free function; the GC reclaims the managed backing
   storage.
-- Runtime defines the empty representation-category marker `IOcctRaii`. `Owned<T>` requires
-  `where T : unmanaged, IOcctRaii`. Every generated exact-layout struct classified as supported
+- Runtime defines the empty representation-category marker `ICppRaii`. `Owned<T>` requires
+  `where T : unmanaged, ICppRaii`. Every generated exact-layout struct classified as supported
   non-`Standard_Transient` RAII, including eligible `TCollection_*` types, implements this marker.
   Proved trivial values and `Standard_Transient` projections do not implement it.
 - `Owned<T>` construction has no public completion phase. A generated factory creates the owner
@@ -295,7 +296,7 @@ the lifetime.
   than moved to another storage form. Runtime neither receives an alignment value nor treats one
   observed managed address as proof across later GC relocation.
 - The `Owned<T>` constructor is public only so independently generated wrapper assemblies can call
-  it without friend access. It is marked `GeneratedCodeOnly`, and the Runtime Analyzer reports
+  it without friend access. It is marked `GeneratedCodeOnly`, and the binding analyzer reports
   handwritten `new Owned<T>(...)` as an error. Consumers obtain owners only from generated C++
   factory projections; suppressing the diagnostic crosses the supported construction boundary.
 - A generated binding loads its exact-match native module for the process lifetime and does not
@@ -306,9 +307,8 @@ the lifetime.
   validates cleanup pointers and owner state but does not authenticate a function pointer's module
   origin; that guarantee belongs to generated exact-match initialization and factory emission.
   Runtime may share declaration-agnostic disposed-state and cleanup machinery internally.
-- `IOcctOwner<T>` is the common generated-invocation boundary for `Handle<T>` and `Owned<T>`. It
-  exposes only non-owning `ref T Value`; it does not inherit `IDisposable` and cannot select or
-  replace either owner's cleanup operation.
+- `ICppOwner<T>` exposes only non-owning `ref T Value` for shared diagnostics and low-level access;
+  it does not inherit `IDisposable`, select cleanup, or act as a common generated receiver.
 - Assigning a reference-type owner aliases one owner and one disposed state. A distinct native
   object is produced only by an explicit generated clone or copy operation that invokes the mapped
   C++ copy semantics.
@@ -317,10 +317,11 @@ the lifetime.
   value types.
 - Generated instance operations are extension methods on the semantic receiver. A C++ `const`
   value operation receives `this in T`; a mutating value operation receives `this ref T` so the
-  exact-layout struct is neither boxed nor silently copied. Owner operations receive
-  `IOcctOwner<T>`, while borrowed lowercase-handle overloads, static operations, and factories
-  remain distinct. Consumers call `handle.Operation()` or `owned.Operation()` without reaching
-  through an owner to invoke routine operations on its native-layout value.
+  exact-layout struct is neither boxed nor silently copied. Transient operations expose separate
+  direct overloads for owning `Handle<T>` and borrowed `in handle<T>` receivers; both use the same
+  native slot and only the owning overload applies owner liveness. `Owned<T>`, static operations,
+  and factories remain distinct. Consumers invoke routine operations without reaching through an
+  owner to its native-layout value.
 - `Handle<T>.Value` and `Owned<T>.Value` are simple escape hatches for direct field or property data
   access and explicit low-level interop. They are not normal receivers for generated OCCT
   operations, lifetime tokens, or second owners. A returned reference cannot be revoked, does not
@@ -337,7 +338,7 @@ the lifetime.
   `GC.KeepAlive(owner)` before error projection. `fixed` does not itself extend the owner lifetime or
   protect against explicit concurrent disposal.
 - Generated API shape and receiver types keep ownership behavior off exact-layout structs and keep
-  routine owner operations off `.Value`. The Runtime analyzer rejects handwritten use of explicitly
+  routine owner operations off `.Value`. The binding analyzer rejects handwritten use of explicitly
   marked generated-only Runtime hooks and reports supported suspicious `Value` lifetime patterns,
   including known escape, suspension, temporary-owner, post-disposal, alias-disposal, and missing
   owner-keepalive forms. This analysis is suppressible and incomplete; it does not prove aliasing,
@@ -361,21 +362,21 @@ cost and safety boundary of any added wrapper.
 
 - Status: Active
 - Strength: Required
-- Scope: The handwritten `TedToolkit.Occt.Runtime` package and every dependency introduced into it
+- Scope: The handwritten `TedToolkit.CppBindings.Runtime` package and every dependency introduced into it
   for generated managed libraries.
-- Owner: TedToolkit.Occt maintainers
+- Owner: TedToolkit maintainers
 - Review trigger: Runtime would gain a type-specific layout, operation import, native symbol,
   template specialization, manifest value, generated-set registry, or dependency that is not
   required by all relevant generated consumers.
 
 #### Default
 
-Generated managed libraries may depend on `TedToolkit.Occt.Runtime`, but Runtime contains only the
+Generated managed libraries may depend on `TedToolkit.CppBindings.Runtime`, but Runtime contains only the
 small declaration-agnostic mechanisms required to implement their shared managed contracts. It has
 no dependency on the Generator, a generated binding assembly, or an OCCT declaration set.
 
 Declaration-specific types, layouts, inheritance interfaces, extension operations, imports,
-native symbols, function-table slots and storage, closed-generic registrations, expected contract fingerprints, and per-type
+native symbols, function-table slots and storage, closed-generic registrations, and per-type
 construction or cleanup adapters belong to generated output. Runtime may own shared metadata,
 exception, loading, invocation-lifetime, and ownership mechanisms only when their contracts are
 independent of any particular OCCT declaration or generated artifact set.
@@ -395,7 +396,7 @@ and safety mechanisms that must behave consistently across them.
 - Runtime may define stable abstractions such as native-name metadata, managed exception contracts,
   owner-state machinery, and declaration-agnostic native-module loading capabilities.
 - Generated code supplies the concrete type identities, imports, exports, layout evidence,
-  specialization registry, expected fingerprint, and target-specific construction, release, or
+  specialization registry, and target-specific construction, release, or
   pointer-adjustment functions consumed through those mechanisms.
 - Runtime dependencies are reviewed as part of its public and transitive surface. Convenience alone
   is not sufficient reason to add a package or a declaration-specific helper.
@@ -414,7 +415,7 @@ can be removed.
 - Strength: Required
 - Scope: Admission and projection of native declarations, C++ templates, standard-library types,
   smart pointers, streams, and every operation that exposes them.
-- Owner: TedToolkit.Occt maintainers
+- Owner: TedToolkit maintainers
 - Review trigger: A declaration or operation is excluded because it belongs to a broad type
   category rather than because its concrete layout, transport, invocation, or lifetime semantics
   cannot be proved.
@@ -500,7 +501,7 @@ gate are not shipped as supported generated bindings.
 
 ## Maintenance
 
-- Principle-set owner: TedToolkit.Occt maintainers
+- Principle-set owner: TedToolkit maintainers
 - Review cadence or objective review triggers: Review whenever the Generator adds an output layer,
   a declaration-specific mapping, a manual generated-source step, a native layout category, or an
   ownership category; a generated binding package changes its platform matrix; or Runtime gains a

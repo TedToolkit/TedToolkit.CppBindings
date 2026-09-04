@@ -1,12 +1,14 @@
-# TedToolkit.Occt
+# TedToolkit.CppBindings
 
-TedToolkit.Occt 是一个面向 .NET 的 OCCT 绑定代码生成项目：它从 vcpkg 安装的 Open CASCADE Technology（OCCT）头文件中解析用户选择的 C++ 类型，并生成配套的 C++ ABI 包装代码与 C# 类型代码。
+TedToolkit.CppBindings 是一个面向 .NET 的 C++ 绑定生成平台。本仓库当前提供 OCCT
+provider：它从 vcpkg 安装的 Open CASCADE Technology（OCCT）头文件建立语义模型，并生成
+配套的 C++ ABI 边界与 C# API。
 
-`TedToolkit.Occt` 是仓库和产品家族名称。计划中的首个即用绑定 package 与 managed
-assembly 名为 `TedToolkit.Occt.Windows`，当前只面向经过证明的 `win-x64` 布局矩阵；生成
-类型的默认 C# namespace 仍为 `TedToolkit.Occt`。
+共享机制使用 `TedToolkit.CppBindings` 身份；OCCT 组件与生成 API 使用
+`TedToolkit.CppBindings.Occt`。首个即用 binding package/assembly 是
+`TedToolkit.CppBindings.Occt.Windows`，当前只面向经过证明的 `win-x64` 布局矩阵。
 
-> ⚠️ 项目目前处于开发阶段。核心解析与 C++ 生成链路已经建立，但尚未形成可直接消费的完整 C# 绑定包；请先阅读[当前实现边界](#当前实现边界)。
+> ⚠️ 项目目前处于开发阶段。完整 Windows 绑定包可以在本机构建和验证，但尚未发布到远程 feed；请先阅读[当前实现边界](#当前实现边界)。
 
 ## 项目解决什么问题
 
@@ -88,24 +90,30 @@ segments、模板特化和 construction/destruction 语义；这些信息共同�
 | 输出 | 责任 |
 | --- | --- |
 | C++ source | Traverses `RecordModel` directly and emits one internal `.cpp` per parsed record with required headers and real OCCT invocation expressions. |
-| C# 代码 | 当前根据原生大小和字段偏移生成类型形状；目标是精确的 Sequential struct、padding/opaque storage、继承接口、extension API、泛型特化和所有权 glue。 |
+| C# source | Emits exact sequential layouts, padding/opaque storage, inheritance interfaces, extension APIs, supported generic specializations, and ownership glue. |
 
-生成的 C# 根命名空间由经过验证的 `CSharpNamespace` 选项控制，包默认使用
-`TedToolkit.Occt`。自定义命名空间只改变托管 API 身份，不改变 C++ canonical identity、
+生成的 C# 根命名空间由经过验证的 `CSharpNamespace` 选项控制，OCCT 包默认使用
+`TedToolkit.CppBindings.Occt`。自定义命名空间只改变托管 API 身份，不改变 C++ canonical identity、
 native export 命名或原生布局身份。
 
 Package/assembly 名称与 namespace 是两个契约：Windows 即用产物使用
-`TedToolkit.Occt.Windows`，但普通调用代码仍使用 `TedToolkit.Occt` namespace。新的
+`TedToolkit.CppBindings.Occt.Windows`，但普通调用代码仍使用
+`TedToolkit.CppBindings.Occt` namespace。新的
 platform、architecture 或 compiler ABI 不能只替换 native asset；必须重新证明 managed
 exact layout，并交付对应的平台绑定产物。
 
 The production generation path no longer uses a handwritten operation catalog or
-`AbiOperationModel`. Per-type C++ files are still internal invocation helpers; the complete C11
-transport boundary, CMake/DLL, managed imports, and exact-match validation remain unimplemented.
-The historical ABI-v1 migration fixture is retired; verification targets the current generated
-boundary and Runtime/native lifetime contracts.
+`AbiOperationModel`. It emits the complete C11 transport boundary, CMake project, managed invocation
+surface, and one deterministic native function table from the same normalized model. The managed
+binding loads its package-owned module, resolves only `NativeApi_GetFunctionTable`, and invokes exact
+typed slots. The historical ABI-v1 migration fixture is retired; verification targets the current
+generated boundary and runtime/native lifetime contracts.
 
-更详细的生成流程见 [TedToolkit.Occt.Generator](src/core/TedToolkit.Occt.Generator/README.md)，生命周期和异常模型见 [TedToolkit.Occt.Runtime](src/core/TedToolkit.Occt.Runtime/README.md)。
+更详细的生成流程见
+[TedToolkit.CppBindings.Occt.Generator](src/core/TedToolkit.CppBindings.Occt.Generator/README.md)，
+通用与 OCCT 生命周期机制分别见
+[TedToolkit.CppBindings.Runtime](src/core/TedToolkit.CppBindings.Runtime/README.md) 和
+[TedToolkit.CppBindings.Occt.Runtime](src/core/TedToolkit.CppBindings.Occt.Runtime/README.md)。
 
 ## 🚀 运行开发示例
 
@@ -127,7 +135,7 @@ boundary and Runtime/native lifetime contracts.
 The development generation host processes every public OCCT header and writes to `output/generated`:
 
 ```powershell
-dotnet run --project tests/TedToolkit.Occt.Console/TedToolkit.Occt.Console.csproj -c Release
+dotnet run --project tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj -c Release
 ```
 
 预期输出结构：
@@ -147,16 +155,19 @@ only after compiler or linker proof; representable related declarations remain g
 
 | 组件 | 责任 | 文档 |
 | --- | --- | --- |
-| `TedToolkit.Occt.Windows` | Windows 平台生成绑定 package/assembly；当前支持矩阵仅为 `win-x64` | [README](src/core/TedToolkit.Occt.Windows/README.md) |
-| `TedToolkit.Occt.Generator` | 读取 vcpkg/OCCT、解析 AST、建立模型并生成两组代码 | [README](src/core/TedToolkit.Occt.Generator/README.md) |
-| `TedToolkit.Occt.Runtime` | 生成库依赖的最小、声明无关托管机制；提供异常投影、`handle<T>`、`Handle<T>` 和 `Owned<T>` | [README](src/core/TedToolkit.Occt.Runtime/README.md) |
-| `TedToolkit.Occt.Analyzer` | 从已安装 OCCT 头文件生成可选择的头文件类型枚举 | `src/tools/TedToolkit.Occt.Analyzer` |
-| `TedToolkit.Occt.Console` | Development host that generates the all-public-header Windows surface | `tests/TedToolkit.Occt.Console` |
+| `TedToolkit.CppBindings.Runtime` | Provider-neutral ownership and generated-code contracts | [README](src/core/TedToolkit.CppBindings.Runtime/README.md) |
+| `TedToolkit.CppBindings.Generator` | Provider-neutral generation orchestration and rendering | [README](src/core/TedToolkit.CppBindings.Generator/README.md) |
+| `TedToolkit.CppBindings.Analyzers` | Consumer compiler diagnostics for generated-only and borrowed-reference contracts | [README](src/tools/TedToolkit.CppBindings.Analyzers/README.md) |
+| `TedToolkit.CppBindings.Occt.Runtime` | OCCT-specific intrusive ownership and native failure projection | [README](src/core/TedToolkit.CppBindings.Occt.Runtime/README.md) |
+| `TedToolkit.CppBindings.Occt.Generator` | Reads OCCT headers, builds the model, and emits managed/native bindings | [README](src/core/TedToolkit.CppBindings.Occt.Generator/README.md) |
+| `TedToolkit.CppBindings.Occt.SourceGenerators` | Generates the selectable OCCT header inventory | `src/tools/TedToolkit.CppBindings.Occt.SourceGenerators` |
+| `TedToolkit.CppBindings.Occt.Windows` | Windows ready-to-use binding package/assembly; current matrix is `win-x64` | [README](src/core/TedToolkit.CppBindings.Occt.Windows/README.md) |
+| `TedToolkit.CppBindings.Occt.Console` | Development host that generates the all-public-header Windows surface | `tests/TedToolkit.CppBindings.Occt.Console` |
 | `Build` | 仓库构建管线；不会为平台 wrapper 生成 Runtime 友元权限 | `Build` |
 
 ## 当前实现边界
 
-- `TedToolkit.Occt.Windows` generates every representable public-header declaration supported by the delivered OCCT DLLs.
+- `TedToolkit.CppBindings.Occt.Windows` generates every representable public-header declaration supported by the delivered OCCT DLLs.
 - 当前仅支持经验证的 `win-x64`、OCCT 8.0.1 和 `net8.0` 组合。
 - 本机生成和 NuGet 打包已经可用，但尚未发布到远程 feed。
 - 新增平台、RID 或头文件范围时仍必须重新执行编译器探测和真实原生行为验证。
@@ -166,23 +177,23 @@ only after compiler or linker proof; representable related declarations remain g
 还原和构建解决方案：
 
 ```powershell
-dotnet restore TedToolkit.Occt.slnx
-dotnet build TedToolkit.Occt.slnx -c Release --no-restore
+dotnet restore TedToolkit.CppBindings.slnx
+dotnet build TedToolkit.CppBindings.slnx -c Release --no-restore
 ```
 
 仓库使用 TUnit 和 Microsoft Testing Platform。测试项目已构建时，优先使用 `dotnet run`：
 
 ```powershell
-dotnet run --project tests/TedToolkit.Occt.Runtime.Tests/TedToolkit.Occt.Runtime.Tests.csproj -c Release --no-build -- --report-trx
+dotnet run --project tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBindings.Runtime.Tests.csproj -c Release --no-build -- --report-trx
 ```
 
 The Generator test project uses the same executable test entry point:
 
 ```powershell
-dotnet run --project tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj -c Release --no-build -- --report-trx
+dotnet run --project tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj -c Release --no-build -- --report-trx
 ```
 
-The repository build entry point runs the Generator, Runtime, and Runtime Analyzer TUnit projects.
+The repository build entry point runs the generator, runtime, and analyzer TUnit projects.
 It also configures and builds the two native Handle fixtures, then runs their managed integration
 executable with the resolved library paths:
 

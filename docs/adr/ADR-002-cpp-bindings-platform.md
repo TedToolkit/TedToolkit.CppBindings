@@ -75,7 +75,8 @@ exact-layout, representation/ownership separation, and declaration-agnostic Runt
 - [Repository design principles](../principles/README.md)
 - [Generated binding architecture](../architecture/generated-binding-system.md)
 - [Runtime/analyzer boundary](../architecture/runtime-analyzer-boundary.md)
-- [ADR-001 native release binding](ADR-001-native-release-binding/README.md)
+- [ADR-003 native function-table bootstrap](ADR-003-native-function-table-bootstrap.md)
+- [Superseded ADR-001 native release binding](ADR-001-native-release-binding/README.md)
 
 ## Consequences and accepted trade-offs
 

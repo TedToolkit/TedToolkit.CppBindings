@@ -1,6 +1,6 @@
 # ADR-001: Load and Cache Generated Native Exports
 
-- Status: Accepted
+- Status: Superseded
 - Date: 2026-08-26
 - Decision owner: TedToolkit.Occt maintainers
 - Decision scope: Windows generated native-module loading, resolved-export storage, generated
@@ -8,9 +8,13 @@
 - Applicable product intent: None
 - Applicable principles: [GEN-01 through GEN-04](../../principles/README.md)
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [ADR-003](../ADR-003-native-function-table-bootstrap.md)
 - Approval source: Explicit maintainer approval of the simplified no-fingerprint, no-runtime-manifest
   generated `NativeApi` design in the Codex task on 2026-08-27.
+
+ADR-003 superseded this decision on 2026-09-05 after the maintained platform moved away from the
+`netstandard2.0` constraint and adopted a generated native pointer-table bootstrap. This record and
+its evidence remain unchanged history of the earlier decision.
 
 ## Decision at a glance
 
