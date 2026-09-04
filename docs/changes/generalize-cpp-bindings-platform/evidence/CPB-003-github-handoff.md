@@ -1,11 +1,13 @@
 # CPB-003 GitHub handoff evidence
 
-- Evidence state: Pre-rename inventory; rename and post-rename validation pending
+- Evidence state: Complete
 - Inventory captured: 2026-09-04 18:59 UTC
 - Verified integration baseline: `e94f10a9bb9490d47363cf43d8ce17600b435b8a`
-- Internal identity candidate: `aeafbb3`
-- Current authoritative repository: `TedToolkit/TedToolkit.Occt`
-- Target repository: `TedToolkit/TedToolkit.CppBindings`
+- Built identity candidate: `aeafbb3ab1a1dca1817dbc19c4fa6b94fd3f582e`
+- Reviewed identity candidate: `ed90895eb2293ac9c0c10e34d492a32624e14595`
+- Integrated cutover revision: `37aee103432c23fef97885d67895bb99c870363a`
+- Previous repository: `TedToolkit/TedToolkit.Occt`
+- Current authoritative repository: `TedToolkit/TedToolkit.CppBindings`
 - Responsible maintainer: `Ted-Jin-Lab`
 
 ## Internal candidate
@@ -84,3 +86,40 @@ maintained local and metadata URL must use the new repository after cutover.
 
 If the rename or post-validation fails, rename back while the old name remains available, restore
 maintained remotes and metadata, and revert the identity candidate through normal Git history.
+
+## Post-rename validation
+
+The reviewed candidate was fast-forwarded through `codex/cppbindings-integration` and pushed to the
+default `development` branch at `37aee103432c23fef97885d67895bb99c870363a` before the rename. The
+repository was then renamed through the GitHub REST API under the authorized administrator account.
+
+| Boundary | After state |
+| --- | --- |
+| Repository identity | `TedToolkit/TedToolkit.CppBindings`; `https://github.com/TedToolkit/TedToolkit.CppBindings` |
+| Default and other branch | `development` at `37aee103432c23fef97885d67895bb99c870363a`; `main` unchanged at `23c6e58e0c1400a99b0c170b96bb59d6832bbc0e` |
+| Old identity | Old GitHub API URL returns HTTP 301 to repository identity `1151932989`; redirect is recovery-only |
+| Local remote | Shared `origin` fetch and push URL is `https://github.com/TedToolkit/TedToolkit.CppBindings.git` |
+| Pull requests and issues | PR 1, `🔖 Release`, remains open; no standalone issues |
+| Workflow | `.github/workflows/build.yml` remains active |
+| Administration | `Ted-Jin-Lab` remains the sole admin collaborator; authenticated repository permission remains admin |
+| Pages and protection | `has_pages` remains false; Pages and `development` protection endpoints return 404 |
+| Hooks, environments, rulesets | All remain empty |
+| Actions policy | Enabled; all actions allowed; SHA pinning not required; default workflow permission remains write; workflows may approve pull-request reviews |
+| Secrets, variables, deploy keys | All remain empty |
+| Releases and tags | Both remain empty |
+
+A fresh single-branch clone from the new authoritative URL checked out the exact integrated revision
+and initialized `externals/TedToolkit` at `3ffa097c26349fdd60d1f86cc6d684e5808e2337` with a clean tracked
+tree. The clone then completed the full post-rename gate:
+
+```text
+dotnet build TedToolkit.CppBindings.slnx -c Release
+Build succeeded.
+0 Warning(s)
+0 Error(s)
+Time Elapsed 00:47:27.37
+```
+
+The clean-clone gate restored dependencies, regenerated the complete corpus, and compiled and linked
+all 6,989 generated C++ units from the renamed authoritative repository. AC-01 and CPB-003 are
+therefore verified on the authoritative integration revision.

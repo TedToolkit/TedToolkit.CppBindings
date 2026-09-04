@@ -11,7 +11,7 @@ not supported packages or compatibility promises. Each item includes its smalles
 | --- | --- | --- | --- | --- | --- |
 | CPB-001 | Consumable generic and OCCT Runtime contracts with standalone diagnostics | Owns AC-03 / Owns AC-04 / Supports AC-02 / Supports AC-05 | None | Verified | `work-items/CPB-001-runtime-and-diagnostics.md` |
 | CPB-002 | Reusable generation platform with a functioning OCCT provider and renamed solution | Owns AC-02 / Owns AC-05 | CPB-001: verified Runtime public surfaces, lifetime behavior, and direct analyzer-package consumption | Verified | `work-items/CPB-002-generation-platform.md` |
-| CPB-003 | Consistent authoritative repository identity and durable maintainer guidance | Owns AC-01 | CPB-002: verified integrated project graph, public identities, renamed solution, and real OCCT binding gates; CPB-001: verified package identities and consumption instructions | Implemented | `work-items/CPB-003-repository-identity.md` |
+| CPB-003 | Consistent authoritative repository identity and durable maintainer guidance | Owns AC-01 | CPB-002: verified integrated project graph, public identities, renamed solution, and real OCCT binding gates; CPB-001: verified package identities and consumption instructions | Verified | `work-items/CPB-003-repository-identity.md` |
 
 ## Integration constraints
 

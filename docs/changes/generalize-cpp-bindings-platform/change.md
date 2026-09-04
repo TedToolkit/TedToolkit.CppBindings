@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: migration -->
-<!-- change-status: in-progress -->
+<!-- change-status: completed -->
 <!-- delivery-shape: multi-item -->
 
 - Priority: P1
 <!-- approval-source: Maintainer approved the additional provider extension family and requested continuation with "继续" on 2026-09-04, following approval of the migration and identity dispositions. -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:37aee103432c23fef97885d67895bb99c870363a -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -33,8 +33,9 @@ coupling before a CGAL provider is introduced and includes the coordinated GitHu
   `TedToolkit.CppBindings.Occt.Runtime`, and the existing planned
   `TedToolkit.CppBindings.Occt.Windows` identity.
 - In scope: a dependency direction in which OCCT projects depend on the generic core and the core
-  has no OCCT, CGAL, native-library, or generated-declaration knowledge; mirrored tests and current
-  architecture, principles, and maintainer documentation.
+  has no OCCT- or CGAL-specific parsing/classification rules, concrete native-library identity, or
+  provider declaration-set knowledge; mirrored tests and current architecture, principles, and
+  maintainer documentation.
 - In scope: a built-in default Windows generation profile for the currently proved MSVC, cdecl,
   `win-x64`, native-build, and packaging conventions. A generic Windows package is created only if
   it later gains an independently useful responsibility.
