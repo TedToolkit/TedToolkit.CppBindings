@@ -4,7 +4,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
 $baselineRepository = (Resolve-Path (Join-Path $repository '../wic-base')).Path
-$proofRoot = Join-Path $repository "out/benchmark/occt-plan-proof-$([Guid]::NewGuid().ToString('N'))"
+$proofRoot = Join-Path ([IO.Path]::GetTempPath()) "occt-plan-proof-$([Guid]::NewGuid().ToString('N'))"
 $builder = Join-Path $PSScriptRoot 'New-OcctBenchmarkPlan.ps1'
 $matrixRunner = Join-Path $PSScriptRoot 'Invoke-BenchmarkMatrix.ps1'
 $adapter = Join-Path $PSScriptRoot 'Invoke-OcctBenchmarkWorkload.ps1'
