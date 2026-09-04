@@ -32,7 +32,8 @@ param(
     [ValidateSet('screening', 'full')] [string] $Scope = 'full',
     [ValidateSet('Debug', 'Release')] [string] $Configuration = 'Release',
     [ValidateRange(1, 64)] [int] $Parallelism = 8,
-    [string] $HarnessBinding = 'commit:PENDING-FINAL-HARNESS-COMMIT'
+    [string] $HarnessBinding = 'commit:PENDING-FINAL-HARNESS-COMMIT',
+    [hashtable] $FixtureVolumeIdentityOverrides
 )
 
 $ErrorActionPreference = 'Stop'
@@ -43,6 +44,7 @@ $candidateBehaviorRevision = '9952e5a76358028c22c8ec215a23d7b82413ad4f'
 $triplet = 'x64-windows'
 $planId = [Guid]::NewGuid().ToString('N')
 $utf8 = [Text.UTF8Encoding]::new($false)
+. (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 
 function Resolve-ExistingPath {
     param([string] $Path, [string] $Kind)
@@ -54,7 +56,7 @@ function Resolve-ExistingPath {
     if ($Kind -eq 'directory' -and -not (Test-Path -LiteralPath $resolved -PathType Container)) {
         throw "Expected a directory: $resolved"
     }
-    return [IO.Path]::GetFullPath($resolved)
+    return Resolve-BenchmarkPhysicalPath $resolved
 }
 
 function Assert-OrdinaryTree {
@@ -74,17 +76,19 @@ function Assert-OrdinaryTree {
 
 function Assert-NoReparseComponents {
     param([string] $Path)
-    $current = [IO.Path]::GetFullPath($Path)
-    while (-not [string]::IsNullOrEmpty($current)) {
-        if (Test-Path -LiteralPath $current) {
-            $item = Get-Item -LiteralPath $current -Force
-            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-                throw "Benchmark paths cannot contain reparse-point components: $($item.FullName)"
+    foreach ($candidate in @([IO.Path]::GetFullPath($Path), (Resolve-BenchmarkPhysicalPath $Path))) {
+        $current = $candidate
+        while (-not [string]::IsNullOrEmpty($current)) {
+            if (Test-Path -LiteralPath $current) {
+                $item = Get-Item -LiteralPath $current -Force
+                if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    throw "Benchmark paths cannot contain reparse-point components: $($item.FullName)"
+                }
             }
+            $parent = [IO.Path]::GetDirectoryName($current)
+            if ([string]::IsNullOrEmpty($parent) -or $parent -ceq $current) { break }
+            $current = $parent
         }
-        $parent = [IO.Path]::GetDirectoryName($current)
-        if ([string]::IsNullOrEmpty($parent) -or $parent -ceq $current) { break }
-        $current = $parent
     }
 }
 
@@ -92,10 +96,10 @@ function Assert-IsolatedRoots {
     param([hashtable] $Roots)
     $names = @($Roots.Keys)
     for ($leftIndex = 0; $leftIndex -lt $names.Count; $leftIndex++) {
-        $left = [IO.Path]::GetFullPath($Roots[$names[$leftIndex]]).TrimEnd('\', '/')
+        $left = (Resolve-BenchmarkPhysicalPath $Roots[$names[$leftIndex]]).TrimEnd('\', '/')
         Assert-NoReparseComponents $left
         for ($rightIndex = $leftIndex + 1; $rightIndex -lt $names.Count; $rightIndex++) {
-            $right = [IO.Path]::GetFullPath($Roots[$names[$rightIndex]]).TrimEnd('\', '/')
+            $right = (Resolve-BenchmarkPhysicalPath $Roots[$names[$rightIndex]]).TrimEnd('\', '/')
             if ($left.Equals($right, [StringComparison]::OrdinalIgnoreCase) -or
                 $left.StartsWith($right + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
                 $right.StartsWith($left + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -105,32 +109,15 @@ function Assert-IsolatedRoots {
     }
 }
 
-if (-not ('OcctBenchmarkNative.Volume' -as [type])) {
-    Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-namespace OcctBenchmarkNative {
-    public static class Volume {
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern bool GetVolumePathName(string fileName, StringBuilder volumePathName, int bufferLength);
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern bool GetVolumeNameForVolumeMountPoint(string volumeMountPoint, StringBuilder volumeName, int bufferLength);
-        public static string Identity(string path) {
-            var mount = new StringBuilder(1024);
-            if (!GetVolumePathName(path, mount, mount.Capacity)) throw new InvalidOperationException("GetVolumePathName failed: " + Marshal.GetLastWin32Error());
-            var volume = new StringBuilder(1024);
-            if (!GetVolumeNameForVolumeMountPoint(mount.ToString(), volume, volume.Capacity)) throw new InvalidOperationException("GetVolumeNameForVolumeMountPoint failed: " + Marshal.GetLastWin32Error());
-            return volume.ToString();
-        }
-    }
-}
-'@
-}
-
-function Get-VolumeIdentity {
+function Get-PlanVolumeIdentity {
     param([string] $Path)
-    [OcctBenchmarkNative.Volume]::Identity([IO.Path]::GetFullPath($Path))
+    $physical = Resolve-BenchmarkPhysicalPath $Path
+    if ($null -ne $FixtureVolumeIdentityOverrides -and $FixtureVolumeIdentityOverrides.ContainsKey($physical)) {
+        $identity = [string] $FixtureVolumeIdentityOverrides[$physical]
+        if ([string]::IsNullOrWhiteSpace($identity)) { throw 'Fixture volume identities must be nonempty.' }
+        return $identity
+    }
+    return Get-BenchmarkVolumeIdentity $physical
 }
 
 function Get-GitOutput {
@@ -174,9 +161,8 @@ function Read-HostReceipt {
     $hostRoot = Resolve-ExistingPath $receipt.HostDirectory directory
     Assert-NoReparseComponents $hostRoot
     Assert-OrdinaryTree $hostRoot
-    $entryPoint = [IO.Path]::GetFullPath((Join-Path $hostRoot $receipt.HostEntryPointRelativePath))
-    $prefix = $hostRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-    if (-not $entryPoint.StartsWith($prefix, [StringComparison]::OrdinalIgnoreCase)) {
+    $entryPoint = Resolve-BenchmarkPhysicalPath (Join-Path $hostRoot $receipt.HostEntryPointRelativePath)
+    if (-not (Test-BenchmarkPathWithin $entryPoint $hostRoot)) {
         throw 'A host receipt entry point escapes its complete-host directory.'
     }
     try { $assembly = [Reflection.AssemblyName]::GetAssemblyName($entryPoint) }
@@ -201,18 +187,18 @@ function Read-HostReceipt {
     }
     $publish = Get-Content -LiteralPath $publishPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
     $sourceRoot = Resolve-ExistingPath $receipt.SourceRepositoryRoot directory
-    $expectedProject = [IO.Path]::GetFullPath((Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'))
+    $expectedProject = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj')
     $expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net10.0',
         '--no-restore', '--output', $hostRoot, '--nologo')
     if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-host-publish' -or
         -not $publish.Succeeded -or $publish.ExitCode -ne 0 -or -not $publish.FreshHostDirectory -or
         -not $publish.SourceCleanBeforeAndAfter -or $publish.FixtureOnly -ne $receipt.FixtureOnly -or
         $publish.SourceRevision -cne $receipt.SourceRevision -or
-        -not [IO.Path]::GetFullPath($publish.SourceRepositoryRoot).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
-        -not [IO.Path]::GetFullPath($publish.ProjectPath).Equals($expectedProject, [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-BenchmarkPathEqual $publish.SourceRepositoryRoot $sourceRoot) -or
+        -not (Test-BenchmarkPathEqual $publish.ProjectPath $expectedProject) -or
         (Get-FileHash -LiteralPath $expectedProject -Algorithm SHA256).Hash -cne $publish.ProjectSha256 -or
-        -not [IO.Path]::GetFullPath($publish.HostDirectory).Equals($hostRoot, [StringComparison]::OrdinalIgnoreCase) -or
-        -not [IO.Path]::GetFullPath($publish.Command.WorkingDirectory).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
+        -not (Test-BenchmarkPathEqual $publish.HostDirectory $hostRoot) -or
+        -not (Test-BenchmarkPathEqual $publish.Command.WorkingDirectory $sourceRoot) -or
         $publish.Command.Executable -cne $publish.DotNetPath -or
         (@($publish.Command.Arguments) -join "`n") -cne ($expectedArguments -join "`n") -or
         $publish.Output -isnot [hashtable] -or $publish.Output.StandardOutput -isnot [string] -or
@@ -263,7 +249,9 @@ function Read-HostReceipt {
             }
         }
     }
-    return [pscustomobject]@{ Path = $resolved; Value = $receipt; HostRoot = $hostRoot; EntryPoint = $entryPoint }
+    return [pscustomobject]@{
+        Path = $resolved; Value = $receipt; HostRoot = $hostRoot; EntryPoint = $entryPoint; Publish = $publish
+    }
 }
 
 function Read-CanonicalManifest {
@@ -304,19 +292,19 @@ function Assert-ManifestContentEqual {
 function Assert-SafeArtifactRoot {
     param([string] $Root, [string[]] $RepositoryRoots, [string[]] $ForbiddenRoots)
 
-    $full = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/')
+    $full = (Resolve-BenchmarkPhysicalPath $Root).TrimEnd('\', '/')
     if ($full -ceq [IO.Path]::GetPathRoot($full).TrimEnd('\', '/') -or $full.Length -lt 12) {
         throw "Artifact root is too broad for managed cleanup: $full"
     }
     foreach ($repository in $RepositoryRoots) {
-        $other = [IO.Path]::GetFullPath($repository).TrimEnd('\', '/')
+        $other = (Resolve-BenchmarkPhysicalPath $repository).TrimEnd('\', '/')
         if ($full -ceq $other -or $other.StartsWith($full + [IO.Path]::DirectorySeparatorChar,
                 [StringComparison]::OrdinalIgnoreCase)) {
             throw "Artifact root is too broad and overlaps a repository: $full"
         }
     }
     foreach ($protected in $ForbiddenRoots) {
-        $other = [IO.Path]::GetFullPath($protected).TrimEnd('\', '/')
+        $other = (Resolve-BenchmarkPhysicalPath $protected).TrimEnd('\', '/')
         if ($full -ceq $other -or $full.StartsWith($other + [IO.Path]::DirectorySeparatorChar,
                 [StringComparison]::OrdinalIgnoreCase) -or
             $other.StartsWith($full + [IO.Path]::DirectorySeparatorChar,
@@ -373,9 +361,9 @@ function Get-ToolchainSnapshot {
         $compilerEnvironment.VSCMD_ARG_TGT_ARCH -cne 'x64') {
         throw 'vcvars64 did not select the x64 host and target.'
     }
-    $selectedCompiler = [IO.Path]::GetFullPath((Join-Path $compilerEnvironment.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe'))
+    $selectedCompiler = Resolve-BenchmarkPhysicalPath (Join-Path $compilerEnvironment.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe')
     if (-not (Test-Path -LiteralPath $selectedCompiler -PathType Leaf) -or
-        -not $selectedCompiler.Equals($compiler, [StringComparison]::OrdinalIgnoreCase)) {
+        -not (Test-BenchmarkPathEqual $selectedCompiler $compiler)) {
         throw 'The provided compiler is not the cl.exe selected by VCToolsInstallDir.'
     }
     $previous = @{}
@@ -416,7 +404,7 @@ function Get-ToolchainSnapshot {
     }
 }
 
-$destination = [IO.Path]::GetFullPath($SpecificationDirectory)
+$destination = Resolve-BenchmarkPhysicalPath $SpecificationDirectory
 if (Test-Path -LiteralPath $destination) { throw 'Use a new OCCT benchmark specification directory.' }
 if ($DeadlineUtc.ToUniversalTime() -le [DateTimeOffset]::UtcNow -or
     $DeadlineUtc.ToUniversalTime() -gt [DateTimeOffset]::UtcNow.AddHours(12)) {
@@ -460,8 +448,8 @@ if ($HarnessBinding -match '^commit:(?<sha>[0-9a-f]{40})$' -and $Matches.sha -cn
     throw 'The final HarnessBinding must equal the candidate repository HEAD.'
 }
 
-$baselineArtifact = [IO.Path]::GetFullPath($BaselineArtifactRoot)
-$candidateArtifact = [IO.Path]::GetFullPath($CandidateArtifactRoot)
+$baselineArtifact = Resolve-BenchmarkPhysicalPath $BaselineArtifactRoot
+$candidateArtifact = Resolve-BenchmarkPhysicalPath $CandidateArtifactRoot
 if ($baselineArtifact.Length -ne $candidateArtifact.Length) {
     throw 'Baseline and candidate artifact roots must have equal absolute path lengths.'
 }
@@ -541,8 +529,7 @@ foreach ($variant in @('baseline', 'candidate')) {
     $expectedRepository = if ($variant -eq 'baseline') { $baselineRepository } else { $candidateRepository }
     $receipt = $hostReceipts[$variant].original.Value
     if (-not $receipt.FixtureOnly -and
-        -not [IO.Path]::GetFullPath($receipt.SourceRepositoryRoot).Equals($expectedRepository,
-            [StringComparison]::OrdinalIgnoreCase)) {
+        -not (Test-BenchmarkPathEqual $receipt.SourceRepositoryRoot $expectedRepository)) {
         throw "$variant original host must be built from the measured clean repository root."
     }
 }
@@ -599,6 +586,15 @@ $ninjaMetricsTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-NinjaBuil
 $exportInventoryTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-OcctExportInventory.ps1') file
 $hostPublisher = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Publish-OcctBenchmarkHost.ps1') file
 $hostReceiptTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'New-OcctBenchmarkHostReceipt.ps1') file
+$pathTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'BenchmarkPath.ps1') file
+$dotnetSha256 = (Get-FileHash -LiteralPath $dotnet -Algorithm SHA256).Hash
+foreach ($receipt in @($hostReceipts.baseline.original, $hostReceipts.baseline.changed,
+        $hostReceipts.candidate.original, $hostReceipts.candidate.changed)) {
+    if (-not (Test-BenchmarkPathEqual $receipt.Publish.DotNetPath $dotnet) -or
+        $receipt.Publish.DotNetSha256 -cne $dotnetSha256) {
+        throw 'Every Console host publish must use the plan-resolved dotnet path and SHA-256.'
+    }
+}
 $toolchainSnapshot = Get-ToolchainSnapshot
 
 $isolationRoots = [ordered]@{
@@ -622,8 +618,8 @@ foreach ($variant in @('baseline', 'candidate')) {
     if (-not $changedReceipt.FixtureOnly) {
         $changedSource = Resolve-ExistingPath $changedReceipt.SourceRepositoryRoot directory
         foreach ($root in $isolationRoots.Values) {
-            $left = [IO.Path]::GetFullPath($changedSource).TrimEnd('\', '/')
-            $right = [IO.Path]::GetFullPath($root).TrimEnd('\', '/')
+            $left = (Resolve-BenchmarkPhysicalPath $changedSource).TrimEnd('\', '/')
+            $right = (Resolve-BenchmarkPhysicalPath $root).TrimEnd('\', '/')
             if ($left.Equals($right, [StringComparison]::OrdinalIgnoreCase) -or
                 $left.StartsWith($right + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
                 $right.StartsWith($left + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -710,19 +706,34 @@ foreach ($variant in @('baseline', 'candidate')) {
         SchemaVersion = 1; PlanId = $planId; Variant = $variant
     })
 }
-$artifactVolume = Get-VolumeIdentity $baselineArtifact
-if ($artifactVolume -cne (Get-VolumeIdentity $candidateArtifact) -or
-    $artifactVolume -cne (Get-VolumeIdentity $candidateRepository)) {
-    throw 'Measured artifact roots and the repository resource-preflight root must share one physical volume.'
-}
-
 $planPath = Join-Path $destination 'occt-plan.json'
 $receiptValues = @($hostReceipts.baseline.original.Value, $hostReceipts.baseline.changed.Value,
     $hostReceipts.candidate.original.Value, $hostReceipts.candidate.changed.Value)
 $fixtureOnlyPlan = [bool] ($gateSpec.FixtureOnly -or @($receiptValues | Where-Object FixtureOnly).Count -gt 0)
+if ($null -ne $FixtureVolumeIdentityOverrides -and -not $fixtureOnlyPlan) {
+    throw 'Injected volume identities are allowed only for fixture-only plan verification.'
+}
+$sameVolumeRoots = [ordered]@{
+    specification = $destination
+    candidateRepository = $candidateRepository
+    baselineArtifact = $baselineArtifact
+    candidateArtifact = $candidateArtifact
+    baselineInput = $baselineInput
+    candidateInput = $candidateInput
+    baselineOriginalHost = $hostReceipts.baseline.original.HostRoot
+    baselineChangedHost = $hostReceipts.baseline.changed.HostRoot
+    candidateOriginalHost = $hostReceipts.candidate.original.HostRoot
+    candidateChangedHost = $hostReceipts.candidate.changed.HostRoot
+}
+$artifactVolume = Get-PlanVolumeIdentity $baselineArtifact
+foreach ($entry in $sameVolumeRoots.GetEnumerator()) {
+    if ((Get-PlanVolumeIdentity $entry.Value) -cne $artifactVolume) {
+        throw "Benchmark repository, specification/report, artifacts, inputs, and hosts must share one physical volume: $($entry.Key)"
+    }
+}
 $fileBindings = [Collections.Generic.List[object]]::new()
 foreach ($path in @($inputManifestPath, $originalHeaderCopy, $changedHeaderCopy, $adapterPath,
-        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool,
+        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool, $pathTool,
         $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate, $hosts.baseline.original, $hosts.baseline.changed,
         $hosts.candidate.original, $hosts.candidate.changed, $hostReceipts.baseline.original.Path,
@@ -733,8 +744,7 @@ foreach ($path in @($inputManifestPath, $originalHeaderCopy, $changedHeaderCopy,
     $fileBindings.Add((Get-FileBinding $path))
 }
 foreach ($receipt in $receiptValues) {
-    if (-not [IO.Path]::GetFullPath($receipt.PublishWrapperPath).Equals($hostPublisher,
-            [StringComparison]::OrdinalIgnoreCase)) {
+    if (-not (Test-BenchmarkPathEqual $receipt.PublishWrapperPath $hostPublisher)) {
         throw 'Host receipts must be produced by the bound benchmark host publisher.'
     }
     foreach ($path in @($receipt.PublishCompletionReceiptPath, $receipt.PublishWrapperPath, $receipt.FrozenPatchPath) |
@@ -744,6 +754,22 @@ foreach ($receipt in $receiptValues) {
     }
 }
 foreach ($binding in $gateSpec.InputFiles) { $fileBindings.Add((Get-FileBinding (Resolve-ExistingPath $binding.Path file))) }
+
+$hostPublishBindings = @(
+    foreach ($variant in @('baseline', 'candidate')) {
+        foreach ($state in @('original', 'changed')) {
+            $hostReceipt = $hostReceipts[$variant][$state]
+            [ordered]@{
+                Variant = $variant
+                State = $state
+                HostReceiptPath = $hostReceipt.Path
+                PublishCompletionReceiptPath = Resolve-ExistingPath $hostReceipt.Value.PublishCompletionReceiptPath file
+                DotNetPath = $dotnet
+                DotNetSha256 = $dotnetSha256
+            }
+        }
+    }
+)
 
 $plan = [ordered]@{
     SchemaVersion = 1
@@ -765,6 +791,7 @@ $plan = [ordered]@{
     GeneratorChangePatchSha256 = $hostReceipts.baseline.changed.Value.FrozenPatchSha256
     FrozenInputManifest = $inputManifestPath
     FrozenFileBindings = @($fileBindings.ToArray())
+    HostPublishBindings = $hostPublishBindings
     ToolchainVcpkgRoot = $toolchainVcpkg
     ToolchainFile = $toolchainFile
     ToolchainStatusFile = $toolchainStatus
@@ -795,7 +822,7 @@ $plan = [ordered]@{
     Tools = [ordered]@{
         DotNet = $dotnet; CMake = $cmake; Ninja = $ninja; Compiler = $compiler; VcVars = $vcvars
         Manifest = $manifestTool; NinjaMetrics = $ninjaMetricsTool; ExportInventory = $exportInventoryTool
-        HostPublisher = $hostPublisher; HostReceipt = $hostReceiptTool
+        HostPublisher = $hostPublisher; HostReceipt = $hostReceiptTool; PathIdentity = $pathTool
     }
     Variants = [ordered]@{
         baseline = [ordered]@{
@@ -844,7 +871,7 @@ foreach ($workload in @('artifact-cold', 'unchanged', 'declaration-edit', 'gener
 
 $boundFiles = [Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($path in @($planPath, $inputManifestPath, $originalHeaderCopy, $changedHeaderCopy, $adapterPath,
-        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool,
+        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool, $pathTool,
         $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate)) { $null = $boundFiles.Add($path) }
 foreach ($binding in $fileBindings) { $null = $boundFiles.Add($binding.Path) }
@@ -852,6 +879,8 @@ foreach ($binding in $fileBindings) { $null = $boundFiles.Add($binding.Path) }
 $matrixPath = Join-Path $destination 'matrix.json'
 Write-NewJson $matrixPath ([ordered]@{
     RepositoryRoot = $candidateRepository
+    ArtifactProbePath = $baselineArtifact
+    ArtifactVolumeIdentity = $artifactVolume
     Scope = $Scope
     DeadlineUtc = $DeadlineUtc.ToUniversalTime().ToString('O')
     MemoryLimitBytes = $MemoryLimitBytes

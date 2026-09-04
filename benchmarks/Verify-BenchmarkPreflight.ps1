@@ -34,7 +34,9 @@ foreach ($case in $cases) {
 $before = (Get-FileHash -LiteralPath $scriptPath -Algorithm SHA256).Hash
 $rejected = $false
 try {
-    & $scriptPath -RepositoryRoot $PSScriptRoot -ReportPath $scriptPath
+    . (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
+    & $scriptPath -RepositoryRoot $PSScriptRoot -ReportPath $scriptPath -ArtifactProbePath $PSScriptRoot `
+        -ExpectedArtifactVolumeIdentity (Get-BenchmarkVolumeIdentity $PSScriptRoot)
 }
 catch { $rejected = $_.Exception.Message -like 'Refusing to overwrite an existing report:*' }
 if (-not $rejected) { throw 'The existing-report guard did not reject the destination.' }

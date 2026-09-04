@@ -1,4 +1,9 @@
-param([string] $RepositoryRoot, [string] $ReportPath)
+param(
+    [string] $RepositoryRoot,
+    [string] $ReportPath,
+    [string] $ArtifactProbePath,
+    [string] $ExpectedArtifactVolumeIdentity
+)
 $ErrorActionPreference = 'Stop'
 # Deterministic orchestration fixture only; never use this for machine readiness.
 @{

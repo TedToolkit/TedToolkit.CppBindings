@@ -15,6 +15,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $utf8 = [Text.UTF8Encoding]::new($false)
+. (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 
 function Invoke-Git {
     param([string[]] $Arguments)
@@ -46,13 +47,12 @@ function Assert-ManagedConsoleHost {
     return $name.FullName
 }
 
-$receipt = [IO.Path]::GetFullPath($ReceiptPath)
+$receipt = Resolve-BenchmarkPhysicalPath $ReceiptPath
 if (Test-Path -LiteralPath $receipt) { throw 'Refusing to overwrite a host receipt.' }
-$sourceRoot = (Resolve-Path -LiteralPath $SourceRepositoryRoot).Path
-$hostRoot = (Resolve-Path -LiteralPath $HostDirectory).Path
-$entryPoint = [IO.Path]::GetFullPath((Join-Path $hostRoot $HostEntryPointRelativePath))
-$hostPrefix = $hostRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-if (-not $entryPoint.StartsWith($hostPrefix, [StringComparison]::OrdinalIgnoreCase) -or
+$sourceRoot = Resolve-BenchmarkPhysicalPath $SourceRepositoryRoot
+$hostRoot = Resolve-BenchmarkPhysicalPath $HostDirectory
+$entryPoint = Resolve-BenchmarkPhysicalPath (Join-Path $hostRoot $HostEntryPointRelativePath)
+if (-not (Test-BenchmarkPathWithin $entryPoint $hostRoot) -or
     -not (Test-Path -LiteralPath $entryPoint -PathType Leaf)) {
     throw 'The host entry point must be a file inside HostDirectory.'
 }
@@ -72,7 +72,7 @@ if ($State -eq 'original') {
 }
 else {
     if (-not $FrozenPatchPath) { throw 'A changed host requires the frozen source patch.' }
-    $patchPath = (Resolve-Path -LiteralPath $FrozenPatchPath).Path
+    $patchPath = Resolve-BenchmarkPhysicalPath $FrozenPatchPath
     $patchBytes = [IO.File]::ReadAllBytes($patchPath)
     if ($patchBytes.Length -eq 0 -or $patchBytes.Length -ne $deltaBytes.Length -or
         [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($patchBytes)) -cne
@@ -82,22 +82,22 @@ else {
     $patchHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($patchBytes))
 }
 
-$publishReceiptPath = (Resolve-Path -LiteralPath $PublishCompletionReceiptPath).Path
+$publishReceiptPath = Resolve-BenchmarkPhysicalPath $PublishCompletionReceiptPath
 $publish = Get-Content -LiteralPath $publishReceiptPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
-$expectedProject = [IO.Path]::GetFullPath((Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'))
+$expectedProject = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj')
 $expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net10.0',
     '--no-restore', '--output', $hostRoot, '--nologo')
 if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-host-publish' -or
     -not $publish.Succeeded -or $publish.ExitCode -ne 0 -or -not $publish.FreshHostDirectory -or
     -not $publish.SourceCleanBeforeAndAfter -or $publish.SourceRevision -cne $sourceRevision -or
-    -not [IO.Path]::GetFullPath($publish.SourceRepositoryRoot).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
-    -not [IO.Path]::GetFullPath($publish.ProjectPath).Equals($expectedProject, [StringComparison]::OrdinalIgnoreCase) -or
+    -not (Test-BenchmarkPathEqual $publish.SourceRepositoryRoot $sourceRoot) -or
+    -not (Test-BenchmarkPathEqual $publish.ProjectPath $expectedProject) -or
     $publish.ProjectRelativePath -cne 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj' -or
     (Get-FileHash -LiteralPath $expectedProject -Algorithm SHA256).Hash -cne $publish.ProjectSha256 -or
-    -not [IO.Path]::GetFullPath($publish.HostDirectory).Equals($hostRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    -not (Test-BenchmarkPathEqual $publish.HostDirectory $hostRoot) -or
     $publish.HostEntryPointRelativePath -cne $HostEntryPointRelativePath.Replace('\', '/') -or
-    -not [IO.Path]::GetFullPath($publish.Command.WorkingDirectory).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
-    $publish.Command.Executable -cne $publish.DotNetPath -or
+    -not (Test-BenchmarkPathEqual $publish.Command.WorkingDirectory $sourceRoot) -or
+    -not (Test-BenchmarkPathEqual $publish.Command.Executable $publish.DotNetPath) -or
     (@($publish.Command.Arguments) -join "`n") -cne ($expectedArguments -join "`n") -or
     $publish.Output -isnot [hashtable] -or $publish.Output.StandardOutput -isnot [string] -or
     $publish.Output.StandardError -isnot [string] -or $publish.HostFiles -isnot [array] -or
@@ -105,7 +105,7 @@ if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-hos
     throw 'The host publish completion receipt does not prove the exact fresh build relationship.'
 }
 foreach ($bindingName in @('DotNet', 'PublishWrapper')) {
-    $boundPath = (Resolve-Path -LiteralPath $publish["${bindingName}Path"]).Path
+    $boundPath = Resolve-BenchmarkPhysicalPath $publish["${bindingName}Path"]
     if ((Get-FileHash -LiteralPath $boundPath -Algorithm SHA256).Hash -cne $publish["${bindingName}Sha256"]) {
         throw "The host publish $bindingName binding changed."
     }

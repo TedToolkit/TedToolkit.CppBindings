@@ -9,9 +9,11 @@ $toolRoot = Join-Path $proofRoot 'fixture-tools'
 $null = New-Item -ItemType Directory -Path $toolRoot
 # Test scheduling/control flow without launching builds or faking real benchmark evidence.
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'Invoke-BenchmarkMatrix.ps1') -Destination $toolRoot
+Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'BenchmarkPath.ps1') -Destination $toolRoot
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/MatrixStage.ps1') -Destination (Join-Path $toolRoot 'Measure-BenchmarkStage.ps1')
 Copy-Item -LiteralPath (Join-Path $PSScriptRoot 'fixtures/MatrixEnvironment.ps1') -Destination (Join-Path $toolRoot 'Get-BenchmarkEnvironment.ps1')
 $runner = Join-Path $toolRoot 'Invoke-BenchmarkMatrix.ps1'
+. (Join-Path $toolRoot 'BenchmarkPath.ps1')
 $pwshPath = (Get-Process -Id $PID).Path
 $deadline = [DateTimeOffset]::UtcNow.AddMinutes(10).ToString('O')
 
@@ -44,7 +46,9 @@ function New-MatrixFixture {
     return @{
         Root = $root; Path = (Join-Path $root 'matrix.json'); Report = (Join-Path $root 'report')
         Specification = @{
-            RepositoryRoot = $root; Scope = 'screening'; DeadlineUtc = $deadline
+            RepositoryRoot = $root; ArtifactProbePath = $root
+            ArtifactVolumeIdentity = Get-BenchmarkVolumeIdentity $root
+            Scope = 'screening'; DeadlineUtc = $deadline
             MemoryLimitBytes = 2GB; MemoryReserveBytes = 1GB
             InputFiles = @(@{ Path = $inputPath; Sha256 = (Get-FileHash -LiteralPath $inputPath).Hash })
             Workloads = @($workloads)
@@ -73,6 +77,7 @@ function Assert-CompleteBindings {
         $runner,
         (Join-Path $toolRoot 'Measure-BenchmarkStage.ps1'),
         (Join-Path $toolRoot 'Get-BenchmarkEnvironment.ps1'),
+        (Join-Path $toolRoot 'BenchmarkPath.ps1'),
         (Join-Path $Fixture.Root 'input.txt'),
         (Join-Path $Fixture.Root 'success-stage.json'),
         (Join-Path $Fixture.Root 'verify-stage.json')

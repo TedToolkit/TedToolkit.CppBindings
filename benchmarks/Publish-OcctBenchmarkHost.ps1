@@ -12,6 +12,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $utf8 = [Text.UTF8Encoding]::new($false)
 $consoleProjectRelativePath = 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'
+. (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 
 function Invoke-Git {
     param([string[]] $Arguments)
@@ -44,29 +45,24 @@ function Get-HostManifest {
     return @($files.ToArray())
 }
 
-$receipt = [IO.Path]::GetFullPath($CompletionReceiptPath)
-$sourceRoot = (Resolve-Path -LiteralPath $SourceRepositoryRoot).Path
-$hostRoot = [IO.Path]::GetFullPath($HostDirectory)
-$dotnet = (Resolve-Path -LiteralPath $DotNetPath).Path
+$receipt = Resolve-BenchmarkPhysicalPath $CompletionReceiptPath
+$sourceRoot = Resolve-BenchmarkPhysicalPath $SourceRepositoryRoot
+$hostRoot = Resolve-BenchmarkPhysicalPath $HostDirectory
+$dotnet = Resolve-BenchmarkPhysicalPath $DotNetPath
 if ($ExpectedSourceRevision -notmatch '^[0-9a-f]{40}$') { throw 'ExpectedSourceRevision must be a lowercase full Git SHA.' }
 if (Test-Path -LiteralPath $receipt) { throw 'Refusing to overwrite a host publish completion receipt.' }
 if (Test-Path -LiteralPath $hostRoot) { throw 'HostDirectory must be absent so the publish output is provably fresh.' }
 if (-not (Test-Path -LiteralPath $dotnet -PathType Leaf)) { throw 'DotNetPath must be an existing executable file.' }
-$sourcePrefix = $sourceRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-$hostPrefix = $hostRoot.TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
-if ($hostRoot.Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
-    $hostRoot.StartsWith($sourcePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+if (Test-BenchmarkPathWithin $hostRoot $sourceRoot -OrEqual) {
     throw 'HostDirectory must be outside the source repository.'
 }
-if ($receipt.Equals($hostRoot, [StringComparison]::OrdinalIgnoreCase) -or
-    $receipt.StartsWith($hostPrefix, [StringComparison]::OrdinalIgnoreCase) -or
-    $receipt.Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
-    $receipt.StartsWith($sourcePrefix, [StringComparison]::OrdinalIgnoreCase)) {
+if ((Test-BenchmarkPathWithin $receipt $hostRoot -OrEqual) -or
+    (Test-BenchmarkPathWithin $receipt $sourceRoot -OrEqual)) {
     throw 'The completion receipt must be outside both the fresh host and source repository.'
 }
 
-$project = [IO.Path]::GetFullPath((Join-Path $sourceRoot $consoleProjectRelativePath))
-if (-not $project.StartsWith($sourcePrefix, [StringComparison]::OrdinalIgnoreCase) -or
+$project = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot $consoleProjectRelativePath)
+if (-not (Test-BenchmarkPathWithin $project $sourceRoot) -or
     -not (Test-Path -LiteralPath $project -PathType Leaf)) {
     throw 'The exact OCCT Console project is missing from the source repository.'
 }
@@ -124,7 +120,7 @@ if ($assembly.Name -cne 'TedToolkit.CppBindings.Occt.Console') {
     throw 'The fresh publish produced the wrong managed assembly.'
 }
 
-$wrapper = (Resolve-Path -LiteralPath $PSCommandPath).Path
+$wrapper = Resolve-BenchmarkPhysicalPath $PSCommandPath
 $document = [ordered]@{
     SchemaVersion = 1
     ReceiptKind = 'occt-console-host-publish'
