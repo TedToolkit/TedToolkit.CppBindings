@@ -328,22 +328,29 @@ function Get-ToolchainSnapshot {
     foreach ($line in $environmentLines) {
         if ($line -match '^([^=]+)=(.*)$') { $compilerEnvironment[$Matches[1]] = $Matches[2] }
     }
-    foreach ($name in @('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion', 'VSCMD_ARG_TGT_ARCH')) {
+    $requiredEnvironment = @(
+        'VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion',
+        'VSCMD_ARG_HOST_ARCH', 'VSCMD_ARG_TGT_ARCH', 'INCLUDE', 'LIB', 'LIBPATH'
+    )
+    foreach ($name in $requiredEnvironment) {
         if (-not $compilerEnvironment.ContainsKey($name) -or [string]::IsNullOrWhiteSpace($compilerEnvironment[$name])) {
             throw "vcvars64 did not select required environment member: $name"
         }
     }
-    if ($compilerEnvironment.VSCMD_ARG_TGT_ARCH -cne 'x64') { throw 'vcvars64 did not select the x64 target.' }
+    if ($compilerEnvironment.VSCMD_ARG_HOST_ARCH -cne 'x64' -or
+        $compilerEnvironment.VSCMD_ARG_TGT_ARCH -cne 'x64') {
+        throw 'vcvars64 did not select the x64 host and target.'
+    }
+    $selectedCompiler = [IO.Path]::GetFullPath((Join-Path $compilerEnvironment.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe'))
+    if (-not (Test-Path -LiteralPath $selectedCompiler -PathType Leaf) -or
+        -not $selectedCompiler.Equals($compiler, [StringComparison]::OrdinalIgnoreCase)) {
+        throw 'The provided compiler is not the cl.exe selected by VCToolsInstallDir.'
+    }
     $previous = @{}
     try {
         foreach ($entry in $compilerEnvironment.GetEnumerator()) {
             $previous[$entry.Key] = [Environment]::GetEnvironmentVariable($entry.Key, 'Process')
             [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process')
-        }
-        $selectedCompiler = @(& where.exe cl.exe 2>$null | Select-Object -First 1)
-        if ($LASTEXITCODE -ne 0 -or $selectedCompiler.Count -ne 1 -or
-            -not [IO.Path]::GetFullPath($selectedCompiler[0]).Equals($compiler, [StringComparison]::OrdinalIgnoreCase)) {
-            throw 'The provided compiler is not the cl.exe selected by vcvars64.'
         }
         $compilerBv = @(& $compiler /Bv 2>&1)
         if ($LASTEXITCODE -ne 0 -or $compilerBv.Count -eq 0) { throw 'The selected compiler /Bv probe failed.' }
@@ -364,7 +371,11 @@ function Get-ToolchainSnapshot {
         VCToolsInstallDir = $compilerEnvironment.VCToolsInstallDir
         WindowsSdkDir = $compilerEnvironment.WindowsSdkDir
         WindowsSDKVersion = $compilerEnvironment.WindowsSDKVersion
+        HostArchitecture = $compilerEnvironment.VSCMD_ARG_HOST_ARCH
         TargetArchitecture = $compilerEnvironment.VSCMD_ARG_TGT_ARCH
+        Include = $compilerEnvironment.INCLUDE
+        Lib = $compilerEnvironment.LIB
+        LibPath = $compilerEnvironment.LIBPATH
         CompilerBv = $compilerBv -join "`n"
         CMakeVersion = $cmakeVersion -join "`n"
         NinjaVersion = $ninjaVersion -join "`n"
