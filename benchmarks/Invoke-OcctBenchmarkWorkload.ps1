@@ -32,6 +32,12 @@ function Assert-Hash {
     }
 }
 
+function Assert-FrozenBindings {
+    foreach ($binding in $plan.FrozenFileBindings) {
+        Assert-Hash $binding.Path $binding.Sha256
+    }
+}
+
 function Assert-WithinRoot {
     param([string] $Path, [string] $Root)
     $fullPath = [IO.Path]::GetFullPath($Path)
@@ -40,6 +46,88 @@ function Assert-WithinRoot {
         throw "Path escapes its isolated benchmark root: $fullPath"
     }
     return $fullPath
+}
+
+function Assert-NoReparseComponents {
+    param([string] $Path)
+    $current = [IO.Path]::GetFullPath($Path)
+    while (-not [string]::IsNullOrEmpty($current)) {
+        if (Test-Path -LiteralPath $current) {
+            $item = Get-Item -LiteralPath $current -Force
+            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                throw "Benchmark paths cannot contain reparse-point components: $($item.FullName)"
+            }
+        }
+        $parent = [IO.Path]::GetDirectoryName($current)
+        if ([string]::IsNullOrEmpty($parent) -or $parent -ceq $current) { break }
+        $current = $parent
+    }
+}
+
+function Assert-NoNestedReparse {
+    param([string] $Root)
+    $reparse = Get-ChildItem -LiteralPath $Root -Recurse -Force |
+        Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint } |
+        Select-Object -First 1
+    if ($null -ne $reparse) { throw "Benchmark tree contains a nested reparse point: $($reparse.FullName)" }
+}
+
+function Assert-IsolatedRoots {
+    $roots = [ordered]@{
+        baselineRepository = $plan.Variants.baseline.RepositoryRoot
+        candidateRepository = $plan.Variants.candidate.RepositoryRoot
+        baselineInput = $plan.Variants.baseline.InputVcpkgRoot
+        candidateInput = $plan.Variants.candidate.InputVcpkgRoot
+        toolchainVcpkg = $plan.ToolchainVcpkgRoot
+        baselineArtifact = $plan.Variants.baseline.ArtifactRoot
+        candidateArtifact = $plan.Variants.candidate.ArtifactRoot
+        canonicalArtifact = $plan.Canonical.ArtifactRoot
+        baselineOriginalHost = $plan.Variants.baseline.OriginalHostRoot
+        baselineChangedHost = $plan.Variants.baseline.ChangedHostRoot
+        candidateOriginalHost = $plan.Variants.candidate.OriginalHostRoot
+        candidateChangedHost = $plan.Variants.candidate.ChangedHostRoot
+    }
+    $names = @($roots.Keys)
+    for ($leftIndex = 0; $leftIndex -lt $names.Count; $leftIndex++) {
+        $left = [IO.Path]::GetFullPath($roots[$names[$leftIndex]]).TrimEnd('\', '/')
+        Assert-NoReparseComponents $left
+        for ($rightIndex = $leftIndex + 1; $rightIndex -lt $names.Count; $rightIndex++) {
+            $right = [IO.Path]::GetFullPath($roots[$names[$rightIndex]]).TrimEnd('\', '/')
+            if ($left.Equals($right, [StringComparison]::OrdinalIgnoreCase) -or
+                $left.StartsWith($right + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
+                $right.StartsWith($left + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
+                throw "Benchmark roots overlap physically or by case: $($names[$leftIndex]) / $($names[$rightIndex])"
+            }
+        }
+    }
+}
+
+if (-not ('OcctBenchmarkNative.Volume' -as [type])) {
+    Add-Type -TypeDefinition @'
+using System;
+using System.Runtime.InteropServices;
+using System.Text;
+namespace OcctBenchmarkNative {
+    public static class Volume {
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool GetVolumePathName(string fileName, StringBuilder volumePathName, int bufferLength);
+        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
+        private static extern bool GetVolumeNameForVolumeMountPoint(string volumeMountPoint, StringBuilder volumeName, int bufferLength);
+        public static string Identity(string path) {
+            var mount = new StringBuilder(1024);
+            if (!GetVolumePathName(path, mount, mount.Capacity)) throw new InvalidOperationException("GetVolumePathName failed: " + Marshal.GetLastWin32Error());
+            var volume = new StringBuilder(1024);
+            if (!GetVolumeNameForVolumeMountPoint(mount.ToString(), volume, volume.Capacity)) throw new InvalidOperationException("GetVolumeNameForVolumeMountPoint failed: " + Marshal.GetLastWin32Error());
+            return volume.ToString();
+        }
+    }
+}
+'@
+}
+
+function Get-VolumeIdentity {
+    param([string] $Path)
+    [OcctBenchmarkNative.Volume]::Identity([IO.Path]::GetFullPath($Path))
 }
 
 function Assert-RootMarker {
@@ -161,6 +249,88 @@ function Assert-CompleteArtifacts {
     }
 }
 
+function Assert-ManifestOracle {
+    param($Actual, [string] $OraclePath)
+    $oracle = Read-Json $OraclePath
+    if ($Actual.FileCount -ne $oracle.FileCount -or $Actual.TotalBytes -ne $oracle.TotalBytes) {
+        throw 'Generated artifacts differ from the canonical baseline oracle.'
+    }
+    for ($index = 0; $index -lt $Actual.Files.Count; $index++) {
+        $left = $Actual.Files[$index]
+        $right = $oracle.Files[$index]
+        if ($left.Path -cne $right.Path -or $left.Bytes -ne $right.Bytes -or $left.Sha256 -cne $right.Sha256) {
+            throw "Generated artifacts differ from the canonical baseline oracle at $($left.Path)."
+        }
+    }
+}
+
+function Expand-NativeGateArguments {
+    param([string] $ArtifactRoot, [string] $Phase)
+    $values = @{
+        '{ArtifactRoot}' = $ArtifactRoot
+        '{GeneratedRoot}' = Join-Path $ArtifactRoot 'generated'
+        '{NativeBuildRoot}' = Join-Path $ArtifactRoot 'native-build'
+        '{Variant}' = $Variant
+        '{Workload}' = $Workload
+        '{Phase}' = $Phase
+    }
+    foreach ($argument in $plan.NativeGate.Arguments) {
+        if ($values.ContainsKey($argument)) { $values[$argument] } else { $argument }
+    }
+}
+
+function Invoke-NativeGate {
+    param([string] $ArtifactRoot, [string] $Phase)
+    Push-Location $plan.NativeGate.WorkingDirectory
+    try { Invoke-Checked $plan.NativeGate.Executable @(Expand-NativeGateArguments $ArtifactRoot $Phase) }
+    finally { Pop-Location }
+}
+
+function Assert-CanonicalBoundary {
+    $manifestPath = Join-Path $sample 'canonical-pre-artifacts.json'
+    $canonicalGenerated = Join-Path $plan.Canonical.ArtifactRoot 'generated'
+    $arguments = @('-NoProfile', '-File', $plan.Tools.Manifest, '-Roots',
+        (Join-Path $canonicalGenerated 'csharp'), (Join-Path $canonicalGenerated 'cpp'), '-Files',
+        (Join-Path $canonicalGenerated 'unsupported-headers.txt'), '-ReportPath', $manifestPath)
+    Invoke-Checked (Get-Process -Id $PID).Path $arguments
+    Assert-ManifestOracle (Read-Json $manifestPath) $plan.Canonical.OriginalManifest
+    $exportsPath = Join-Path $sample 'canonical-pre-exports.json'
+    Invoke-Checked (Get-Process -Id $PID).Path @('-NoProfile', '-File', $plan.Tools.ExportInventory,
+        '-SourcePath', (Join-Path $canonicalGenerated 'cpp/NativeFunctionTable.cpp'),
+        '-ReportPath', $exportsPath, '-CompareTo', $plan.Canonical.OriginalExportInventory)
+    if (-not (Read-Json $exportsPath).Comparison.EqualOrderedExports) {
+        throw 'The immutable canonical export boundary changed.'
+    }
+}
+
+function Assert-ToolchainSnapshot {
+    $previous = Use-CompilerEnvironment
+    try {
+        foreach ($name in @('VCToolsInstallDir', 'WindowsSdkDir', 'WindowsSDKVersion')) {
+            if ([Environment]::GetEnvironmentVariable($name, 'Process') -cne $plan.ToolchainSnapshot[$name]) {
+                throw "vcvars-selected toolchain changed: $name"
+            }
+        }
+        $selectedCompiler = @(& where.exe cl.exe 2>$null | Select-Object -First 1)
+        if ($LASTEXITCODE -ne 0 -or $selectedCompiler.Count -ne 1 -or
+            -not [IO.Path]::GetFullPath($selectedCompiler[0]).Equals($plan.Tools.Compiler,
+                [StringComparison]::OrdinalIgnoreCase)) { throw 'vcvars64 selected a different compiler.' }
+        $compilerBv = @(& $plan.Tools.Compiler /Bv 2>&1)
+        if ($LASTEXITCODE -ne 0 -or ($compilerBv -join "`n") -cne $plan.ToolchainSnapshot.CompilerBv) {
+            throw 'The selected compiler /Bv identity changed.'
+        }
+        $cmakeVersion = @(& $plan.Tools.CMake --version 2>&1)
+        $ninjaVersion = @(& $plan.Tools.Ninja --version 2>&1)
+        $dotnetInfo = @(& $plan.Tools.DotNet --info 2>&1)
+        if (($cmakeVersion -join "`n") -cne $plan.ToolchainSnapshot.CMakeVersion -or
+            ($ninjaVersion -join "`n") -cne $plan.ToolchainSnapshot.NinjaVersion -or
+            ($dotnetInfo -join "`n") -cne $plan.ToolchainSnapshot.DotNetInfo) {
+            throw 'The pinned CMake, Ninja, or dotnet environment changed.'
+        }
+    }
+    finally { Restore-Environment $previous }
+}
+
 function Copy-NewFile {
     param([string] $Source, [string] $Destination)
     $stream = [IO.File]::Open($Destination, 'CreateNew', 'Write', 'None')
@@ -187,12 +357,22 @@ if ($plan.HarnessBinding -ceq 'commit:PENDING-FINAL-HARNESS-COMMIT') {
 if ($plan.HarnessBinding -cne "commit:$($plan.CandidateHead)") {
     throw 'Harness binding and candidate HEAD differ.'
 }
-foreach ($binding in $plan.FrozenFileBindings) { Assert-Hash $binding.Path $binding.Sha256 }
+if ($plan.FixtureOnly) { throw 'Fixture-only OCCT plans cannot execute workloads.' }
 if ($plan.Variants.baseline.ArtifactRoot.Length -ne $plan.Variants.candidate.ArtifactRoot.Length -or
     $plan.Variants.baseline.InputVcpkgRoot.Length -ne $plan.Variants.candidate.InputVcpkgRoot.Length -or
     $plan.Variants.baseline.InputVcpkgRoot -ceq $plan.ToolchainVcpkgRoot -or
     $plan.Variants.candidate.InputVcpkgRoot -ceq $plan.ToolchainVcpkgRoot) {
     throw 'Frozen path-isolation or equal-length guarantees changed.'
+}
+if ($plan.Variants.baseline.OriginalHost.Length -ne $plan.Variants.candidate.OriginalHost.Length -or
+    $plan.Variants.baseline.ChangedHost.Length -ne $plan.Variants.candidate.ChangedHost.Length) {
+    throw 'Measured Console host path shape changed.'
+}
+Assert-IsolatedRoots
+if ((Get-VolumeIdentity $plan.Variants.baseline.ArtifactRoot) -cne $plan.ArtifactVolumeIdentity -or
+    (Get-VolumeIdentity $plan.Variants.candidate.ArtifactRoot) -cne $plan.ArtifactVolumeIdentity -or
+    (Get-VolumeIdentity $plan.Variants.candidate.RepositoryRoot) -cne $plan.ArtifactVolumeIdentity) {
+    throw 'Artifact roots moved away from the physical volume checked by resource preflight.'
 }
 
 $variantPlan = $plan.Variants[$Variant]
@@ -211,14 +391,17 @@ $ninjaLog = Join-Path $nativeBuildRoot '.ninja_log'
 
 switch ($Action) {
     'Prepare' {
+        # Full binding verification is intentionally outside the measured Generate/Configure/Build actions.
+        Assert-FrozenBindings
         Assert-RepositoryRevision $variantPlan
         Assert-FrozenInputs $variantPlan original
+        Assert-NoNestedReparse $variantPlan.ArtifactRoot
+        Assert-ToolchainSnapshot
+        Assert-CanonicalBoundary
+        Invoke-NativeGate $plan.Canonical.ArtifactRoot pre
         if ($Workload -eq 'artifact-cold') {
             $children = @(Get-ChildItem -LiteralPath $variantPlan.ArtifactRoot -Force |
                 Where-Object Name -cne '.occt-benchmark-root.json')
-            if (@($children | Where-Object { $_.Attributes -band [IO.FileAttributes]::ReparsePoint }).Count -gt 0) {
-                throw 'Refusing to clean an artifact root containing reparse points.'
-            }
             foreach ($child in $children) { Remove-Item -LiteralPath $child.FullName -Recurse -Force }
             $null = [IO.Directory]::CreateDirectory($generatedRoot)
             break
@@ -253,6 +436,7 @@ switch ($Action) {
     }
     'Build' { Invoke-NativeBuild }
     'Verify' {
+        Assert-FrozenBindings
         Assert-RepositoryRevision $variantPlan
         $headerState = if ($Workload -eq 'declaration-edit') { 'changed' } else { 'original' }
         Assert-FrozenInputs $variantPlan $headerState
@@ -260,6 +444,11 @@ switch ($Action) {
         $comparisonPath = if ($Workload -eq 'artifact-cold') { $null } else { $beforeManifest }
         Get-Manifest $afterManifest $comparisonPath
         $after = Read-Json $afterManifest
+        $oracleManifest = if ($Workload -eq 'declaration-edit') {
+            $plan.Canonical.DeclarationManifest
+        }
+        else { $plan.Canonical.OriginalManifest }
+        Assert-ManifestOracle $after $oracleManifest
         if ($Workload -in @('unchanged', 'generator-change', 'missing-output') -and -not $after.Comparison.EqualContent) {
             throw "$Workload changed generated content unexpectedly."
         }
@@ -290,13 +479,27 @@ switch ($Action) {
             '-ReportPath', (Join-Path $sample 'native-metrics.json'))
         if ($Workload -ne 'artifact-cold') { $metricsArguments += @('-BeforeLogPath', $beforeNinja) }
         Invoke-Checked (Get-Process -Id $PID).Path $metricsArguments
+        $oracleExports = if ($Workload -eq 'declaration-edit') {
+            $plan.Canonical.DeclarationExportInventory
+        }
+        else { $plan.Canonical.OriginalExportInventory }
+        $exportReport = Join-Path $sample 'exports-after.json'
+        Invoke-Checked (Get-Process -Id $PID).Path @('-NoProfile', '-File', $plan.Tools.ExportInventory,
+            '-SourcePath', (Join-Path $cppRoot 'NativeFunctionTable.cpp'), '-ReportPath', $exportReport,
+            '-CompareTo', $oracleExports)
+        if (-not (Read-Json $exportReport).Comparison.EqualOrderedExports) {
+            throw 'Generated export order differs from the canonical baseline oracle.'
+        }
+        Invoke-NativeGate $variantPlan.ArtifactRoot post
         Write-NewJson (Join-Path $sample 'occt-verification.json') ([ordered]@{
             SchemaVersion = 1; Variant = $Variant; Workload = $Workload
             ArtifactManifest = $afterManifest; NinjaMetrics = (Join-Path $sample 'native-metrics.json')
+            ExportInventory = $exportReport; NativeGate = 'pre-and-post-passed'
             HarnessBinding = $plan.HarnessBinding; ProductionAdoptionAuthorized = $false
         })
     }
     'Settle' {
+        Assert-FrozenBindings
         if ($Workload -notin @('declaration-edit', 'generator-change')) {
             throw 'Only declaration-edit and generator-change samples require settlement.'
         }
@@ -308,9 +511,11 @@ switch ($Action) {
         Invoke-NativeBuild
         $settledPath = Join-Path $sample 'artifacts-settled.json'
         Get-Manifest $settledPath $beforeManifest
-        if (-not (Read-Json $settledPath).Comparison.EqualContent) {
+        $settled = Read-Json $settledPath
+        if (-not $settled.Comparison.EqualContent) {
             throw 'Settlement did not restore the canonical generated content.'
         }
+        Assert-ManifestOracle $settled $plan.Canonical.OriginalManifest
     }
 }
 

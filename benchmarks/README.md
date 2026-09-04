@@ -187,17 +187,44 @@ claim, and historical verification builds are not benchmark samples.
 
 `New-OcctBenchmarkPlan.ps1` freezes the approved five-workload OCCT matrix. It requires the exact
 baseline commit `e94f10a9bb9490d47363cf43d8ce17600b435b8a`, candidate behavior commit
-`9952e5a76358028c22c8ec215a23d7b82413ad4f`, clean repositories, a frozen harmless generator-change
-patch, prebuilt original/changed hosts, equal-length isolated artifact and input roots, and a shared deadline.
+`9952e5a76358028c22c8ec215a23d7b82413ad4f`, clean repositories, four complete Console-host
+receipts, canonical baseline/declaration oracles, a native boundary gate, physically isolated roots,
+and a shared deadline.
 The initial plan intentionally retains `commit:PENDING-FINAL-HARNESS-COMMIT`; regenerate it with
 the final harness commit before execution. `Invoke-OcctBenchmarkWorkload.ps1` rejects that pending
 binding, so a template plan cannot accidentally become a performance run.
 
+Create each host receipt with `New-OcctBenchmarkHostReceipt.ps1` after its independently recorded
+build stage. A receipt covers every file in the host directory, requires a real managed
+`TedToolkit.CppBindings.Occt.Console` assembly plus runtime metadata, binds the build specification
+and successful result, and records the clean source revision. Original hosts must use the exact
+variant revision. Changed hosts must use clean commits whose complete `git diff --binary
+--full-index` is byte-identical to the same frozen harmless patch. Fixture-only receipts can test
+the plan schema, but make the resulting plan permanently non-executable; a text file named `.dll`
+is rejected in both modes.
+
 The editable inputs are private physical copies of `installed/x64-windows/include` and the vcpkg
 status file. The real vcpkg root is used only as the CMake toolchain and must be a different path.
-Prepare and verify stages hash the live private-header inventory. Generator stages invoke the exact
+Repositories, inputs, toolchain, canonical artifacts, measured artifacts, specifications, and host
+directories must be pairwise disjoint under case-insensitive comparison and cannot contain reparse
+components. Nested reparse points are rechecked immediately before artifact cleanup. Both measured
+artifact roots must have equal path lengths and share the candidate repository's physical volume,
+which is the volume checked by matrix resource preflight. Corresponding original/changed host paths
+and private input paths must also have equal lengths; both variants use one neutral working directory.
+
+Plan creation loads the exact declared `vcvars64.bat`, verifies that it selects the declared x64
+`cl.exe`, records compiler `/Bv`, MSVC and Windows SDK roots/version, and records direct CMake,
+Ninja, and dotnet version probes. Prepare rechecks that receipt outside material timing; no PATH-only
+tool identity is accepted. Prepare and verify stages also hash the live private-header inventory. Generator stages invoke the exact
 Console DLL directly with `dotnet <Console.dll> --output-root <isolated-root>`; they never call
 `Build/GenerateWindowsBindings.ps1` and therefore cannot be hidden by its generation cache.
+
+Bind artifact manifests and ordered `NativeFunctionTable.cpp` export inventories for the canonical
+original state and the representative declaration edit. Every baseline and candidate result must
+match its applicable oracle. A bound native boundary/integration gate runs against the immutable
+canonical artifact before preparation and against the sampled artifact after build. Its executable,
+arguments, working directory, and inputs are immutable plan inputs; fixture-only gates cannot execute
+a formal workload.
 
 The generated stage plan has these fixed semantics:
 
@@ -219,8 +246,9 @@ infrastructure only and grants no production-adoption authority.
 ./benchmarks/Verify-OcctBenchmarkPlan.ps1
 ```
 
-The verifier creates only tiny header/host/tool fixtures, generates a plan, and exercises matrix
-`-PlanOnly`; it does not run the OCCT generator or compile native code.
+The verifier compiles only a tiny managed Console-shaped fixture, generates cryptographically valid
+synthetic receipts and oracles, exercises junction/case/shared-target/nested-reparse failures, and
+runs matrix `-PlanOnly`; it does not run the OCCT generator, compile native code, or collect timing.
 
 ## Reference workload inventory
 
@@ -242,8 +270,8 @@ rollback, and file/directory transitions. It is correctness evidence, not a timi
 
 ## Remaining experiment work
 
-The paired execution control and OCCT workload adapter are implemented; prepared full-workload inputs,
-final harness binding, repeated measurements, native boundary comparison, generation per-file timings,
+The paired execution control and OCCT workload adapter are implemented; prepared full-workload receipts,
+final harness binding, repeated measurements, native boundary results, generation per-file timings,
 and the decision report remain unfinished. Resource reports and synthetic fixtures are not
 timing samples. Do not count the earlier build-verification duration as a benchmark or recommend
 production adoption from it.
