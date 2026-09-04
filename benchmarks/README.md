@@ -187,8 +187,8 @@ claim, and historical verification builds are not benchmark samples.
 
 `New-OcctBenchmarkPlan.ps1` freezes the approved five-workload OCCT matrix. It requires the exact
 baseline commit `e94f10a9bb9490d47363cf43d8ce17600b435b8a`, candidate behavior commit
-`9952e5a76358028c22c8ec215a23d7b82413ad4f`, clean repositories, prebuilt original and harmless
-generator-change hosts, equal-length isolated artifact and input roots, and a shared deadline.
+`9952e5a76358028c22c8ec215a23d7b82413ad4f`, clean repositories, a frozen harmless generator-change
+patch, prebuilt original/changed hosts, equal-length isolated artifact and input roots, and a shared deadline.
 The initial plan intentionally retains `commit:PENDING-FINAL-HARNESS-COMMIT`; regenerate it with
 the final harness commit before execution. `Invoke-OcctBenchmarkWorkload.ps1` rejects that pending
 binding, so a template plan cannot accidentally become a performance run.

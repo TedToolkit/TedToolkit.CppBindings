@@ -277,6 +277,14 @@ switch ($Action) {
         if ($Workload -eq 'missing-output') {
             $missing = Assert-WithinRoot (Join-Path $generatedRoot $plan.MissingOutputRelativePath) $generatedRoot
             if (-not (Test-Path -LiteralPath $missing -PathType Leaf)) { throw 'Generation did not restore the missing output.' }
+            if ($Variant -eq 'candidate') {
+                $relative = $plan.MissingOutputRelativePath.Substring('cpp/'.Length)
+                $expectedRewrite = '1/' + $relative
+                $observed = @($after.Comparison.ObservedRewritten)
+                if ($observed.Count -ne 1 -or $observed[0] -cne $expectedRewrite) {
+                    throw 'The write-if-changed candidate rewrote more than the one restored output.'
+                }
+            }
         }
         $metricsArguments = @('-NoProfile', '-File', $plan.Tools.NinjaMetrics, '-LogPath', $ninjaLog,
             '-ReportPath', (Join-Path $sample 'native-metrics.json'))
