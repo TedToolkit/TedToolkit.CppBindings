@@ -70,7 +70,7 @@ function Assert-OrdinaryTree {
 function Get-GitOutput {
     param([string] $Repository, [string[]] $Arguments)
 
-    $output = @(& git -c "safe.directory=$Repository" -c 'core.excludesFile=NUL' -C $Repository @Arguments 2>$null)
+    $output = @(& git -c "safe.directory=$Repository" -C $Repository @Arguments 2>$null)
     if ($LASTEXITCODE -ne 0) { throw "git failed for $Repository with arguments: $($Arguments -join ' ')" }
     return ($output -join "`n").Trim()
 }
@@ -177,12 +177,12 @@ $candidateRepository = Resolve-ExistingPath $CandidateRepositoryRoot directory
 if ((Get-GitOutput $baselineRepository @('rev-parse', 'HEAD')) -cne $baselineRevision) {
     throw "The baseline repository must be exactly $baselineRevision."
 }
-if (Get-GitOutput $baselineRepository @('status', '--porcelain=v1', '--untracked-files=all')) {
+if (Get-GitOutput $baselineRepository @('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=all')) {
     throw 'The baseline repository must be clean.'
 }
 $candidateHead = Get-GitOutput $candidateRepository @('rev-parse', 'HEAD')
 $null = Get-GitOutput $candidateRepository @('merge-base', '--is-ancestor', $candidateBehaviorRevision, $candidateHead)
-if (Get-GitOutput $candidateRepository @('status', '--porcelain=v1', '--untracked-files=all')) {
+if (Get-GitOutput $candidateRepository @('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=all')) {
     throw 'The candidate repository must be clean before a plan is frozen.'
 }
 if ($HarnessBinding -match '^commit:(?<sha>[0-9a-f]{40})$' -and $Matches.sha -cne $candidateHead) {

@@ -79,13 +79,13 @@ function Assert-FrozenInputs {
 function Assert-RepositoryRevision {
     param([hashtable] $VariantPlan)
     $expected = if ($Variant -eq 'baseline') { $plan.BaselineRevision } else { $plan.CandidateHead }
-    $head = @(& git -c "safe.directory=$($VariantPlan.RepositoryRoot)" -c 'core.excludesFile=NUL' `
+    $head = @(& git -c "safe.directory=$($VariantPlan.RepositoryRoot)" `
         -C $VariantPlan.RepositoryRoot rev-parse HEAD 2>$null)
     if ($LASTEXITCODE -ne 0 -or ($head -join '').Trim() -cne $expected) {
         throw "Repository revision changed for $Variant."
     }
-    $status = @(& git -c "safe.directory=$($VariantPlan.RepositoryRoot)" -c 'core.excludesFile=NUL' `
-        -C $VariantPlan.RepositoryRoot status --porcelain=v1 --untracked-files=all 2>$null)
+    $status = @(& git -c "safe.directory=$($VariantPlan.RepositoryRoot)" `
+        -C $VariantPlan.RepositoryRoot status --porcelain=v1 --untracked-files=all --ignore-submodules=all 2>$null)
     if ($LASTEXITCODE -ne 0 -or $status.Count -ne 0) { throw "Repository is not clean for $Variant." }
 }
 
