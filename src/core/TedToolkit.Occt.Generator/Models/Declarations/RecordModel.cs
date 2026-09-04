@@ -16,9 +16,19 @@ namespace TedToolkit.Occt.Generator.Models.Declarations;
 internal sealed class RecordModel
 {
     /// <summary>
+    /// Gets the mixed generic/fixed template projection, when this record belongs to a managed template family.
+    /// </summary>
+    public TemplateProjectionModel? TemplateProjection { get; set; }
+
+    /// <summary>
     /// Gets a value indicating whether native callers can name this record.
     /// </summary>
     public bool IsPubliclyAccessible { get; init; } = true;
+
+    /// <summary>
+    /// Gets or sets a value indicating whether another emitted record requires this complete type.
+    /// </summary>
+    public bool IsRequiredDependency { get; set; }
 
     /// <summary>
     /// Gets a value indicating whether every template type argument names a concrete native type.

@@ -454,6 +454,112 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("public static bool Multiply(this ref Matrix self, in Matrix right)");
     }
 
+    /// <summary>
+    /// Verifies mixed template projections emit one generic layout and exact closed native operations.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_generate_generic_layout_with_fixed_native_specialization_Async()
+    {
+        var valueType = new TypeModel()
+        {
+            CppTypeName = "double",
+            CSharpPInvokeType = DataType.Double,
+            CSharpPublicType = DataType.Double,
+        };
+        var record = new RecordModel()
+        {
+            TemplateProjection = new()
+            {
+                FixedTypeName = "Buffer_double_4_void",
+                NativeTemplateName = "Buffer",
+                NativeTypePattern = "Buffer<TValue, 4, void>",
+                FamilyName = "Buffer_4_void",
+                DeclarationTypeName = "Buffer_4_void<TValue>",
+                ClosedTypeName = "Buffer_4_void<double>",
+                Arguments =
+                [
+                    new()
+                    {
+                        ParameterName = "TValue",
+                        NativeArgument = "double",
+                        ClosedCSharpType = "double",
+                        Kind = TemplateArgumentProjectionKind.Generic,
+                    },
+                    new()
+                    {
+                        ParameterName = "Size",
+                        NativeArgument = "4",
+                        Kind = TemplateArgumentProjectionKind.Fixed,
+                    },
+                    new()
+                    {
+                        ParameterName = "TPolicy",
+                        NativeArgument = "void",
+                        Kind = TemplateArgumentProjectionKind.Fixed,
+                    },
+                ],
+            },
+            DescriptionItems = [],
+            FieldModels =
+            [
+                new()
+                {
+                    Alignment = 8,
+                    CppTemplateType = "TValue",
+                    CSharpTemplateType = "TValue",
+                    DescriptionItems = [],
+                    Name = "Value",
+                    Offset = 0,
+                    Size = 8,
+                    Type = valueType,
+                },
+            ],
+            IsAbstract = false,
+            IsStandardTransient = false,
+            MethodModels =
+            [
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = false,
+                    IsStatic = false,
+                    MethodName = "Clear",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = new()
+                    {
+                        CppTypeName = "void",
+                        CSharpPInvokeType = new("void"),
+                        CSharpPublicType = new("void"),
+                    },
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.Value,
+            Size = 8,
+            SourceHeader = "Buffer.hxx",
+            Type = new()
+            {
+                CppTypeName = "Buffer<double, 4, void>",
+                CSharpPInvokeType = new("Buffer_4_void<double>"),
+                CSharpPublicType = new("Buffer_4_void<double>"),
+            },
+        };
+        NativeExportNameBuilder.Assign(record);
+
+        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("public unsafe struct Buffer_4_void<");
+        await Assert.That(code).Contains("where TValue: unmanaged");
+        await Assert.That(code).Contains("public TValue Value;");
+        await Assert.That(code).DoesNotContain("Size = 8");
+        await Assert.That(code).Contains("class Buffer_double_4_voidExtensions");
+        await Assert.That(code).Contains("Clear(this ref Buffer_4_void<double> self)");
+    }
+
     private static IOptions<GenerationOptions> CreateOptions()
     {
         return Microsoft.Extensions.Options.Options.Create(new GenerationOptions()

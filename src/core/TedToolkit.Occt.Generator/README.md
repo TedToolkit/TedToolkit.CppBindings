@@ -198,10 +198,12 @@ is not an input, fallback, or compatibility target for current generation.
 The accepted replacement must instead generate every supported object as an unmanaged sequential
 struct, calculate explicit private padding and aligned opaque storage from compiler layout data,
 emit no `FieldOffsetAttribute` or managed `BaseType`, prove managed/native size and alignment, and
-fail closed when the pinned CLR cannot reproduce a native layout. C++ templates use one C# generic
-struct only when one physical graph proves every registered closed specialization. A template that
-uses `void` as a dependent implementation placeholder is not emitted as an open generic type; only
-its usable closed specializations are emitted, using underscore-expanded fixed type names.
+fail closed when the pinned CLR cannot reproduce a native layout. Template arguments are projected
+independently: representable type arguments remain generic, while non-type values, `void`, and other
+unrepresentable arguments are fixed into the managed family name. Thus `Buffer<T, 4, void>` becomes
+`Buffer_4_void<T>`. The generic struct is emitted only when its dependent fields and bases can be
+expressed by one valid managed physical graph. Each discovered closed specialization retains an
+exact C++ wrapper and direct function-table slots; invocation does not use runtime generic dispatch.
 
 ## 输出目录
 

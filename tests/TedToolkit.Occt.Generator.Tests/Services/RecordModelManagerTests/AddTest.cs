@@ -737,6 +737,40 @@ internal sealed class AddTest
     }
 
     /// <summary>
+    /// Verifies a private nested template remains excluded even when its concrete argument is public.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_exclude_private_template_with_public_argument_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Owner
+            {
+            private:
+                template<typename T>
+                struct Hidden
+                {
+                    T Value;
+                };
+
+                Hidden<int> Internal;
+
+            public:
+                int Value;
+            };
+            """, "__occt__/test.cpp");
+        var record = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static value => value.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(record);
+
+        await Assert.That(manager.RecordModels.Select(static item => item.Type.CppTypeName))
+            .IsEquivalentTo(["Owner",]);
+    }
+
+    /// <summary>
     /// Verifies template specialization field types collect both the template and template-argument headers.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -858,6 +892,143 @@ internal sealed class AddTest
 
         await Assert.That(manager.RecordModels.Select(static record => record.Type.CppTypeName))
             .Contains("Shared<int>");
+    }
+
+    /// <summary>
+    /// Verifies representable type arguments remain generic while non-type and void arguments stay fixed.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_partially_generalize_mixed_template_arguments_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename TValue, int Size, typename TPolicy = void>
+            struct Buffer
+            {
+                TValue Value;
+            };
+
+            struct Owner
+            {
+                Buffer<double, 4> Field;
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(owner);
+
+        var buffer = manager.RecordModels.Single(static record =>
+            record.Type.CppTypeName.StartsWith("Buffer<", StringComparison.Ordinal));
+        await Assert.That(buffer.Type.CSharpTypeName).IsEqualTo("Buffer_4_void<double>");
+    }
+
+    /// <summary>
+    /// Verifies a default native type argument is applied exactly once to its managed generic family.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_apply_default_template_argument_once_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename TValue = double>
+            struct Vector
+            {
+                TValue Value;
+            };
+
+            struct Owner
+            {
+                Vector<> DefaultValue;
+                Vector<int> IntValue;
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(owner);
+
+        var vectorTypes = manager.RecordModels
+            .Where(static record => record.Type.CppTypeName.StartsWith("Vector<", StringComparison.Ordinal))
+            .Select(static record => record.Type.CSharpTypeName)
+            .ToArray();
+        await Assert.That(vectorTypes).Contains("Vector<double>");
+        await Assert.That(vectorTypes).Contains("Vector<int>");
+        await Assert.That(vectorTypes.All(static type => !type.Contains("><", StringComparison.Ordinal))).IsTrue();
+    }
+
+    /// <summary>
+    /// Verifies native arguments that collapse to the same C# type retain distinct closed identities.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_keep_colliding_managed_template_arguments_closed_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename TValue>
+            struct Hasher
+            {
+            };
+
+            struct Owner
+            {
+                Hasher<wchar_t> Wide;
+                Hasher<char16_t> Utf16;
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(owner);
+
+        var hashers = manager.RecordModels
+            .Where(static record => record.Type.CppTypeName.StartsWith("Hasher<", StringComparison.Ordinal))
+            .ToArray();
+        await Assert.That(hashers).Count().IsEqualTo(2);
+        await Assert.That(hashers.All(static record => record.TemplateProjection is null)).IsTrue();
+        await Assert.That(hashers.Select(static record => record.Type.CSharpTypeName).Distinct()).Count()
+            .IsEqualTo(2);
+    }
+
+    /// <summary>
+    /// Verifies a specialization selected through a partial template remains available as an exact closed type.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_keep_partial_template_specialization_closed_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename TValue, bool Enabled>
+            struct Optional;
+
+            template <typename TValue>
+            struct Optional<TValue, true>
+            {
+                TValue Value;
+            };
+
+            struct Owner
+            {
+                Optional<int, true> Field;
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(owner);
+
+        var optional = manager.RecordModels.Single(static record =>
+            record.Type.CppTypeName.StartsWith("Optional<", StringComparison.Ordinal));
+        await Assert.That(optional.TemplateProjection).IsNull();
+        await Assert.That(optional.Type.CSharpTypeName).IsEqualTo("Optional_int_true");
     }
 
     /// <summary>

@@ -31,9 +31,15 @@ internal sealed class GeneratorService(
     public IGenerator GenerateCSharp(
         RecordModel record,
         IReadOnlyDictionary<string, RecordModel>? recordCatalog = null,
-        IReadOnlyDictionary<string, int>? nativeFunctionIndices = null)
+        IReadOnlyDictionary<string, int>? nativeFunctionIndices = null,
+        bool generateRepresentation = true)
     {
-        return new CSharpGenerator(record, generationOptions, recordCatalog, nativeFunctionIndices);
+        return new CSharpGenerator(
+            record,
+            generationOptions,
+            recordCatalog,
+            nativeFunctionIndices,
+            generateRepresentation);
     }
 
     /// <inheritdoc/>

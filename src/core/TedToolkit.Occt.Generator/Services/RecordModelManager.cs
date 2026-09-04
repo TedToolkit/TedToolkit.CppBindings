@@ -6,6 +6,7 @@
 // -----------------------------------------------------------------------
 
 using System.Diagnostics.CodeAnalysis;
+using System.Globalization;
 using System.Runtime.CompilerServices;
 using System.Runtime.InteropServices;
 using System.Text;
@@ -51,6 +52,8 @@ internal sealed class RecordModelManager(
 
     private readonly Dictionary<string, byte[]> _sourceFiles = new(StringComparer.OrdinalIgnoreCase);
 
+    private bool _managedTemplateReferencesFinalized;
+
     /// <inheritdoc/>
     public IReadOnlyList<EnumModel> EnumModels
     {
@@ -66,7 +69,8 @@ internal sealed class RecordModelManager(
         get
         {
             ShareHeaderRequirements();
-            return _recordNames.Values.Where(t => t.IsPubliclyAccessible
+            FinalizeManagedTemplateReferences();
+            return _recordNames.Values.Where(t => (t.IsPubliclyAccessible || t.IsRequiredDependency)
                                                    && t.IsClosedTemplateSpecialization
                                                    && !IsAnonymousTypeName(t.Type.CppTypeName));
         }
@@ -109,16 +113,25 @@ internal sealed class RecordModelManager(
         }
 
         record.Location.GetFileLocation(out var file, out _, out _, out _);
+        var projectedType = ApplyRequiredHeaders(
+            resolver.Resolve(record.TypeForDecl)
+                .Type,
+            record.TypeForDecl);
+        var templateProjection = CreateTemplateProjection(record);
+        if (templateProjection is not null)
+        {
+            projectedType.CSharpPInvokeType = new(templateProjection.ClosedTypeName);
+            projectedType.CSharpPublicType = new(templateProjection.ClosedTypeName);
+        }
+
         var result = new RecordModel()
         {
+            TemplateProjection = templateProjection,
             IsPubliclyAccessible = IsPubliclyAccessible(record),
             IsClosedTemplateSpecialization = IsClosedTemplateSpecialization(record),
             DescriptionItems = commentProjection.DescriptionItems,
             SourceHeader = Path.GetFileName(file.Name.CString),
-            Type = ApplyRequiredHeaders(
-                resolver.Resolve(record.TypeForDecl)
-                    .Type,
-                record.TypeForDecl),
+            Type = projectedType,
             Size = size,
             IsAbstract = record.IsAbstract,
             IsStandardTransient = false,
@@ -132,8 +145,12 @@ internal sealed class RecordModelManager(
             .Where(f => isOcctType || f.Access is CX_CXXAccessSpecifier.CX_CXXPublic)
             .Where(options.Value.FieldTypeToGenerate)
             .Where(static f => IsDefined(f.Type))
-            .Select(ToModel)
+            .Select(field => ToModel(field, record, templateProjection))
             .ToArray();
+        if (result.TemplateProjection is not null && !HasGenericPhysicalLayout(result))
+        {
+            KeepClosedTemplateProjection(result);
+        }
 
         result.MethodModels = record.Methods
             .Where(m => ShouldIncludeMethod(m, record.IsAbstract))
@@ -162,6 +179,463 @@ internal sealed class RecordModelManager(
         NativeExportNameBuilder.Assign(result);
 
         return result;
+    }
+
+    private static bool HasGenericPhysicalLayout(RecordModel record)
+    {
+        var currentOffset = 0L;
+        foreach (var field in record.FieldModels.OrderBy(static field => field.Offset))
+        {
+            if (field.Offset != currentOffset)
+            {
+                return false;
+            }
+
+            if (string.IsNullOrEmpty(field.CSharpTemplateType)
+                && !string.IsNullOrEmpty(field.CppTemplateType)
+                && !string.Equals(
+                    field.CppTemplateType,
+                    field.Type.CppTypeName,
+                    StringComparison.Ordinal))
+            {
+                // The field depends on template arguments through a nested native type that has
+                // not itself been projected as a managed generic layout. Keeping this record closed
+                // avoids claiming that one concrete field layout is valid for every T.
+                return false;
+            }
+
+            currentOffset = checked(currentOffset + field.Size);
+        }
+
+        return currentOffset == record.Size || (record.FieldModels.Count is 0 && record.Size is 1);
+    }
+
+    private void FinalizeManagedTemplateReferences()
+    {
+        if (_managedTemplateReferencesFinalized)
+        {
+            return;
+        }
+
+        _managedTemplateReferencesFinalized = true;
+        var records = _recordNames.Values.ToArray();
+        KeepAmbiguousTemplateSpecializationsClosed(records);
+        var replacements = records
+            .Where(static record => record.TemplateProjection is not null)
+            .Select(static record => record.TemplateProjection!)
+            .ToDictionary(static projection => projection.FixedTypeName, StringComparer.Ordinal);
+        if (replacements.Count is 0)
+        {
+            return;
+        }
+
+        var resolved = new HashSet<string>(StringComparer.Ordinal);
+        var resolving = new HashSet<string>(StringComparer.Ordinal);
+        foreach (var projection in replacements.Values)
+        {
+            ResolveTemplateProjection(projection, replacements, resolved, resolving);
+        }
+
+        foreach (var record in records)
+        {
+            if (record.TemplateProjection is not null)
+            {
+                record.Type.CSharpPInvokeType = new(record.TemplateProjection.ClosedTypeName);
+                record.Type.CSharpPublicType = new(record.TemplateProjection.ClosedTypeName);
+            }
+
+            UpdateManagedType(record.Type, replacements, resolved, resolving);
+            foreach (var field in record.FieldModels)
+            {
+                UpdateManagedType(field.Type, replacements, resolved, resolving);
+            }
+
+            foreach (var method in record.MethodModels)
+            {
+                UpdateManagedType(method.ReturnType, replacements, resolved, resolving);
+                foreach (var parameter in method.Parameters)
+                {
+                    UpdateManagedType(parameter.Type, replacements, resolved, resolving);
+                }
+            }
+        }
+    }
+
+    private static void KeepAmbiguousTemplateSpecializationsClosed(IReadOnlyList<RecordModel> records)
+    {
+        foreach (var specialization in records
+                     .Where(static record => record.TemplateProjection is not null)
+                     .GroupBy(static record => (
+                         record.TemplateProjection!.FamilyName,
+                         record.TemplateProjection.ClosedTypeName))
+                     .Where(static group => group
+                         .Select(static record => record.Type.CppTypeName)
+                         .Distinct(StringComparer.Ordinal)
+                         .Skip(1)
+                         .Any())
+                     .SelectMany(static group => group))
+        {
+            KeepClosedTemplateProjection(specialization);
+        }
+
+        foreach (var family in records
+                     .Where(static record => record.TemplateProjection is not null)
+                     .GroupBy(static record => record.TemplateProjection!.FamilyName, StringComparer.Ordinal))
+        {
+            var shapes = family.Select(GetTemplatePhysicalShape)
+                .Distinct(StringComparer.Ordinal)
+                .Take(2)
+                .Count();
+            if (shapes < 2)
+            {
+                continue;
+            }
+
+            foreach (var specialization in family)
+            {
+                KeepClosedTemplateProjection(specialization);
+            }
+        }
+    }
+
+    private static string GetTemplatePhysicalShape(RecordModel record)
+    {
+        return string.Join(
+            "\n",
+            record.ObjectKind,
+            record.IsStandardTransient,
+            record.Bases.Count(static relation => relation.IsPublic),
+            string.Join("|", record.FieldModels.Select(static field =>
+                string.Join(":", field.Name, field.CppTemplateType, field.CSharpTemplateType))));
+    }
+
+    private static void KeepClosedTemplateProjection(RecordModel record)
+    {
+        var projection = record.TemplateProjection;
+        if (projection is null)
+        {
+            return;
+        }
+
+        record.Type.CSharpPInvokeType = new(projection.FixedTypeName);
+        record.Type.CSharpPublicType = new(projection.FixedTypeName);
+        record.TemplateProjection = null;
+    }
+
+    private static void ResolveTemplateProjection(
+        TemplateProjectionModel projection,
+        IReadOnlyDictionary<string, TemplateProjectionModel> replacements,
+        HashSet<string> resolved,
+        HashSet<string> resolving)
+    {
+        if (resolved.Contains(projection.FixedTypeName)
+            || !resolving.Add(projection.FixedTypeName))
+        {
+            return;
+        }
+
+        foreach (var argument in projection.GenericArguments)
+        {
+            argument.ClosedCSharpType = ReplaceManagedTemplateReferences(
+                argument.ClosedCSharpType,
+                replacements,
+                resolved,
+                resolving);
+        }
+
+        projection.ClosedTypeName = projection.FamilyName + "<"
+            + string.Join(", ", projection.GenericArguments.Select(static argument => argument.ClosedCSharpType))
+            + ">";
+        _ = resolving.Remove(projection.FixedTypeName);
+        _ = resolved.Add(projection.FixedTypeName);
+    }
+
+    private static void UpdateManagedType(
+        TypeModel type,
+        IReadOnlyDictionary<string, TemplateProjectionModel> replacements,
+        HashSet<string> resolved,
+        HashSet<string> resolving)
+    {
+        type.CSharpPInvokeType = new(ReplaceManagedTemplateReferences(
+            type.CSharpPInvokeType.ToCode(), replacements, resolved, resolving));
+        type.CSharpPublicType = new(ReplaceManagedTemplateReferences(
+            type.CSharpPublicType.ToCode(), replacements, resolved, resolving));
+        type.OcctHandleElementType = ReplaceManagedTemplateReferences(
+            type.OcctHandleElementType, replacements, resolved, resolving);
+    }
+
+    private static string ReplaceManagedTemplateReferences(
+        string value,
+        IReadOnlyDictionary<string, TemplateProjectionModel> replacements,
+        HashSet<string> resolved,
+        HashSet<string> resolving)
+    {
+        if (string.IsNullOrEmpty(value))
+        {
+            return value;
+        }
+
+        return NativeIdentifierRegex.Replace(value, match =>
+        {
+            if (!replacements.TryGetValue(match.Value, out var projection))
+            {
+                return match.Value;
+            }
+
+            var next = match.Index + match.Length;
+            while (next < value.Length && char.IsWhiteSpace(value[next]))
+            {
+                next++;
+            }
+
+            if (next < value.Length && value[next] is '<')
+            {
+                return match.Value;
+            }
+
+            ResolveTemplateProjection(projection, replacements, resolved, resolving);
+            return projection.ClosedTypeName;
+        });
+    }
+
+    private TemplateProjectionModel? CreateTemplateProjection(CXXRecordDecl record)
+    {
+        if (record is not ClassTemplateSpecializationDecl specialization
+            || IsHandleSpecialization(specialization))
+        {
+            return null;
+        }
+
+        var specializedCursor = clang.getSpecializedCursorTemplate(specialization.Handle);
+        if (specializedCursor.kind is CXCursorKind.CXCursor_ClassTemplatePartialSpecialization)
+        {
+            // ClangSharp 21 incorrectly casts this cursor to ClassTemplateDecl. Keep the exact
+            // closed projection until the wrapper exposes the partial-specialization parameter list.
+            return null;
+        }
+
+        var parameters = specialization.SpecializedTemplate.TemplateParameters;
+        var arguments = specialization.TemplateArgs;
+        if (parameters.Count is 0 || parameters.Count != arguments.Count)
+        {
+            return null;
+        }
+
+        var nativeSpellings = GetTemplateArgumentSpellings(record.TypeForDecl.AsString, arguments);
+        var projections = new TemplateArgumentProjection[arguments.Count];
+        var genericCount = 0;
+        for (var index = 0; index < arguments.Count; index++)
+        {
+            var parameterName = string.IsNullOrWhiteSpace(parameters[index].Name)
+                ? $"T{index + 1}"
+                : parameters[index].Name.ToValidCSharpName();
+            var argument = arguments[index];
+            var nativeArgument = nativeSpellings[index];
+            if (parameters[index] is TemplateTypeParmDecl
+                && IsManagedGenericArgument(argument, out var closedCSharpType))
+            {
+                projections[index] = new()
+                {
+                    ParameterName = parameterName,
+                    NativeArgument = nativeArgument,
+                    ClosedCSharpType = closedCSharpType,
+                    Kind = TemplateArgumentProjectionKind.Generic,
+                };
+                genericCount++;
+            }
+            else
+            {
+                projections[index] = new()
+                {
+                    ParameterName = parameterName,
+                    NativeArgument = nativeArgument,
+                    Kind = TemplateArgumentProjectionKind.Fixed,
+                };
+            }
+        }
+
+        if (genericCount is 0)
+        {
+            return null;
+        }
+
+        var familyName = specialization.SpecializedTemplate.QualifiedName.ToGeneratedTypeName();
+        foreach (var fixedArgument in projections.Where(static argument =>
+                     argument.Kind is TemplateArgumentProjectionKind.Fixed))
+        {
+            familyName += "_" + ToFixedTemplateArgumentToken(fixedArgument.NativeArgument);
+        }
+
+        var genericArguments = projections.Where(static argument =>
+                argument.Kind is TemplateArgumentProjectionKind.Generic)
+            .ToArray();
+        return new()
+        {
+            FixedTypeName = record.TypeForDecl.AsString.ToGeneratedTypeName(),
+            NativeTemplateName = specialization.SpecializedTemplate.QualifiedName,
+            NativeTypePattern = CreateNativeTemplatePattern(specialization.SpecializedTemplate.QualifiedName, projections),
+            FamilyName = familyName,
+            DeclarationTypeName = familyName + "<"
+                + string.Join(", ", genericArguments.Select(static argument => argument.ParameterName)) + ">",
+            ClosedTypeName = familyName + "<"
+                + string.Join(", ", genericArguments.Select(static argument => argument.ClosedCSharpType)) + ">",
+            Arguments = projections,
+        };
+    }
+
+    private static string CreateNativeTemplatePattern(
+        string nativeTemplateName,
+        IReadOnlyList<TemplateArgumentProjection> arguments)
+    {
+        return nativeTemplateName + "<" + string.Join(", ", arguments.Select(static argument =>
+            argument.Kind is TemplateArgumentProjectionKind.Generic
+                ? argument.ParameterName
+                : argument.NativeArgument)) + ">";
+    }
+
+    private bool IsManagedGenericArgument(TemplateArgument argument, out string closedCSharpType)
+    {
+        closedCSharpType = "";
+        if (argument.Kind is not CXTemplateArgumentKind.CXTemplateArgumentKind_Type
+            || argument.AsType.CanonicalType.Kind is CXTypeKind.CXType_Void)
+        {
+            return false;
+        }
+
+        if (argument.AsType.CanonicalType.AsCXXRecordDecl is { Definition: null, })
+        {
+            return false;
+        }
+
+        var transport = Resolver.CreateTransport(argument.AsType, out _);
+        if (transport.Indirections.Count is not 0)
+        {
+            return false;
+        }
+
+        closedCSharpType = resolver.Resolve(argument.AsType).Type.CSharpPublicType.ToCode();
+        return !string.IsNullOrWhiteSpace(closedCSharpType)
+               && closedCSharpType is not "void"
+               && !closedCSharpType.Contains('*', StringComparison.Ordinal)
+               && !closedCSharpType.Contains('&', StringComparison.Ordinal);
+    }
+
+    private static string[] GetTemplateArgumentSpellings(
+        string nativeTypeName,
+        IReadOnlyList<TemplateArgument> arguments)
+    {
+        var result = SplitInnermostTemplateArguments(nativeTypeName);
+        while (result.Count < arguments.Count)
+        {
+            result.Add(GetTemplateArgumentFallback(arguments[result.Count]));
+        }
+
+        if (result.Count > arguments.Count)
+        {
+            result.RemoveRange(arguments.Count, result.Count - arguments.Count);
+        }
+
+        return result.ToArray();
+    }
+
+    private static List<string> SplitInnermostTemplateArguments(string nativeTypeName)
+    {
+        var close = nativeTypeName.LastIndexOf('>');
+        if (close < 0)
+        {
+            return [];
+        }
+
+        var depth = 0;
+        var open = -1;
+        for (var index = close; index >= 0; index--)
+        {
+            switch (nativeTypeName[index])
+            {
+                case '>':
+                    depth++;
+                    break;
+
+                case '<':
+                    depth--;
+                    if (depth is 0)
+                    {
+                        open = index;
+                        index = -1;
+                    }
+
+                    break;
+            }
+        }
+
+        if (open < 0)
+        {
+            return [];
+        }
+
+        var contents = nativeTypeName.AsSpan(open + 1, close - open - 1);
+        var result = new List<string>();
+        var start = 0;
+        depth = 0;
+        for (var index = 0; index < contents.Length; index++)
+        {
+            switch (contents[index])
+            {
+                case '<':
+                case '(':
+                case '[':
+                case '{':
+                    depth++;
+                    break;
+
+                case '>':
+                case ')':
+                case ']':
+                case '}':
+                    depth--;
+                    break;
+
+                case ',' when depth is 0:
+                    result.Add(contents[start..index].Trim().ToString());
+                    start = index + 1;
+                    break;
+            }
+        }
+
+        result.Add(contents[start..].Trim().ToString());
+        return result;
+    }
+
+    private static string GetTemplateArgumentFallback(TemplateArgument argument)
+    {
+        return argument.Kind switch
+        {
+            CXTemplateArgumentKind.CXTemplateArgumentKind_Type => argument.AsType.AsString,
+            CXTemplateArgumentKind.CXTemplateArgumentKind_Integral
+                when argument.IntegralType.CanonicalType.Kind is CXTypeKind.CXType_Bool =>
+                argument.AsIntegral is 0 ? "false" : "true",
+            CXTemplateArgumentKind.CXTemplateArgumentKind_Integral =>
+                argument.AsIntegral.ToString(CultureInfo.InvariantCulture),
+            CXTemplateArgumentKind.CXTemplateArgumentKind_Declaration => argument.AsDecl.QualifiedName,
+            CXTemplateArgumentKind.CXTemplateArgumentKind_NullPtr => "nullptr",
+            _ => "argument",
+        };
+    }
+
+    private static string ToFixedTemplateArgumentToken(string nativeArgument)
+    {
+        var value = nativeArgument.Trim();
+        if (value.StartsWith('-'))
+        {
+            value = "minus_" + value[1..];
+        }
+        else if (value.StartsWith('+'))
+        {
+            value = "plus_" + value[1..];
+        }
+
+        value = value.ToGeneratedTypeName().Trim('_');
+        return string.IsNullOrEmpty(value) ? "argument" : value;
     }
 
     private RecordModel[] GetNativeDependencyRecords(CXXRecordDecl record)
@@ -236,12 +710,101 @@ internal sealed class RecordModelManager(
         }
 
         if (TryUnwrapRecord(dependency) is not { } unwrappedDependency
-            || !IsPubliclyAccessible(unwrappedDependency))
+            || !HasDefinedTemplateArguments(unwrappedDependency)
+            || (!IsPubliclyAccessible(unwrappedDependency)
+                && !HasPublicTemplateArguments(unwrappedDependency)))
         {
             return;
         }
 
-        _ = dependencies.Add(Add(unwrappedDependency));
+        var dependencyModel = Add(unwrappedDependency);
+        dependencyModel.IsRequiredDependency = true;
+        _ = dependencies.Add(dependencyModel);
+    }
+
+    private static bool HasDefinedTemplateArguments(CXXRecordDecl record)
+    {
+        if (record is not ClassTemplateSpecializationDecl specialization)
+        {
+            return true;
+        }
+
+        foreach (var argument in specialization.TemplateArgs.Where(static argument =>
+                     argument.Kind is CXTemplateArgumentKind.CXTemplateArgumentKind_Type))
+        {
+            var argumentRecord = argument.AsType.GetAddingType()?.AsCXXRecordDecl;
+            if (argumentRecord is not null && argumentRecord.Definition is null)
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool HasPublicTemplateArguments(CXXRecordDecl record)
+    {
+        if (record is not ClassTemplateSpecializationDecl specialization)
+        {
+            return false;
+        }
+
+        var templateCursor = clang.getSpecializedCursorTemplate(specialization.Handle);
+        if (!IsPubliclyAccessibleTemplate(templateCursor))
+        {
+            return false;
+        }
+
+        foreach (var argument in specialization.TemplateArgs.Where(static argument =>
+                     argument.Kind is CXTemplateArgumentKind.CXTemplateArgumentKind_Type))
+        {
+            var argumentType = argument.AsType.GetAddingType();
+            if (argumentType?.AsCXXRecordDecl is { } argumentRecord
+                && !IsPubliclyAccessible(argumentRecord.Definition ?? argumentRecord))
+            {
+                return false;
+            }
+
+            if (argumentType is not null
+                && TryGetEnumDecl(argumentType, out var argumentEnum)
+                && !IsPubliclyAccessible(argumentEnum))
+            {
+                return false;
+            }
+        }
+
+        return true;
+    }
+
+    private static bool IsPubliclyAccessibleTemplate(CXCursor cursor)
+    {
+        if (cursor.kind is CXCursorKind.CXCursor_NoDeclFound
+            or CXCursorKind.CXCursor_InvalidFile
+            or CXCursorKind.CXCursor_NotImplemented
+            or CXCursorKind.CXCursor_InvalidCode)
+        {
+            return false;
+        }
+
+        while (true)
+        {
+            var parent = clang.getCursorSemanticParent(cursor);
+            if (parent.kind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace)
+            {
+                return true;
+            }
+
+            if (parent.kind is not (CXCursorKind.CXCursor_StructDecl
+                or CXCursorKind.CXCursor_ClassDecl
+                or CXCursorKind.CXCursor_ClassTemplate
+                or CXCursorKind.CXCursor_ClassTemplatePartialSpecialization)
+                || !HasPublicAccess(cursor))
+            {
+                return false;
+            }
+
+            cursor = parent;
+        }
     }
 
     private static bool IsClosedTemplateSpecialization(CXXRecordDecl record)
@@ -1062,7 +1625,10 @@ internal sealed class RecordModelManager(
         return -1;
     }
 
-    private FieldModel ToModel(FieldDecl fieldDecl)
+    private FieldModel ToModel(
+        FieldDecl fieldDecl,
+        CXXRecordDecl declaringRecord,
+        TemplateProjectionModel? templateProjection)
     {
         var commentProjection = fieldDecl.ToCommentProjection();
 
@@ -1075,8 +1641,11 @@ internal sealed class RecordModelManager(
                 $"Can't get physical layout of field ({fieldDecl.Name} in {fieldDecl.Parent?.Name})");
         }
 
+        var templateField = GetTemplateField(fieldDecl, declaringRecord, templateProjection);
         return new()
         {
+            CSharpTemplateType = GetDirectTemplateFieldType(templateField, templateProjection),
+            CppTemplateType = templateField?.Type.AsString ?? "",
             DescriptionItems = commentProjection.DescriptionItems,
             Name = fieldDecl.Name,
             Type = ToModel(fieldDecl.Type),
@@ -1084,6 +1653,53 @@ internal sealed class RecordModelManager(
             Size = size,
             Alignment = alignment,
         };
+    }
+
+    private static FieldDecl? GetTemplateField(
+        FieldDecl fieldDecl,
+        CXXRecordDecl declaringRecord,
+        TemplateProjectionModel? templateProjection)
+    {
+        if (templateProjection is null
+            || declaringRecord is not ClassTemplateSpecializationDecl specialization)
+        {
+            return null;
+        }
+
+        return specialization.SpecializedTemplate.TemplatedDecl.Fields
+            .FirstOrDefault(candidate => string.Equals(candidate.Name, fieldDecl.Name, StringComparison.Ordinal));
+    }
+
+    private static string GetDirectTemplateFieldType(
+        FieldDecl? templateField,
+        TemplateProjectionModel? templateProjection)
+    {
+        if (templateField is null || templateProjection is null)
+        {
+            return "";
+        }
+
+        var current = templateField.Type;
+        var pointerDepth = 0;
+        while (current is PointerType)
+        {
+            pointerDepth++;
+            current = current.PointeeType;
+        }
+
+        if (current is not TemplateTypeParmType templateParameter
+            || templateParameter.Index >= templateProjection.Arguments.Count)
+        {
+            return "";
+        }
+
+        var argument = templateProjection.Arguments[(int)templateParameter.Index];
+        if (argument.Kind is not TemplateArgumentProjectionKind.Generic)
+        {
+            return "";
+        }
+
+        return argument.ParameterName + new string('*', pointerDepth);
     }
 
     private static bool IsDefined(ClangSharp.Type type)

@@ -25,12 +25,12 @@ internal class TypeModel
     /// <summary>
     /// Gets or sets the projected C# type used for PInvoke and field layout generation.
     /// </summary>
-    public required DataType CSharpPInvokeType { get; init; }
+    public required DataType CSharpPInvokeType { get; set; }
 
     /// <summary>
     /// Gets or sets the projected public C# API type.
     /// </summary>
-    public required DataType CSharpPublicType { get; init; }
+    public required DataType CSharpPublicType { get; set; }
 
     /// <summary>
     /// Gets the undecorated native value type name.

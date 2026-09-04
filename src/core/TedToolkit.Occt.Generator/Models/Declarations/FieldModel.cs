@@ -16,6 +16,16 @@ namespace TedToolkit.Occt.Generator.Models.Declarations;
 internal sealed class FieldModel
 {
     /// <summary>
+    /// Gets the open managed field type when the declaring record is a generic template family.
+    /// </summary>
+    public string CSharpTemplateType { get; init; } = "";
+
+    /// <summary>
+    /// Gets the native dependent field type spelling from the template declaration.
+    /// </summary>
+    public string CppTemplateType { get; init; } = "";
+
+    /// <summary>
     /// Gets the XML documentation description items for the field.
     /// </summary>
     public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }

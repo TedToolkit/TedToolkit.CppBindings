@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Text;
+
 using Cysharp.Text;
 
 using Microsoft.Extensions.Options;
@@ -64,19 +66,35 @@ public sealed class GenerateCSharpModule : Module<bool>
             .Select(static (export, index) => (export, index))
             .ToDictionary(static value => value.export, static value => value.index, StringComparer.Ordinal);
 
+        var recordFamilies = records
+            .GroupBy(static record => record.TemplateProjection is { } projection
+                    ? "family:" + projection.FamilyName
+                    : "record:" + record.Type.CppTypeName,
+                StringComparer.Ordinal)
+            .Select(static family => family.OrderBy(static record => record.Type.CppTypeName, StringComparer.Ordinal)
+                .ToArray())
+            .ToArray();
         await Task.WhenAll(
                 GenerateNativeApiAsync(cancellationToken),
                 Parallel.ForEachAsync(
-                    records,
-                    cancellationToken,
-                    (record, token) => new ValueTask(GenerateCSharpAsync(
-                        record,
+                    recordFamilies,
+                    new ParallelOptions()
+                    {
+                        CancellationToken = cancellationToken,
+                        MaxDegreeOfParallelism = 2,
+                    },
+                    (family, token) => new ValueTask(GenerateCSharpAsync(
+                        family,
                         recordCatalog,
                         nativeFunctionIndices,
                         token))),
                 Parallel.ForEachAsync(
                     enums,
-                    cancellationToken,
+                    new ParallelOptions()
+                    {
+                        CancellationToken = cancellationToken,
+                        MaxDegreeOfParallelism = 2,
+                    },
                     (enumModel, token) => new ValueTask(GenerateCSharpAsync(enumModel, token))))
             .ConfigureAwait(false);
         return true;
@@ -95,18 +113,41 @@ public sealed class GenerateCSharpModule : Module<bool>
     }
 
     private async Task GenerateCSharpAsync(
-        RecordModel record,
+        RecordModel[] family,
         IReadOnlyDictionary<string, RecordModel> recordCatalog,
         IReadOnlyDictionary<string, int> nativeFunctionIndices,
         CancellationToken cancellationToken)
     {
+        var representative = family[0];
+        var fileStem = representative.TemplateProjection?.FamilyName ?? representative.Type.CSharpTypeName;
         var csharpFile = Path.Combine(_generationOptions.Value.CSharpFolder.FullName,
-            ZString.Concat(record.Type.CSharpTypeName.ToGeneratedFileStem(), ".g.cs"));
+            ZString.Concat(fileStem.ToGeneratedFileStem(), ".g.cs"));
 
-        var codes = await _generatorService.GenerateCSharp(record, recordCatalog, nativeFunctionIndices)
-            .GenerateAsync(cancellationToken)
-            .ConfigureAwait(false);
-        await File.WriteAllTextAsync(csharpFile, codes, cancellationToken).ConfigureAwait(false);
+        var stream = new FileStream(
+            csharpFile,
+            FileMode.Create,
+            FileAccess.Write,
+            FileShare.Read,
+            bufferSize: 4096,
+            useAsync: true);
+        await using (stream.ConfigureAwait(false))
+        {
+            var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+            await using (writer.ConfigureAwait(false))
+            {
+                for (var index = 0; index < family.Length; index++)
+                {
+                    var code = await _generatorService.GenerateCSharp(
+                            family[index],
+                            recordCatalog,
+                            nativeFunctionIndices,
+                            generateRepresentation: index is 0)
+                        .GenerateAsync(cancellationToken)
+                        .ConfigureAwait(false);
+                    await writer.WriteAsync(code.AsMemory(), cancellationToken).ConfigureAwait(false);
+                }
+            }
+        }
     }
 
     private async Task GenerateCSharpAsync(EnumModel enumModel, CancellationToken cancellationToken)

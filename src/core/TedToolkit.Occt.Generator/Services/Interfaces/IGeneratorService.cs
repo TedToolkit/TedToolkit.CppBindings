@@ -28,11 +28,13 @@ internal interface IGeneratorService
     /// <param name="record">The record declaration.</param>
     /// <param name="recordCatalog">The completed record models used to classify record results.</param>
     /// <param name="nativeFunctionIndices">The function-table indices keyed by native export name.</param>
+    /// <param name="generateRepresentation">Whether to emit the shared managed representation for this record's family.</param>
     /// <returns>The generator instance.</returns>
     IGenerator GenerateCSharp(
         RecordModel record,
         IReadOnlyDictionary<string, RecordModel>? recordCatalog = null,
-        IReadOnlyDictionary<string, int>? nativeFunctionIndices = null);
+        IReadOnlyDictionary<string, int>? nativeFunctionIndices = null,
+        bool generateRepresentation = true);
 
     /// <summary>
     /// Creates a C# generator for the specified enum.

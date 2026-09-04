@@ -7,6 +7,7 @@
 
 using System.Runtime.InteropServices;
 using System.Text;
+using System.Text.RegularExpressions;
 
 using Microsoft.Extensions.Options;
 
@@ -29,33 +30,51 @@ namespace TedToolkit.Occt.Generator.Generators;
 /// <param name="generationOptions">The generator options.</param>
 /// <param name="recordCatalog">The completed record models used to classify record results.</param>
 /// <param name="nativeFunctionIndices">The function-table indices keyed by native export name.</param>
+/// <param name="generateRepresentation">Whether to emit the shared managed representation for this record's family.</param>
 internal sealed class CSharpGenerator(
     RecordModel recordDecl,
     IOptions<GenerationOptions> generationOptions,
     IReadOnlyDictionary<string, RecordModel>? recordCatalog = null,
-    IReadOnlyDictionary<string, int>? nativeFunctionIndices = null) : IGenerator
+    IReadOnlyDictionary<string, int>? nativeFunctionIndices = null,
+    bool generateRepresentation = true) : IGenerator
 {
+    private bool? _usesGenericReceiver;
+
     private bool UsesGenericReceiver
     {
         get
         {
-            return GetDerivedRecords().Length > 0;
+            return _usesGenericReceiver ??= recordCatalog?.Values.Any(candidate =>
+                !ReferenceEquals(candidate, recordDecl)
+                && TryGetInheritancePath(candidate, recordDecl, out _)) is true;
         }
     }
 
     /// <inheritdoc />
     public async Task<string> GenerateAsync(CancellationToken cancellationToken)
     {
-        var structName = recordDecl.Type.CSharpPublicType.ToCode();
+        if (!generateRepresentation)
+        {
+            return GenerateExtensions();
+        }
+
+        var templateProjection = recordDecl.TemplateProjection;
+        var structName = templateProjection?.FamilyName ?? recordDecl.Type.CSharpPublicType.ToCode();
         var usesExplicitLayout = UsesExplicitLayout();
         var nameSpace = NameSpace("TedToolkit.Occt");
         var structDeclaration = Struct(structName).Unsafe
             .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
-                .AddArgument(Argument(recordDecl.Type.CppTypeName.ToLiteral())))
-            .AddAttribute(Attribute<StructLayoutAttribute>()
-                .AddArgument(Argument((usesExplicitLayout ? LayoutKind.Explicit : LayoutKind.Sequential).ToExpression()))
-                .AddNamedArgument(nameof(StructLayoutAttribute.Size),
-                    recordDecl.Size.ToLiteral()));
+                .AddArgument(Argument((templateProjection?.NativeTypePattern
+                                       ?? recordDecl.Type.CppTypeName).ToLiteral())));
+        var layoutAttribute = Attribute<StructLayoutAttribute>()
+            .AddArgument(Argument((usesExplicitLayout ? LayoutKind.Explicit : LayoutKind.Sequential).ToExpression()));
+        if (templateProjection is null)
+        {
+            layoutAttribute.AddNamedArgument(nameof(StructLayoutAttribute.Size), recordDecl.Size.ToLiteral());
+        }
+
+        structDeclaration.AddAttribute(layoutAttribute);
+        AddTemplateParameters(structDeclaration);
         AddRootDescriptions(structDeclaration, recordDecl.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
 
@@ -80,16 +99,21 @@ internal sealed class CSharpGenerator(
             return;
         }
 
-        var interfaceDeclaration = Interface(recordDecl.Type.CSharpInterfaceName).Public.Unsafe;
-        structDeclaration?.AddBaseType(new DataType(recordDecl.Type.CSharpInterfaceName));
+        var interfaceName = GetOpenInterfaceName(recordDecl);
+        var interfaceDeclaration = Interface(recordDecl.TemplateProjection?.FamilyName is { } familyName
+                ? "I" + familyName
+                : recordDecl.Type.CSharpInterfaceName)
+            .Public.Unsafe;
+        AddTemplateParameters(interfaceDeclaration);
+        structDeclaration?.AddBaseType(new DataType(interfaceName));
         foreach (var baseRelation in recordDecl.Bases.Where(relation =>
                      relation.IsPublic
                      && recordCatalog?.ContainsKey(relation.Base.Type.CppTypeName) is not false))
         {
-            interfaceDeclaration.AddBaseType(new DataType(
+            interfaceDeclaration.AddBaseType(new DataType(GeneralizeManagedType(
                 baseRelation.Base.Type.CSharpInterfaceName is "IStandard_Transient"
                     ? "global::TedToolkit.Occt.IStandard_Transient"
-                    : baseRelation.Base.Type.CSharpInterfaceName));
+                    : baseRelation.Base.Type.CSharpInterfaceName)));
         }
 
         if (recordDecl.ObjectKind is NativeObjectKind.Handle
@@ -112,6 +136,49 @@ internal sealed class CSharpGenerator(
         nameSpace.AddMember(interfaceDeclaration);
     }
 
+    private void AddTemplateParameters(TypeDeclaration declaration)
+    {
+        if (recordDecl.TemplateProjection is null)
+        {
+            return;
+        }
+
+        foreach (var argument in recordDecl.TemplateProjection.GenericArguments)
+        {
+            declaration.AddTypeParameter(new TypeParameter(argument.ParameterName).AddUnmanagedConstraint());
+        }
+    }
+
+    private static string GetOpenInterfaceName(RecordModel record)
+    {
+        return record.TemplateProjection is null
+            ? record.Type.CSharpInterfaceName
+            : "I" + record.TemplateProjection.DeclarationTypeName;
+    }
+
+    private string GeneralizeManagedType(string closedType)
+    {
+        if (recordDecl.TemplateProjection is null || string.IsNullOrEmpty(closedType))
+        {
+            return closedType;
+        }
+
+        foreach (var arguments in recordDecl.TemplateProjection.GenericArguments
+                     .GroupBy(static argument => argument.ClosedCSharpType, StringComparer.Ordinal)
+                     .Where(static group => group.Count() is 1)
+                     .OrderByDescending(static group => group.Key.Length))
+        {
+            var argument = arguments.Single();
+            closedType = Regex.Replace(
+                closedType,
+                $"(?<![A-Za-z0-9_]){Regex.Escape(argument.ClosedCSharpType)}(?![A-Za-z0-9_])",
+                argument.ParameterName,
+                RegexOptions.CultureInvariant);
+        }
+
+        return closedType;
+    }
+
     private bool UsesExplicitLayout()
     {
         var currentOffset = 0L;
@@ -130,6 +197,16 @@ internal sealed class CSharpGenerator(
 
     private void GenerateFields(TypeDeclaration structDeclaration, bool usesExplicitLayout)
     {
+        if (recordDecl.TemplateProjection is not null)
+        {
+            foreach (var field in recordDecl.FieldModels.OrderBy(static field => field.Offset))
+            {
+                AddField(structDeclaration, field, false);
+            }
+
+            return;
+        }
+
         if (usesExplicitLayout)
         {
             foreach (var field in recordDecl.FieldModels.OrderBy(static field => field.Offset))
@@ -152,11 +229,20 @@ internal sealed class CSharpGenerator(
         AddPadding(structDeclaration, ref currentOffset, recordDecl.Size, ref paddingIndex);
     }
 
-    private static void AddField(TypeDeclaration structDeclaration, FieldModel fieldModel, bool usesExplicitLayout)
+    private void AddField(TypeDeclaration structDeclaration, FieldModel fieldModel, bool usesExplicitLayout)
     {
-        var field = Field(fieldModel.Type.CSharpPInvokeType, fieldModel.Name)
+        var managedType = recordDecl.TemplateProjection is null
+            ? fieldModel.Type.CSharpPInvokeType
+            : new DataType(string.IsNullOrEmpty(fieldModel.CSharpTemplateType)
+                ? GeneralizeManagedType(fieldModel.Type.CSharpPInvokeType.ToCode())
+                : fieldModel.CSharpTemplateType);
+        var nativeType = recordDecl.TemplateProjection is not null
+                         && !string.IsNullOrEmpty(fieldModel.CppTemplateType)
+            ? fieldModel.CppTemplateType
+            : fieldModel.Type.CppTypeName;
+        var field = Field(managedType, fieldModel.Name)
             .AddAttribute(Attribute(new DataType("global::TedToolkit.Occt.Attributes.NativeTypeNameAttribute"))
-                .AddArgument(Argument(fieldModel.Type.CppTypeName.ToLiteral())))
+                .AddArgument(Argument(nativeType.ToLiteral())))
             .Public;
         if (usesExplicitLayout)
         {
@@ -216,8 +302,9 @@ internal sealed class CSharpGenerator(
         }
 
         var recordName = recordDecl.Type.CSharpTypeName;
+        var extensionName = recordDecl.TemplateProjection?.FixedTypeName ?? recordName;
         var builder = new StringBuilder("\n\nnamespace TedToolkit.Occt\n{\n    public static unsafe class ")
-            .Append(recordName).Append("Extensions\n    {\n");
+            .Append(extensionName).Append("Extensions\n    {\n");
         foreach (var method in methods)
         {
             if (method.Type is MethodModelType.NEW)

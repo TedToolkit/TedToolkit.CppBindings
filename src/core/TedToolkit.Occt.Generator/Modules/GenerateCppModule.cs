@@ -52,8 +52,10 @@ public sealed class GenerateCppModule : Module<bool>
     {
         ArgumentNullException.ThrowIfNull(context);
         var outputs = _recordManager.RecordModels
-            .OrderBy(static record => record.Type.CSharpTypeName, StringComparer.Ordinal)
-            .Select(static record => new RecordOutput(record, record.Type.CSharpTypeName.ToGeneratedFileStem() + ".cpp"))
+            .OrderBy(static record => record.Type.CppTypeName, StringComparer.Ordinal)
+            .Select(static record => new RecordOutput(
+                record,
+                record.Type.CppTypeName.ToGeneratedTypeName().ToGeneratedFileStem() + ".cpp"))
             .ToArray();
         RejectFileNameCollisions(outputs);
         var exports = NativeApiGenerator.GetExports(outputs.Select(static output => output.Record).ToArray());
