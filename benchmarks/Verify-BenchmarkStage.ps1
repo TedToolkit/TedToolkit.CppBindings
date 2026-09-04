@@ -1,0 +1,65 @@
+$ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+$runner = Join-Path $PSScriptRoot 'Measure-BenchmarkStage.ps1'
+$fixture = Join-Path $PSScriptRoot 'fixtures/StageProcess.ps1'
+$repository = Split-Path $PSScriptRoot -Parent
+$proofRoot = Join-Path $repository ('out/benchmark/stage-proof-' + [Guid]::NewGuid().ToString('N'))
+$null = New-Item -ItemType Directory -Path $proofRoot
+$deadline = [DateTimeOffset]::UtcNow.AddMinutes(5).ToString('O')
+$pwshPath = (Get-Process -Id $PID).Path
+$argument = 'quoted "value" with spaces, Unicode 测试, and literal $()'
+$scenarios = @(
+    @{ Name = 'success'; Mode = 'echo'; Limit = 20; Memory = 2GB; Expected = $null },
+    @{ Name = 'failure'; Mode = 'failure'; Limit = 20; Memory = 2GB; Expected = '*exited with code 17*' },
+    @{ Name = 'timeout'; Mode = 'sleep'; Limit = 2; Memory = 2GB; Expected = '*time budget was exceeded*' },
+    @{ Name = 'memory'; Mode = 'sleep'; Limit = 20; Memory = 1; Expected = '*memory budget was exceeded*' },
+    @{ Name = 'tree'; Mode = 'tree'; Limit = 3; Memory = 2GB; Expected = '*time budget was exceeded*' }
+)
+foreach ($scenario in $scenarios) {
+    $specPath = Join-Path $proofRoot ($scenario.Name + '.json')
+    $report = Join-Path $proofRoot $scenario.Name
+    [ordered]@{
+        Label = 'Harness verification only: ' + $scenario.Name
+        Executable = $pwshPath
+        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', $scenario.Mode, '-Value', $argument)
+        WorkingDirectory = $proofRoot
+        DeadlineUtc = $deadline
+        TimeLimitSeconds = $scenario.Limit
+        MemoryLimitBytes = $scenario.Memory
+    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $specPath -Encoding utf8
+    $errorText = $null
+    try { & $runner -SpecificationPath $specPath -ReportDirectory $report }
+    catch { $errorText = $_.Exception.Message }
+    if ($null -eq $scenario.Expected -and $null -ne $errorText) { throw $errorText }
+    if ($null -ne $scenario.Expected -and $errorText -notlike $scenario.Expected) {
+        throw "Unexpected result for $($scenario.Name): $errorText"
+    }
+    $result = Get-Content -LiteralPath (Join-Path $report 'result.json') -Raw | ConvertFrom-Json
+    if ($result.Succeeded -ne ($null -eq $scenario.Expected)) { throw 'Result success state does not match the exit.' }
+    if ($result.Command.Arguments[-1] -cne $argument) { throw 'Argument boundaries were not preserved.' }
+    if ($result.ProcessElapsedSeconds -le 0) { throw 'The process elapsed measurement is missing.' }
+    if ($scenario.Name -eq 'failure' -and $result.ExitCode -ne 17) { throw 'The child exit code was lost.' }
+    if ($scenario.Name -eq 'success') {
+        $output = Get-Content -LiteralPath (Join-Path $report 'stdout.log') -Raw
+        if (-not $output.StartsWith($argument) -or $output.Length -lt 1048576) { throw 'Standard output was truncated or arguments changed.' }
+        if ((Get-Content -LiteralPath (Join-Path $report 'stderr.log') -Raw).Trim() -ne 'stderr retained') {
+            throw 'Standard error was not captured independently.'
+        }
+    }
+    if ($scenario.Name -eq 'tree') {
+        $output = Get-Content -LiteralPath (Join-Path $report 'stdout.log') -Raw
+        if ($output -notmatch 'child:(\d+)') { throw 'The descendant fixture did not start.' }
+        if (Get-Process -Id ([int] $Matches[1]) -ErrorAction SilentlyContinue) { throw 'The descendant survived timeout cleanup.' }
+        if ($result.ObservedProcessCount -lt 2) { throw 'Descendant resource accounting was not exercised.' }
+    }
+}
+
+$protectedReport = Join-Path $proofRoot 'success/result.json'
+$before = (Get-FileHash -LiteralPath $protectedReport -Algorithm SHA256).Hash
+$rejected = $false
+try { & $runner -SpecificationPath (Join-Path $proofRoot 'success.json') -ReportDirectory (Join-Path $proofRoot 'success') }
+catch { $rejected = $_.Exception.Message -like 'Use a new report directory*' }
+if (-not $rejected -or (Get-FileHash -LiteralPath $protectedReport -Algorithm SHA256).Hash -ne $before) {
+    throw 'The existing-evidence guard failed.'
+}
+Write-Output "Stage proof passed: five process scenarios and evidence preservation. Raw evidence: $proofRoot"
