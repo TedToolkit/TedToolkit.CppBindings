@@ -9,6 +9,11 @@ using System.Text;
 using Microsoft.Win32.SafeHandles;
 
 namespace OcctBenchmarkNative {
+    public sealed class FileIdentityInfo {
+        public string Identity { get; set; }
+        public uint LinkCount { get; set; }
+    }
+
     public static class PathIdentity {
         private const uint FileReadAttributes = 0x80;
         private const uint FileShareAll = 0x7;
@@ -32,6 +37,24 @@ namespace OcctBenchmarkNative {
 
         [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
         private static extern uint GetShortPathName(string longPath, StringBuilder shortPath, uint bufferLength);
+
+        [StructLayout(LayoutKind.Sequential)]
+        private struct ByHandleFileInformation {
+            public uint FileAttributes;
+            public System.Runtime.InteropServices.ComTypes.FILETIME CreationTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastAccessTime;
+            public System.Runtime.InteropServices.ComTypes.FILETIME LastWriteTime;
+            public uint VolumeSerialNumber;
+            public uint FileSizeHigh;
+            public uint FileSizeLow;
+            public uint NumberOfLinks;
+            public uint FileIndexHigh;
+            public uint FileIndexLow;
+        }
+
+        [DllImport("kernel32.dll", SetLastError = true)]
+        private static extern bool GetFileInformationByHandle(
+            SafeFileHandle handle, out ByHandleFileInformation information);
 
         public static string FinalPath(string path) {
             using (var handle = CreateFile(path, FileReadAttributes, FileShareAll, IntPtr.Zero,
@@ -64,6 +87,22 @@ namespace OcctBenchmarkNative {
                 if (length == 0) throw new Win32Exception(Marshal.GetLastWin32Error(), "GetShortPathName failed for " + path);
                 if (length < buffer.Capacity) return buffer.ToString();
                 buffer.Capacity = checked((int)length + 1);
+            }
+        }
+
+        public static FileIdentityInfo FileIdentity(string path) {
+            using (var handle = CreateFile(path, FileReadAttributes, FileShareAll, IntPtr.Zero,
+                OpenExisting, BackupSemantics, IntPtr.Zero)) {
+                if (handle.IsInvalid) throw new Win32Exception(Marshal.GetLastWin32Error(), "CreateFile failed for " + path);
+                ByHandleFileInformation information;
+                if (!GetFileInformationByHandle(handle, out information))
+                    throw new Win32Exception(Marshal.GetLastWin32Error(), "GetFileInformationByHandle failed for " + path);
+                if ((information.FileAttributes & 0x10) != 0) throw new InvalidOperationException("Expected a file: " + path);
+                return new FileIdentityInfo {
+                    Identity = information.VolumeSerialNumber.ToString("X8") + ":" +
+                        information.FileIndexHigh.ToString("X8") + information.FileIndexLow.ToString("X8"),
+                    LinkCount = information.NumberOfLinks
+                };
             }
         }
 
@@ -108,6 +147,11 @@ function Get-BenchmarkVolumeIdentity {
         if ([string]::IsNullOrEmpty($existing)) { throw "No existing volume probe ancestor for benchmark path: $physical" }
     }
     return [OcctBenchmarkNative.PathIdentity]::VolumeIdentity($existing)
+}
+
+function Get-BenchmarkFileIdentity {
+    param([Parameter(Mandatory)] [string] $Path)
+    return [OcctBenchmarkNative.PathIdentity]::FileIdentity((Resolve-BenchmarkPhysicalPath $Path))
 }
 
 function Test-BenchmarkPathEqual {

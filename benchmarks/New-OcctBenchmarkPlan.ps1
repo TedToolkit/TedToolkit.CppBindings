@@ -148,6 +148,20 @@ function Get-FileBinding {
     }
 }
 
+function Assert-PrivateSingleLinkFile {
+    param([string] $Path, [string] $Label)
+    $identity = Get-BenchmarkFileIdentity $Path
+    if ($identity.LinkCount -ne 1) {
+        throw "$Label must be a private file with hard-link count 1: $Path"
+    }
+    return $identity
+}
+
+function Assert-DistinctFileIdentities {
+    param($Left, $Right, [string] $Label)
+    if ($Left.Identity -ceq $Right.Identity) { throw "$Label must have distinct physical file identities." }
+}
+
 function Read-HostReceipt {
     param([string] $Path, [string] $ExpectedVariant, [string] $ExpectedState, [string] $ExpectedBase)
 
@@ -493,6 +507,29 @@ $statusFiles = [ordered]@{
     baseline = Resolve-ExistingPath (Join-Path $baselineInput 'installed/vcpkg/status') file
     candidate = Resolve-ExistingPath (Join-Path $candidateInput 'installed/vcpkg/status') file
 }
+$privateFileIdentities = [ordered]@{
+    baselineHeader = Assert-PrivateSingleLinkFile $baselineHeader 'Baseline mutable declaration header'
+    candidateHeader = Assert-PrivateSingleLinkFile $candidateHeader 'Candidate mutable declaration header'
+    baselineStatus = Assert-PrivateSingleLinkFile $statusFiles.baseline 'Baseline private vcpkg status file'
+    candidateStatus = Assert-PrivateSingleLinkFile $statusFiles.candidate 'Candidate private vcpkg status file'
+}
+Assert-DistinctFileIdentities $privateFileIdentities.baselineHeader $privateFileIdentities.candidateHeader `
+    'Baseline and candidate mutable declaration headers'
+Assert-DistinctFileIdentities $privateFileIdentities.baselineStatus $privateFileIdentities.candidateStatus `
+    'Baseline and candidate private vcpkg status files'
+$toolchainStatusIdentity = Get-BenchmarkFileIdentity $toolchainStatus
+Assert-DistinctFileIdentities $privateFileIdentities.baselineStatus $toolchainStatusIdentity `
+    'Baseline private and toolchain vcpkg status files'
+Assert-DistinctFileIdentities $privateFileIdentities.candidateStatus $toolchainStatusIdentity `
+    'Candidate private and toolchain vcpkg status files'
+$toolchainHeader = Join-Path $toolchainVcpkg "installed/$triplet/include/$DeclarationHeaderRelativePath"
+if (Test-Path -LiteralPath $toolchainHeader -PathType Leaf) {
+    $toolchainHeaderIdentity = Get-BenchmarkFileIdentity $toolchainHeader
+    Assert-DistinctFileIdentities $privateFileIdentities.baselineHeader $toolchainHeaderIdentity `
+        'Baseline private and toolchain declaration headers'
+    Assert-DistinctFileIdentities $privateFileIdentities.candidateHeader $toolchainHeaderIdentity `
+        'Candidate private and toolchain declaration headers'
+}
 if ((Get-FileHash $statusFiles.baseline).Hash -cne (Get-FileHash $statusFiles.candidate).Hash) {
     throw 'The private input roots must use the same vcpkg status file.'
 }
@@ -828,6 +865,8 @@ $plan = [ordered]@{
         baseline = [ordered]@{
             RepositoryRoot = $baselineRepository; ArtifactRoot = $baselineArtifact; InputVcpkgRoot = $baselineInput
             IncludeRoot = $includeRoots.baseline; HeaderPath = $baselineHeader; StatusFile = $statusFiles.baseline
+            HeaderFileIdentity = $privateFileIdentities.baselineHeader.Identity
+            StatusFileIdentity = $privateFileIdentities.baselineStatus.Identity
             StatusFileSha256 = (Get-FileHash $statusFiles.baseline).Hash
             OriginalHost = $hosts.baseline.original; OriginalHostRoot = $hostReceipts.baseline.original.HostRoot
             OriginalHostSha256 = (Get-FileHash $hosts.baseline.original).Hash
@@ -837,6 +876,8 @@ $plan = [ordered]@{
         candidate = [ordered]@{
             RepositoryRoot = $candidateRepository; ArtifactRoot = $candidateArtifact; InputVcpkgRoot = $candidateInput
             IncludeRoot = $includeRoots.candidate; HeaderPath = $candidateHeader; StatusFile = $statusFiles.candidate
+            HeaderFileIdentity = $privateFileIdentities.candidateHeader.Identity
+            StatusFileIdentity = $privateFileIdentities.candidateStatus.Identity
             StatusFileSha256 = (Get-FileHash $statusFiles.candidate).Hash
             OriginalHost = $hosts.candidate.original; OriginalHostRoot = $hostReceipts.candidate.original.HostRoot
             OriginalHostSha256 = (Get-FileHash $hosts.candidate.original).Hash
