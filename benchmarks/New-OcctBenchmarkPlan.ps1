@@ -700,6 +700,9 @@ foreach ($path in @($inputManifestPath, $originalHeaderCopy, $changedHeaderCopy,
 foreach ($receipt in $receiptValues) {
     foreach ($path in @($receipt.BuildSpecificationPath, $receipt.BuildResultPath, $receipt.FrozenPatchPath) |
         Where-Object { $_ }) { $fileBindings.Add((Get-FileBinding $path)) }
+    foreach ($hostFile in $receipt.HostFiles) {
+        $fileBindings.Add((Get-FileBinding (Resolve-ExistingPath (Join-Path $receipt.HostDirectory $hostFile.Path) file)))
+    }
 }
 foreach ($binding in $gateSpec.InputFiles) { $fileBindings.Add((Get-FileBinding (Resolve-ExistingPath $binding.Path file))) }
 
@@ -804,13 +807,6 @@ foreach ($path in @($planPath, $inputManifestPath, $originalHeaderCopy, $changed
         $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate)) { $null = $boundFiles.Add($path) }
 foreach ($binding in $fileBindings) { $null = $boundFiles.Add($binding.Path) }
-foreach ($variant in @('baseline', 'candidate')) {
-    foreach ($generatorHost in @($hosts[$variant].original, $hosts[$variant].changed)) {
-        foreach ($file in Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($generatorHost)) -Recurse -File) {
-            $null = $boundFiles.Add($file.FullName)
-        }
-    }
-}
 
 $matrixPath = Join-Path $destination 'matrix.json'
 Write-NewJson $matrixPath ([ordered]@{
