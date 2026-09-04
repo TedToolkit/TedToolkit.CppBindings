@@ -283,6 +283,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
         }
     }
     Require ((@($matrix.Workloads.Name) -join ',') -ceq 'artifact-cold,unchanged,declaration-edit,generator-change,missing-output') 'Workload inventory drifted.'
+    Require ($matrix.Scope -ceq 'full') 'The default OCCT plan must retain full recommendation sampling scope.'
     foreach ($workload in $matrix.Workloads) {
         foreach ($variant in @('baseline', 'candidate')) {
             $measure = @($workload.$variant.Measure | ForEach-Object { Get-Content -LiteralPath $_ -Raw | ConvertFrom-Json })
@@ -293,6 +294,23 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     }
     & $matrixRunner -SpecificationPath (Join-Path $specification 'matrix.json') `
         -ReportDirectory (Join-Path $proofRoot 'matrix-plan-only') -PlanOnly
+
+    $screeningArguments = $arguments.Clone()
+    $screeningArguments.SpecificationDirectory = Join-Path $proofRoot 'screening-specification'
+    $screeningArguments.BaselineArtifactRoot = Join-Path $proofRoot 'artifact-sb'
+    $screeningArguments.CandidateArtifactRoot = Join-Path $proofRoot 'artifact-sc'
+    $screeningArguments.Scope = 'screening'
+    & $builder @screeningArguments
+    $screeningMatrixPath = Join-Path $screeningArguments.SpecificationDirectory 'matrix.json'
+    $screeningMatrix = Get-Content -LiteralPath $screeningMatrixPath -Raw | ConvertFrom-Json
+    Require ($screeningMatrix.Scope -ceq 'screening') 'Screening scope was not retained by the OCCT plan.'
+    Require (@($screeningMatrix.Workloads | Where-Object Samples -ne 1).Count -eq 0) `
+        'Screening must request exactly one recorded pair per full-public-header workload.'
+    $screeningReport = Join-Path $proofRoot 'screening-matrix-plan-only'
+    & $matrixRunner -SpecificationPath $screeningMatrixPath -ReportDirectory $screeningReport -PlanOnly
+    $screeningSchedule = (Get-Content -LiteralPath (Join-Path $screeningReport 'plan.json') -Raw | ConvertFrom-Json).Schedule
+    Require ($screeningSchedule.Count -eq 10 -and @($screeningSchedule | Where-Object IsWarmup).Count -eq 0) `
+        'Screening must produce ten recorded executions and no warmups.'
 
     $invalidHostRoot = Join-Path $proofRoot 'hosts-invalid'
     Write-TextFile (Join-Path $invalidHostRoot 'TedToolkit.CppBindings.Occt.Console.dll') 'not a managed PE'
@@ -350,6 +368,8 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
 
     $crossVolumeArguments = $arguments.Clone()
     $crossVolumeArguments.SpecificationDirectory = Join-Path $proofRoot 'cross-volume-spec'
+    $crossVolumeArguments.BaselineArtifactRoot = Join-Path $proofRoot 'artifact-vb'
+    $crossVolumeArguments.CandidateArtifactRoot = Join-Path $proofRoot 'artifact-vc'
     $crossVolumeArguments.FixtureVolumeIdentityOverrides = @{
         (Resolve-Path -LiteralPath $candidateInput).Path = '\\?\Volume{fixture-other-volume}\'
     }

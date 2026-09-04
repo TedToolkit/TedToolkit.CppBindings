@@ -18,7 +18,11 @@ $pwshPath = (Get-Process -Id $PID).Path
 $deadline = [DateTimeOffset]::UtcNow.AddMinutes(10).ToString('O')
 
 function New-MatrixFixture {
-    param([string] $Name, [string] $VerifyMode = 'success')
+    param(
+        [string] $Name,
+        [string] $VerifyMode = 'success',
+        [ValidateSet('screening', 'full')] [string] $Scope = 'full'
+    )
 
     $root = Join-Path $proofRoot $Name
     $null = New-Item -ItemType Directory -Path $root
@@ -39,7 +43,7 @@ function New-MatrixFixture {
     $workloads = @('artifact-cold', 'unchanged', 'declaration-edit', 'generator-change', 'missing-output') |
         ForEach-Object {
             @{
-                Name = $_; Samples = $(if ($_ -eq 'artifact-cold') { 3 } else { 5 })
+                Name = $_; Samples = $(if ($Scope -eq 'screening') { 1 } elseif ($_ -eq 'artifact-cold') { 3 } else { 5 })
                 baseline = $variant.Clone(); candidate = $variant.Clone()
             }
         }
@@ -48,7 +52,7 @@ function New-MatrixFixture {
         Specification = @{
             RepositoryRoot = $root; ArtifactProbePath = $root
             ArtifactVolumeIdentity = Get-BenchmarkVolumeIdentity $root
-            Scope = 'screening'; DeadlineUtc = $deadline
+            Scope = $Scope; DeadlineUtc = $deadline
             MemoryLimitBytes = 2GB; MemoryReserveBytes = 1GB
             InputFiles = @(@{ Path = $inputPath; Sha256 = (Get-FileHash -LiteralPath $inputPath).Hash })
             Workloads = @($workloads)
@@ -98,7 +102,9 @@ $happy = New-MatrixFixture 'happy'
 Invoke-Fixture $happy ''
 $plan = Get-Content -LiteralPath (Join-Path $happy.Report 'plan.json') -Raw | ConvertFrom-Json -DateKind String
 $result = Get-Content -LiteralPath (Join-Path $happy.Report 'result.json') -Raw | ConvertFrom-Json
-if (-not $result.Succeeded -or $result.CompletedSamples -ne 56 -or $result.Statistics.Count -ne 10) {
+if (-not $result.Succeeded -or $result.CompletedSamples -ne 56 -or $result.Statistics.Count -ne 10 -or
+    -not $result.MeetsRecommendationSamplingRequirements -or
+    $result.EvidenceUse -cne 'RecommendationThresholdAssessment' -or $result.ProductionAdoptionAuthorized) {
     throw 'The full paired schedule did not finish.'
 }
 if (@($result.Samples | Where-Object IsWarmup).Count -ne 10) { throw 'Warmup accounting failed.' }
@@ -114,6 +120,7 @@ foreach ($binding in $planBindings) {
 }
 Assert-CompleteBindings $plan $happy
 Assert-CompleteBindings $result $happy
+if ($plan.ProductionAdoptionAuthorized) { throw 'The matrix plan granted production adoption authority.' }
 $warmupPhase = Get-Content -LiteralPath (Join-Path $happy.Report '000-artifact-cold-baseline/Prepare-00.json') -Raw |
     ConvertFrom-Json
 $nextVariantPhase = Get-Content -LiteralPath (Join-Path $happy.Report '001-artifact-cold-candidate/Prepare-00.json') -Raw |
@@ -145,6 +152,29 @@ foreach ($statistic in $result.Statistics) {
         throw 'Warmups, setup, or verification contaminated the statistics.'
     }
 }
+
+$screening = New-MatrixFixture 'screening' success screening
+Invoke-Fixture $screening ''
+$screeningPlan = Get-Content -LiteralPath (Join-Path $screening.Report 'plan.json') -Raw | ConvertFrom-Json
+$screeningResult = Get-Content -LiteralPath (Join-Path $screening.Report 'result.json') -Raw | ConvertFrom-Json
+if (-not $screeningResult.Succeeded -or $screeningResult.CompletedSamples -ne 10 -or
+    @($screeningResult.Samples | Where-Object IsWarmup).Count -ne 0 -or
+    $screeningResult.MeetsRecommendationSamplingRequirements -or
+    $screeningResult.EvidenceUse -cne 'CorrectnessResourceAndDirectionalFeasibilityOnly' -or
+    $screeningResult.ProductionAdoptionAuthorized) {
+    throw 'Screening did not remain a ten-execution non-recommendation feasibility pass.'
+}
+$screeningFirsts = @(for ($index = 0; $index -lt $screeningPlan.Schedule.Count; $index += 2) {
+    $screeningPlan.Schedule[$index].Variant
+})
+if (($screeningFirsts -join ',') -cne 'baseline,candidate,baseline,candidate,baseline') {
+    throw 'Screening first-variant order was not balanced across workloads.'
+}
+foreach ($group in ($screeningPlan.Schedule | Group-Object Workload)) {
+    if ($group.Count -ne 2 -or @($group.Group.Variant | Sort-Object -Unique).Count -ne 2) {
+        throw 'Screening did not schedule exactly one recorded baseline/candidate pair per workload.'
+    }
+}
 foreach ($phase in $result.Samples.Phases) {
     $derived = Get-Content -LiteralPath (Join-Path $phase.Report 'result.json') -Raw | ConvertFrom-Json -DateKind String
     if ($derived.DeadlineUtc -ne $deadline -or $derived.MemoryLimitBytes -ne 2GB) {
@@ -165,12 +195,17 @@ $planOnlyEvidence = Get-Content -LiteralPath (Join-Path $planOnly.Report 'plan.j
 if (-not $planOnlyEvidence.PlanOnly) { throw 'Plan-only evidence did not identify itself.' }
 Assert-CompleteBindings $planOnlyEvidence $planOnly
 
-foreach ($case in @('few-warm', 'few-cold', 'duplicate', 'no-verify', 'wrong-hash', 'expired', 'extended',
-        'unknown-placeholder', 'embedded-placeholder')) {
+foreach ($case in @('few-warm', 'few-cold', 'screening-extra', 'cross-volume', 'duplicate', 'no-verify',
+        'wrong-hash', 'expired', 'extended', 'unknown-placeholder', 'embedded-placeholder')) {
     $fixture = New-MatrixFixture $case
     $expected = switch ($case) {
         'few-warm' { $fixture.Specification.Workloads[1].Samples = 4; 'Invalid sample count*' }
         'few-cold' { $fixture.Specification.Workloads[0].Samples = 2; 'Invalid sample count*' }
+        'screening-extra' {
+            $fixture.Specification.Scope = 'screening'; $fixture.Specification.Workloads[0].Samples = 2
+            'Invalid sample count*'
+        }
+        'cross-volume' { $fixture.Specification.ArtifactVolumeIdentity = '\\?\Volume{fixture-other-volume}\'; '*frozen physical volume*' }
         'duplicate' { $fixture.Specification.Workloads[1].Name = 'artifact-cold'; 'Unknown or duplicate workload*' }
         'no-verify' { $fixture.Specification.Workloads[0].baseline.Verify = @(); '*nonempty Verify stage array*' }
         'wrong-hash' { $fixture.Specification.InputFiles[0].Sha256 = ('0' * 64); 'Input changed*' }
@@ -204,7 +239,11 @@ foreach ($case in @('verification-failure', 'changed-input', 'resource-failure')
     }
     Invoke-Fixture $fixture $expected
     $failed = Get-Content -LiteralPath (Join-Path $fixture.Report 'result.json') -Raw | ConvertFrom-Json
-    if ($failed.Succeeded -or $failed.CompletedSamples -ne 0) { throw 'A failed/unchecked sample was accepted.' }
+    if ($failed.Succeeded -or $failed.CompletedSamples -ne 0 -or
+        $failed.MeetsRecommendationSamplingRequirements -or
+        $failed.EvidenceUse -cne 'IncompleteNoRecommendation' -or $failed.ProductionAdoptionAuthorized) {
+        throw 'A failed/unchecked sample was accepted or granted recommendation authority.'
+    }
     if (@(Get-ChildItem -LiteralPath $fixture.Report -Directory).Count -ne 1) { throw 'The failing matrix continued sampling.' }
 }
 if ($RealProcess) {
@@ -227,4 +266,4 @@ if ($RealProcess) {
         $phase.ProcessElapsedSeconds -le 0) { throw 'The actual stage failure did not invalidate the sample.' }
     Write-Output 'Real process integration passed: actual process capture and failing verification reject the sample.'
 }
-Write-Output "Matrix proof passed: paired schedule, exact sample placeholders, retained bindings, warmup exclusion, budget sharing, evidence guard, plan-only, nine invalid plans and three fail-closed runs. Fixture-only evidence: $proofRoot"
+Write-Output "Matrix proof passed: full 56-execution sampling, screening 10-execution feasibility, exact placeholders/bindings, recommendation authority guards, shared budget/deadline, plan-only, eleven invalid plans and three fail-closed runs. Fixture-only evidence: $proofRoot"

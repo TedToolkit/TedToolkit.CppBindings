@@ -8,12 +8,15 @@ experiment is in progress. No performance recommendation or speedup has been est
 Run from PowerShell 7.5 or later on the Windows benchmark machine, with a new report path for each attempt:
 
 ```powershell
-./benchmarks/Get-BenchmarkEnvironment.ps1 -RepositoryRoot . -ReportPath ./out/benchmark/environment-01.json
+./benchmarks/Get-BenchmarkEnvironment.ps1 -RepositoryRoot . `
+  -ReportPath ./out/benchmark/environment-01.json `
+  -ArtifactProbePath ./out/benchmark/artifacts-baseline `
+  -ExpectedArtifactVolumeIdentity '<volume identity frozen by New-OcctBenchmarkPlan.ps1>'
 ./benchmarks/Verify-BenchmarkPreflight.ps1
 ```
 
 The script records the Git revision, working-tree status, submodules, .NET/CMake tools, CPU, free
-memory, artifact-drive space, and potentially competing builds. It fails closed when collection
+memory, explicitly bound artifact-volume space, and potentially competing builds. It fails closed when collection
 fails, the destination already exists, or the resource checks fail. A rejected resource snapshot is
 retained with its reasons. It does not stop other processes, alter the baseline, or run a build.
 CIM access may require permission outside a restricted execution sandbox.
@@ -94,11 +97,14 @@ artifact-cold, never OS-cache cold, unless a separate procedure establishes the 
 
 ## Paired matrix execution
 
-`Invoke-BenchmarkMatrix.ps1` sequences one baseline/candidate pair across all five approved workloads.
-It includes one warmup for each variant/workload, then at least three artifact-cold pairs and five
-pairs for each other workload. Pair order alternates. Preparation and correctness verification are
-outside the measured stage sum, but all phases consume the same experiment deadline and resource
-budget. Warmup diagnostics are retained and excluded from statistics.
+`Invoke-BenchmarkMatrix.ps1` always covers all five approved full-public-header workloads. Screening
+runs exactly one recorded baseline/candidate pair per workload (10 executions), without warmups,
+and alternates the first variant across workloads. It supports correctness, resource, and directional
+feasibility only. Full scope retains one warmup for each variant/workload, then three artifact-cold
+pairs and five pairs for each other workload (56 executions); pair order alternates. Preparation and
+correctness verification are outside the measured stage sum, but all phases consume the same
+experiment deadline and resource budget. Full warmup diagnostics are retained and excluded from
+statistics.
 
 ```powershell
 ./benchmarks/Invoke-BenchmarkMatrix.ps1 -SpecificationPath ./out/benchmark/matrix.json -ReportDirectory ./out/benchmark/plan-01 -PlanOnly
@@ -111,13 +117,15 @@ The matrix specification is JSON with these members:
 | Member | Meaning |
 | --- | --- |
 | `RepositoryRoot` | Existing repository for environment snapshots |
-| `Scope` | `screening` or `full`; this label does not prove workload coverage |
+| `ArtifactProbePath`, `ArtifactVolumeIdentity` | Explicit artifact/report volume bound for every resource snapshot |
+| `Scope` | `screening` for one non-warmup pair per workload, or `full` for recommendation-sized sampling |
 | `DeadlineUtc` | Original shared experiment deadline, unexpired and at most 12 hours away |
 | `MemoryLimitBytes`, `MemoryReserveBytes` | Positive integer workload ceiling and free-memory reserve |
 | `InputFiles` | Nonempty array of immutable `{ "Path": "...", "Sha256": "..." }` bindings |
 | `Workloads` | Exactly `artifact-cold`, `unchanged`, `declaration-edit`, `generator-change`, and `missing-output` |
 
-Each workload has `Name`, integer `Samples`, and `baseline` / `candidate` objects. Each variant
+Each workload has `Name`, integer `Samples`, and `baseline` / `candidate` objects. `Samples` must be
+exactly 1 for screening; full requires at least 3 for artifact-cold and 5 for every other workload. Each variant
 object has nonempty `Prepare`, `Measure`, and `Verify` arrays of stage-specification file paths.
 Each stage file supplies `Executable`, string-array `Arguments`, existing `WorkingDirectory`, and
 integer `TimeLimitSeconds`. The matrix supplies the label, common deadline, and memory ceiling.
@@ -136,7 +144,9 @@ does not verify its referenced live files: supply a verifier that checks those f
 
 The runner binds the matrix, stage specifications, measurement/preflight scripts, and declared input
 files; checks them before phases and after samples; and takes resource snapshots before and after
-each sample. Any detected mismatch, resource rejection, failed phase, failed verification, or expired
+each sample against the explicit artifact volume. The candidate repository, specification/report,
+both measured artifact and input roots, and all four host roots must remain on that physical volume;
+the real vcpkg toolchain may remain elsewhere. Any detected mismatch, resource rejection, failed phase, failed verification, or expired
 deadline stops the matrix. Completed samples and failed-phase logs are retained under a fresh report
 directory. Partial statistics are diagnostic only when `Succeeded` is false. A `-PlanOnly` run checks
 the schedule and declared bindings but performs neither resource checks nor workloads.
@@ -145,7 +155,10 @@ The reported median/range sums only `Measure` phases, not end-to-end elapsed tim
 reports to distinguish parse/model, emission/write, configure, compile, and link. This control layer
 does not supply OCCT workload commands, native correctness assertions, per-file outliers, or TU counts.
 Pre/post snapshots still cannot rule out transient contention during a sample. There is no automatic
-recommendation: full-workload correctness and resource evidence must accompany any adoption proposal.
+recommendation. `MeetsRecommendationSamplingRequirements` is false for screening and every failed
+matrix; `EvidenceUse` states whether results are feasibility-only, incomplete, or eligible for
+recommendation-threshold assessment. `ProductionAdoptionAuthorized` is always false. Full-workload
+correctness and resource evidence must accompany any later adoption proposal.
 Do not reset the deadline for another candidate, a retry, or a subsequent invocation of the same
 experiment. The coordinator retains the original deadline across invocations; the script is not a
 cross-invocation machine-time ledger and has no automatic resume.

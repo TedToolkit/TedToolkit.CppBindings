@@ -229,13 +229,16 @@ if ($spec.Workloads -isnot [array] -or $spec.Workloads.Count -ne $required.Count
 }
 $workloads = @{}
 $schedule = [Collections.Generic.List[object]]::new()
+$workloadIndex = 0
 foreach ($workload in $spec.Workloads) {
     if ($workload.Name -cnotin $required -or $workloads.ContainsKey($workload.Name)) {
         throw 'Unknown or duplicate workload.'
     }
     $minimum = if ($workload.Name -eq 'artifact-cold') { 3 } else { 5 }
-    if ($workload.Samples -isnot [long] -or $workload.Samples -lt $minimum -or $workload.Samples -gt 100) {
-        throw "Invalid sample count for $($workload.Name); minimum $minimum."
+    if ($workload.Samples -isnot [long] -or $workload.Samples -gt 100 -or
+        ($spec.Scope -eq 'screening' -and $workload.Samples -ne 1) -or
+        ($spec.Scope -eq 'full' -and $workload.Samples -lt $minimum)) {
+        throw "Invalid sample count for $($workload.Name) and $($spec.Scope) scope."
     }
     $variants = @{}
     foreach ($variantName in @('baseline', 'candidate')) {
@@ -253,15 +256,20 @@ foreach ($workload in $spec.Workloads) {
         $variants[$variantName] = $groups
     }
     $workloads[$workload.Name] = $variants
-    for ($repetition = 0; $repetition -le $workload.Samples; $repetition++) {
-        $order = if ($repetition % 2 -eq 0) { @('baseline', 'candidate') } else { @('candidate', 'baseline') }
+    $firstRepetition = if ($spec.Scope -eq 'screening') { 1 } else { 0 }
+    for ($repetition = $firstRepetition; $repetition -le $workload.Samples; $repetition++) {
+        $order = if ($spec.Scope -eq 'screening') {
+            if ($workloadIndex % 2 -eq 0) { @('baseline', 'candidate') } else { @('candidate', 'baseline') }
+        }
+        elseif ($repetition % 2 -eq 0) { @('baseline', 'candidate') } else { @('candidate', 'baseline') }
         foreach ($variantName in $order) {
             $schedule.Add([pscustomobject]@{
                 Sequence = $schedule.Count; Workload = $workload.Name; Variant = $variantName
-                Repetition = $repetition; IsWarmup = $repetition -eq 0
+                Repetition = $repetition; IsWarmup = $spec.Scope -eq 'full' -and $repetition -eq 0
             })
         }
     }
+    $workloadIndex++
 }
 $pathTool = Resolve-BenchmarkPhysicalPath (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 $bindings[$pathTool] = (Get-FileHash -LiteralPath $pathTool -Algorithm SHA256).Hash
@@ -269,6 +277,7 @@ Assert-Bindings $bindings
 $null = New-Item -ItemType Directory -Path $destination
 Write-Evidence (Join-Path $destination 'plan.json') ([ordered]@{
     SchemaVersion = 1; Scope = $spec.Scope; DeadlineUtc = $deadline.ToString('O')
+    ProductionAdoptionAuthorized = $false
     Bindings = $bindings; Schedule = @($schedule.ToArray()); PlanOnly = [bool] $PlanOnly
 })
 if ($PlanOnly) { Write-Output "Validated matrix plan: $destination"; return }
@@ -298,6 +307,13 @@ $statistics = @($samples | Where-Object { -not $_.IsWarmup } |
     })
 Write-Evidence (Join-Path $destination 'result.json') ([ordered]@{
     SchemaVersion = 1; Succeeded = $null -eq $failure; Failure = $failure
+    Scope = $spec.Scope
+    ProductionAdoptionAuthorized = $false
+    MeetsRecommendationSamplingRequirements = $spec.Scope -eq 'full' -and $null -eq $failure -and
+        $samples.Count -eq $schedule.Count
+    EvidenceUse = if ($null -ne $failure) { 'IncompleteNoRecommendation' }
+        elseif ($spec.Scope -eq 'screening') { 'CorrectnessResourceAndDirectionalFeasibilityOnly' }
+        else { 'RecommendationThresholdAssessment' }
     DeadlineUtc = $deadline.ToString('O'); CompletedSamples = $samples.Count
     Bindings = $bindings; Samples = @($samples.ToArray()); Statistics = $statistics
     Limitations = @(
@@ -307,6 +323,7 @@ Write-Evidence (Join-Path $destination 'result.json') ([ordered]@{
         'Input-file binding covers declared files only; a pinned manifest still needs a verifier checking its live corpus.',
         'Prepare/Verify commands must prove cache state, workload edits, source/export equality, rewrites and native behavior.',
         'No recommendation is automatic. Full workload confirmation and independent correctness/resource review are required.',
+        'Screening results are feasibility evidence only and cannot be evaluated against the 20% improvement or 5% regression recommendation thresholds.',
         'This invocation shares one deadline; a later matrix or resumed experiment must retain the same deadline.'
     )
 })
