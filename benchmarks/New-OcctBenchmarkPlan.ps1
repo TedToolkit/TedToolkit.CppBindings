@@ -356,12 +356,27 @@ function New-Stage {
         '-Workload', $Workload,
         '-SampleRoot', '{SampleRoot}'
     )
-    Write-NewJson $path ([ordered]@{
+    $stage = [ordered]@{
         Executable = $powerShellPath
         Arguments = $arguments
         WorkingDirectory = $destination
         TimeLimitSeconds = $TimeLimitSeconds
-    })
+    }
+    if ($Action -eq 'Generate') {
+        $stage['PreMeasurementValidation'] = [ordered]@{
+            Executable = $powerShellPath
+            Arguments = @(
+                '-NoProfile', '-File', $adapterPath,
+                '-PlanPath', $planPath,
+                '-Action', 'ValidateGenerationToolchain',
+                '-Variant', $Variant,
+                '-Workload', $Workload,
+                '-SampleRoot', '{SampleRoot}'
+            )
+            WorkingDirectory = $destination
+        }
+    }
+    Write-NewJson $path $stage
     return $path
 }
 

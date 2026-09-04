@@ -297,6 +297,18 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $specification = $arguments.SpecificationDirectory
     $plan = Get-Content -LiteralPath (Join-Path $specification 'occt-plan.json') -Raw | ConvertFrom-Json
     $matrix = Get-Content -LiteralPath (Join-Path $specification 'matrix.json') -Raw | ConvertFrom-Json
+    $adapterTokens = $null
+    $adapterErrors = $null
+    $adapterAst = [Management.Automation.Language.Parser]::ParseFile($adapter, [ref] $adapterTokens,
+        [ref] $adapterErrors)
+    Require ($adapterErrors.Count -eq 0) 'The OCCT workload adapter does not parse.'
+    $timedGenerate = $adapterAst.Find({
+        param($node)
+        $node -is [Management.Automation.Language.FunctionDefinitionAst] -and $node.Name -eq 'Invoke-Generation'
+    }, $false)
+    Require ($null -ne $timedGenerate -and
+        $timedGenerate.Extent.Text -notmatch 'Assert-ClangDriverSnapshot|Assert-ClangResourceInventory') `
+        'Full Clang toolchain validation leaked into the timed Generate action.'
     Require $plan.FixtureOnly 'Synthetic receipts did not force a fixture-only plan.'
     Require ($plan.HarnessBinding -ceq 'commit:PENDING-FINAL-HARNESS-COMMIT') 'Pending harness binding was lost.'
     Require ($plan.ToolchainSnapshot.CompilerBv.Length -gt 0 -and $plan.ToolchainSnapshot.WindowsSDKVersion.Length -gt 0) 'Exact vcvars/compiler/SDK identity was not pinned.'
@@ -354,6 +366,13 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
             $actions = @($measure | ForEach-Object { $_.Arguments[$_.Arguments.IndexOf('-Action') + 1] })
             $expected = if ($workload.Name -eq 'artifact-cold') { 'Generate,Configure,Build' } else { 'Generate,Build' }
             Require (($actions -join ',') -ceq $expected) "Wrong measured stages: $($workload.Name)/$variant"
+            $generate = $measure[0]
+            Require ($generate.PreMeasurementValidation.Arguments[
+                    $generate.PreMeasurementValidation.Arguments.IndexOf('-Action') + 1] -ceq
+                    'ValidateGenerationToolchain' -and
+                $generate.PreMeasurementValidation.Executable -ceq $generate.Executable -and
+                $generate.PreMeasurementValidation.WorkingDirectory -ceq $generate.WorkingDirectory) `
+                "Generate lacks an immediately preceding out-of-band toolchain validation: $($workload.Name)/$variant"
         }
     }
     & $matrixRunner -SpecificationPath (Join-Path $specification 'matrix.json') `
@@ -489,7 +508,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $mismatchedClangPlan.Tools.Clang = $executablePlan.Tools.Compiler
     Write-JsonFile $mismatchedClangPlanPath $mismatchedClangPlan
     $mismatchedClangRejected = $false
-    try { & $adapter -PlanPath $mismatchedClangPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    try { & $adapter -PlanPath $mismatchedClangPlanPath -Action ValidateGenerationToolchain -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
     catch { $mismatchedClangRejected = $_.Exception.Message -like '*clang++*' }
     Require $mismatchedClangRejected 'A generation environment with a different clang++ executable was accepted.'
 
@@ -505,7 +524,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     )
     Write-JsonFile $mutatedLldPlanPath $mutatedLldPlan
     $mutatedLldRejected = $false
-    try { & $adapter -PlanPath $mutatedLldPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    try { & $adapter -PlanPath $mutatedLldPlanPath -Action ValidateGenerationToolchain -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
     catch { $mutatedLldRejected = $_.Exception.Message -like '*Clang driver companion changed*' }
     Require $mutatedLldRejected 'A mutated lld-link.exe companion identity was accepted.'
 
@@ -522,7 +541,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
         (Get-FileHash -LiteralPath $mutatedResourceInventoryPath).Hash
     Write-JsonFile $mutatedResourcePlanPath $mutatedResourcePlan
     $mutatedResourceRejected = $false
-    try { & $adapter -PlanPath $mutatedResourcePlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    try { & $adapter -PlanPath $mutatedResourcePlanPath -Action ValidateGenerationToolchain -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
     catch { $mutatedResourceRejected = $_.Exception.Message -like '*Clang resource directory changed*' }
     Require $mutatedResourceRejected 'A mutated Clang resource-directory identity was accepted.'
 
@@ -532,7 +551,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $mismatchedMsvcPlan.ToolchainSnapshot.ClangSelectedMsvcVersion = '0.0.fixture'
     Write-JsonFile $mismatchedMsvcPlanPath $mismatchedMsvcPlan
     $mismatchedMsvcRejected = $false
-    try { & $adapter -PlanPath $mismatchedMsvcPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    try { & $adapter -PlanPath $mismatchedMsvcPlanPath -Action ValidateGenerationToolchain -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
     catch { $mismatchedMsvcRejected = $_.Exception.Message -like '*different MSVC or Windows SDK*' }
     Require $mismatchedMsvcRejected 'A mismatched Clang-selected MSVC version was accepted.'
 
@@ -542,7 +561,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $mismatchedSdkPlan.ToolchainSnapshot.ClangSelectedWindowsSdkVersion = '0.0.fixture'
     Write-JsonFile $mismatchedSdkPlanPath $mismatchedSdkPlan
     $mismatchedSdkRejected = $false
-    try { & $adapter -PlanPath $mismatchedSdkPlanPath -Action Generate -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
+    try { & $adapter -PlanPath $mismatchedSdkPlanPath -Action ValidateGenerationToolchain -Variant baseline -Workload unchanged -SampleRoot $proofRoot }
     catch { $mismatchedSdkRejected = $_.Exception.Message -like '*different MSVC or Windows SDK*' }
     Require $mismatchedSdkRejected 'A mismatched Clang-selected Windows SDK version was accepted.'
 
@@ -569,10 +588,20 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     Require ($formalManifest.Roots.Count -eq 2 -and $formalManifest.AdditionalFiles.Count -eq 1) `
         'Formal Prepare lost an array-valued manifest argument across the PowerShell process boundary.'
 
+    $missingValidationRejected = $false
+    try {
+        & $adapter -PlanPath $executablePlanPath -Action Generate -Variant baseline -Workload unchanged `
+            -SampleRoot $formalPrepareSample
+    }
+    catch { $missingValidationRejected = $_.Exception.Message -like '*fresh pre-measurement toolchain validation receipt*' }
+    Require $missingValidationRejected 'Generate ran without its immediately preceding toolchain validation.'
+
     $priorVcpkgRoot = [Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process')
     $priorPath = [Environment]::GetEnvironmentVariable('PATH', 'Process')
     try {
         [Environment]::SetEnvironmentVariable('VCPKG_ROOT', 'fixture-prior-vcpkg-root', 'Process')
+        & $adapter -PlanPath $executablePlanPath -Action ValidateGenerationToolchain -Variant baseline `
+            -Workload unchanged -SampleRoot $formalPrepareSample
         & $adapter -PlanPath $executablePlanPath -Action Generate -Variant baseline -Workload unchanged `
             -SampleRoot $formalPrepareSample
         Require ([Environment]::GetEnvironmentVariable('VCPKG_ROOT', 'Process') -ceq 'fixture-prior-vcpkg-root') `

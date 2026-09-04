@@ -84,6 +84,22 @@ if ($deadline -le [DateTimeOffset]::UtcNow) { throw 'The experiment deadline has
 if ($deadline -gt [DateTimeOffset]::UtcNow.AddHours(12)) { throw 'The deadline exceeds the 12-hour experiment ceiling.' }
 $workDirectory = (Resolve-Path -LiteralPath $spec.WorkingDirectory).Path
 $executable = Get-Command $spec.Executable -CommandType Application -ErrorAction Stop | Select-Object -First 1
+$preValidation = $null
+if ($spec.PSObject.Properties.Name -contains 'PreMeasurementValidation') {
+    $preValidation = $spec.PreMeasurementValidation
+    foreach ($name in @('Executable', 'Arguments', 'WorkingDirectory')) {
+        if ($preValidation.PSObject.Properties.Name -notcontains $name) {
+            throw "Missing pre-measurement validation member: $name"
+        }
+    }
+    if ($preValidation.Arguments -isnot [array] -or
+        @($preValidation.Arguments | Where-Object { $_ -isnot [string] }).Count -gt 0) {
+        throw 'Pre-measurement validation arguments must be a JSON string array.'
+    }
+    $preExecutable = Get-Command $preValidation.Executable -CommandType Application -ErrorAction Stop |
+        Select-Object -First 1
+    $preWorkDirectory = (Resolve-Path -LiteralPath $preValidation.WorkingDirectory).Path
+}
 $destination = [IO.Path]::GetFullPath($ReportDirectory)
 if (Test-Path -LiteralPath $destination) { throw 'Use a new report directory for each stage; existing evidence is never overwritten.' }
 
@@ -102,6 +118,12 @@ $known = @{}
 [long] $peakWorkingSet = 0
 $samples = 0
 $stopwatch = [Diagnostics.Stopwatch]::new()
+$preStopwatch = [Diagnostics.Stopwatch]::new()
+$preStartedAt = $null
+$preCompletedAt = $null
+$preExitCode = $null
+$preSucceeded = $null -eq $preValidation
+$preProcess = $null
 $process = [Diagnostics.Process]::new()
 $process.StartInfo.FileName = $executable.Source
 $process.StartInfo.WorkingDirectory = $workDirectory
@@ -110,10 +132,31 @@ $process.StartInfo.CreateNoWindow = $true
 $process.StartInfo.RedirectStandardOutput = $true
 $process.StartInfo.RedirectStandardError = $true
 foreach ($argument in $spec.Arguments) { $process.StartInfo.ArgumentList.Add($argument) }
-$startedAt = [DateTimeOffset]::UtcNow
+$startedAt = $null
+if ($null -ne $preValidation) {
+    $preProcess = [Diagnostics.Process]::new()
+    $preProcess.StartInfo.FileName = $preExecutable.Source
+    $preProcess.StartInfo.WorkingDirectory = $preWorkDirectory
+    $preProcess.StartInfo.UseShellExecute = $false
+    $preProcess.StartInfo.CreateNoWindow = $true
+    foreach ($argument in $preValidation.Arguments) { $preProcess.StartInfo.ArgumentList.Add($argument) }
+}
 try {
     $stdout = [IO.File]::Open((Join-Path $destination 'stdout.log'), [IO.FileMode]::CreateNew)
     $stderr = [IO.File]::Open((Join-Path $destination 'stderr.log'), [IO.FileMode]::CreateNew)
+    if ($null -ne $preProcess) {
+        $preStartedAt = [DateTimeOffset]::UtcNow
+        $preStopwatch.Start()
+        if (-not $preProcess.Start()) { throw 'The pre-measurement validation process did not start.' }
+        $preProcess.WaitForExit()
+        $preExitCode = $preProcess.ExitCode
+        if ($preExitCode -ne 0) { throw "Pre-measurement validation exited with code $preExitCode." }
+        $preStopwatch.Stop()
+        $preCompletedAt = [DateTimeOffset]::UtcNow
+        $preSucceeded = $true
+        if ($preCompletedAt -ge $deadline) { throw 'The experiment deadline expired during pre-measurement validation.' }
+    }
+    $startedAt = [DateTimeOffset]::UtcNow
     $stopwatch.Start()
     $started = $process.Start()
     if (-not $started) { throw 'The workload process did not start.' }
@@ -163,6 +206,11 @@ finally {
     }
     if ($null -ne $stdout) { $stdout.Dispose() }
     if ($null -ne $stderr) { $stderr.Dispose() }
+    if ($null -ne $preProcess) {
+        if ($preStopwatch.IsRunning) { $preStopwatch.Stop() }
+        if ($null -eq $preCompletedAt) { $preCompletedAt = [DateTimeOffset]::UtcNow }
+        $preProcess.Dispose()
+    }
     $process.Dispose()
 }
 
@@ -187,7 +235,7 @@ $result = [ordered]@{
     SpecificationSha256 = $specHash
     RunnerSha256 = $runnerHash
     Command = [ordered]@{ Executable = $executable.Source; Arguments = $spec.Arguments; WorkingDirectory = $workDirectory }
-    StartedAtUtc = $startedAt.ToString('O')
+    StartedAtUtc = if ($null -eq $startedAt) { $null } else { $startedAt.ToString('O') }
     DeadlineUtc = $deadline.ToString('O')
     TimeLimitSeconds = $spec.TimeLimitSeconds
     MemoryLimitBytes = $spec.MemoryLimitBytes
@@ -202,6 +250,22 @@ $result = [ordered]@{
     SampledTreeWriteTransferBytes = $writeBytes
     CounterSamples = $samples
     ObservedProcessCount = $known.Count
+    PreMeasurementValidation = [ordered]@{
+        Configured = $null -ne $preValidation
+        Command = if ($null -eq $preValidation) { $null } else {
+            [ordered]@{
+                Executable = $preExecutable.Source
+                Arguments = $preValidation.Arguments
+                WorkingDirectory = $preWorkDirectory
+            }
+        }
+        StartedAtUtc = if ($null -eq $preStartedAt) { $null } else { $preStartedAt.ToString('O') }
+        CompletedAtUtc = if ($null -eq $preCompletedAt) { $null } else { $preCompletedAt.ToString('O') }
+        ElapsedSeconds = $preStopwatch.Elapsed.TotalSeconds
+        Succeeded = $preSucceeded
+        ExitCode = $preExitCode
+        IncludedInMeasuredTime = $false
+    }
     Limitations = @(
         'CIM polling perturbs the workload; process elapsed time excludes post-exit polling delay but not polling contention.',
         'Working sets sum shared pages and miss between-sample peaks; this is not an OS-enforced memory cap.',

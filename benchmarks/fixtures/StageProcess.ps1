@@ -1,5 +1,5 @@
 param(
-    [ValidateSet('echo', 'failure', 'sleep', 'tree')]
+    [ValidateSet('echo', 'failure', 'sleep', 'tree', 'delay')]
     [string] $Mode,
     [string] $Value
 )
@@ -14,6 +14,7 @@ switch ($Mode) {
         Start-Sleep -Milliseconds 600
     }
     'failure' { [Console]::Error.WriteLine('controlled failure'); exit 17 }
+    'delay' { Start-Sleep -Milliseconds ([int] $Value) }
     'sleep' { Start-Sleep -Seconds 30 }
     'tree' {
         $child = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @(

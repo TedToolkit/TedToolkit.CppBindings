@@ -75,6 +75,21 @@ function Read-StageGroup {
         $command = Get-Command $value.Executable -CommandType Application -ErrorAction Stop | Select-Object -First 1
         $value.Executable = Resolve-BenchmarkPhysicalPath $command.Source
         $value.WorkingDirectory = Resolve-BenchmarkPhysicalPath $value.WorkingDirectory
+        if ($value.ContainsKey('PreMeasurementValidation')) {
+            $pre = $value.PreMeasurementValidation
+            foreach ($member in @('Executable', 'Arguments', 'WorkingDirectory')) {
+                if (-not $pre.ContainsKey($member)) { throw "Missing pre-measurement validation member: $member" }
+            }
+            if ($pre.Arguments -isnot [array] -or
+                @($pre.Arguments | Where-Object { $_ -isnot [string] }).Count -gt 0) {
+                throw 'Pre-measurement validation arguments must be a JSON string array.'
+            }
+            Assert-StageArgumentTemplates $pre.Arguments
+            $preCommand = Get-Command $pre.Executable -CommandType Application -ErrorAction Stop |
+                Select-Object -First 1
+            $pre.Executable = Resolve-BenchmarkPhysicalPath $preCommand.Source
+            $pre.WorkingDirectory = Resolve-BenchmarkPhysicalPath $pre.WorkingDirectory
+        }
         [pscustomobject]@{
             Path = $snapshot.Path
             Sha256 = $snapshot.Sha256
@@ -147,6 +162,10 @@ function Invoke-Sample {
             $phase = $stage.Specification.Clone()
             $phase.Label = "$($Entry.Workload)/$($Entry.Variant)/$($Entry.Repetition)/$phaseName"
             $phase.Arguments = @(Expand-StageArguments $phase.Arguments $Entry $sampleRoot)
+            if ($phase.ContainsKey('PreMeasurementValidation')) {
+                $phase.PreMeasurementValidation.Arguments = @(Expand-StageArguments `
+                    $phase.PreMeasurementValidation.Arguments $Entry $sampleRoot)
+            }
             $phase.DeadlineUtc = $deadline.ToString('O')
             $phase.MemoryLimitBytes = $spec.MemoryLimitBytes
             $phasePath = Join-Path $sampleRoot ($phaseName + '.json')
@@ -317,7 +336,7 @@ Write-Evidence (Join-Path $destination 'result.json') ([ordered]@{
     DeadlineUtc = $deadline.ToString('O'); CompletedSamples = $samples.Count
     Bindings = $bindings; Samples = @($samples.ToArray()); Statistics = $statistics
     Limitations = @(
-        'Warmups are retained for diagnosis but excluded from statistics. Setup and verification are not timed stages.',
+        'Warmups are retained for diagnosis but excluded from statistics. Setup, pre-measurement validation, and verification are not timed stages.',
         'Stage sums are not end-to-end elapsed time; inspect individual stage logs and sampled counters.',
         'Pre/post resource snapshots do not prove absence of contention during a sample.',
         'Input-file binding covers declared files only; a pinned manifest still needs a verifier checking its live corpus.',

@@ -247,11 +247,16 @@ exactly one `lld-link.exe`), and inventories every file in `-print-resource-dir`
 size, and SHA-256. The resource inventory file itself is hash-bound.
 
 Prepare reproduces that generator environment and rechecks the full driver trace, companion hashes,
-resource-directory identity and inventory outside material timing. Immediately before every Generate
-action, the same checks run again with the variant's private `VCPKG_ROOT`. The harness invokes the exact
-Console DLL with `dotnet <Console.dll> --output-root <isolated-root>` and restores both `PATH` and
-`VCPKG_ROOT` after success or failure. Prepare and verify stages also validate the complete live
-private-triplet inventory. No PATH-only tool identity is accepted. Generator stages never call
+resource-directory identity and inventory outside material timing. Every Generate stage also declares
+a bound pre-measurement validation command. The stage runner executes that full check immediately
+before starting its stopwatch and measured child, records its separate elapsed time, and refuses to
+start the child after a validation failure. Validation emits a single-use receipt scoped to the plan,
+variant, workload, generator host, driver trace, and resource inventory; timed Generate consumes only
+a matching receipt no more than 30 seconds old. The timed action therefore contains only negligible
+receipt/environment setup plus the exact Console invocation
+`dotnet <Console.dll> --output-root <isolated-root>`, and restores both `PATH` and `VCPKG_ROOT` after
+success or failure. Prepare and verify stages also validate the complete live private-triplet
+inventory. No PATH-only tool identity is accepted. Generator stages never call
 `Build/GenerateWindowsBindings.ps1` and therefore cannot be hidden by its generation cache.
 The full compiler/version probes remain in preparation; configure/build only recheck the already
 bound vcvars environment immediately before launching the pinned native tool, with the same check
@@ -287,7 +292,8 @@ infrastructure only and grants no production-adoption authority.
 The verifier publishes only a tiny managed Console-shaped fixture, generates cryptographically valid
 receipts and oracles, exercises pre-existing/stale/mismatched-output, missing `lib`/`bin`, mismatched
 `clang++`, mutated `lld-link.exe` and Clang-resource identities, mismatched Clang-selected MSVC/SDK,
-hard-link alias, junction/case/shared-target/nested-reparse failures, and runs matrix
+missing pre-measurement receipts, out-of-band validation placement, hard-link alias,
+junction/case/shared-target/nested-reparse failures, and runs matrix
 `-PlanOnly`. An external-process
 formal Prepare fixture transports manifest root/file arrays as JSON and verifies both root categories;
 the verifier does not run the OCCT generator, compile native code, or collect timing.

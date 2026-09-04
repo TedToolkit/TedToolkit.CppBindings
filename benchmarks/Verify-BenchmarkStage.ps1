@@ -18,7 +18,7 @@ $scenarios = @(
 foreach ($scenario in $scenarios) {
     $specPath = Join-Path $proofRoot ($scenario.Name + '.json')
     $report = Join-Path $proofRoot $scenario.Name
-    [ordered]@{
+    $specification = [ordered]@{
         Label = 'Harness verification only: ' + $scenario.Name
         Executable = $pwshPath
         Arguments = @('-NoProfile', '-File', $fixture, '-Mode', $scenario.Mode, '-Value', $argument)
@@ -26,7 +26,15 @@ foreach ($scenario in $scenarios) {
         DeadlineUtc = $deadline
         TimeLimitSeconds = $scenario.Limit
         MemoryLimitBytes = $scenario.Memory
-    } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $specPath -Encoding utf8
+    }
+    if ($scenario.Name -eq 'success') {
+        $specification['PreMeasurementValidation'] = [ordered]@{
+            Executable = $pwshPath
+            Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'delay', '-Value', '1200')
+            WorkingDirectory = $proofRoot
+        }
+    }
+    $specification | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $specPath -Encoding utf8
     $errorText = $null
     try { & $runner -SpecificationPath $specPath -ReportDirectory $report }
     catch { $errorText = $_.Exception.Message }
@@ -40,6 +48,16 @@ foreach ($scenario in $scenarios) {
     if ($result.ProcessElapsedSeconds -le 0) { throw 'The process elapsed measurement is missing.' }
     if ($scenario.Name -eq 'failure' -and $result.ExitCode -ne 17) { throw 'The child exit code was lost.' }
     if ($scenario.Name -eq 'success') {
+        if (-not $result.PreMeasurementValidation.Configured -or
+            -not $result.PreMeasurementValidation.Succeeded -or
+            $result.PreMeasurementValidation.IncludedInMeasuredTime -or
+            $result.PreMeasurementValidation.ElapsedSeconds -lt 1 -or
+            $result.RunnerElapsedSeconds -ge $result.PreMeasurementValidation.ElapsedSeconds -or
+            $result.ProcessElapsedSeconds -ge $result.PreMeasurementValidation.ElapsedSeconds -or
+            [DateTimeOffset]::Parse($result.StartedAtUtc) -lt
+                [DateTimeOffset]::Parse($result.PreMeasurementValidation.CompletedAtUtc)) {
+            throw 'Pre-measurement validation contaminated or did not immediately precede the timed child.'
+        }
         $output = Get-Content -LiteralPath (Join-Path $report 'stdout.log') -Raw
         if (-not $output.StartsWith($argument) -or $output.Length -lt 1048576) { throw 'Standard output was truncated or arguments changed.' }
         if ((Get-Content -LiteralPath (Join-Path $report 'stderr.log') -Raw).Trim() -ne 'stderr retained') {
@@ -54,6 +72,35 @@ foreach ($scenario in $scenarios) {
     }
 }
 
+$preFailureSpec = Join-Path $proofRoot 'pre-validation-failure.json'
+$preFailureReport = Join-Path $proofRoot 'pre-validation-failure'
+[ordered]@{
+    Label = 'Harness verification only: pre-validation-failure'
+    Executable = $pwshPath
+    Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'echo', '-Value', 'must-not-run')
+    WorkingDirectory = $proofRoot
+    DeadlineUtc = $deadline
+    TimeLimitSeconds = 20
+    MemoryLimitBytes = 2GB
+    PreMeasurementValidation = [ordered]@{
+        Executable = $pwshPath
+        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'failure', '-Value', '')
+        WorkingDirectory = $proofRoot
+    }
+} | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $preFailureSpec -Encoding utf8
+$preFailure = $null
+try { & $runner -SpecificationPath $preFailureSpec -ReportDirectory $preFailureReport }
+catch { $preFailure = $_.Exception.Message }
+$preFailureResult = Get-Content -LiteralPath (Join-Path $preFailureReport 'result.json') -Raw | ConvertFrom-Json
+if ($preFailure -notlike '*Pre-measurement validation exited with code 17*' -or
+    $preFailureResult.PreMeasurementValidation.Succeeded -or
+    $preFailureResult.PreMeasurementValidation.ExitCode -ne 17 -or
+    $null -ne $preFailureResult.ProcessElapsedSeconds -or
+    $null -ne $preFailureResult.StartedAtUtc -or
+    (Get-Item -LiteralPath (Join-Path $preFailureReport 'stdout.log')).Length -ne 0) {
+    throw 'A failed pre-measurement validation did not block the timed child.'
+}
+
 $protectedReport = Join-Path $proofRoot 'success/result.json'
 $before = (Get-FileHash -LiteralPath $protectedReport -Algorithm SHA256).Hash
 $rejected = $false
@@ -62,4 +109,4 @@ catch { $rejected = $_.Exception.Message -like 'Use a new report directory*' }
 if (-not $rejected -or (Get-FileHash -LiteralPath $protectedReport -Algorithm SHA256).Hash -ne $before) {
     throw 'The existing-evidence guard failed.'
 }
-Write-Output "Stage proof passed: five process scenarios and evidence preservation. Raw evidence: $proofRoot"
+Write-Output "Stage proof passed: five process scenarios, out-of-band pre-measurement validation, and evidence preservation. Raw evidence: $proofRoot"

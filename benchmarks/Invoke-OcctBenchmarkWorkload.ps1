@@ -1,7 +1,7 @@
 #Requires -Version 7.5
 param(
     [Parameter(Mandatory)] [string] $PlanPath,
-    [Parameter(Mandatory)] [ValidateSet('Prepare', 'Generate', 'Configure', 'Build', 'Verify', 'Settle')] [string] $Action,
+    [Parameter(Mandatory)] [ValidateSet('Prepare', 'ValidateGenerationToolchain', 'Generate', 'Configure', 'Build', 'Verify', 'Settle')] [string] $Action,
     [Parameter(Mandatory)] [ValidateSet('baseline', 'candidate')] [string] $Variant,
     [Parameter(Mandatory)] [ValidateSet('artifact-cold', 'unchanged', 'declaration-edit', 'generator-change', 'missing-output')] [string] $Workload,
     [Parameter(Mandatory)] [string] $SampleRoot
@@ -393,6 +393,53 @@ function Assert-ClangDriverSnapshot {
     Assert-ClangResourceInventory
 }
 
+function Get-GenerationValidationReceiptPath {
+    Join-Path $sample "generation-toolchain-$Variant-$Workload.json"
+}
+
+function Invoke-GenerationToolchainValidation {
+    param([hashtable] $VariantPlan, [bool] $ChangedHost)
+
+    $generatorHost = if ($ChangedHost) { $VariantPlan.ChangedHost } else { $VariantPlan.OriginalHost }
+    $expected = if ($ChangedHost) { $VariantPlan.ChangedHostSha256 } else { $VariantPlan.OriginalHostSha256 }
+    Assert-Hash $generatorHost $expected
+    $generationPrevious = Use-GenerationEnvironment $VariantPlan.InputVcpkgRoot
+    try { Assert-ClangDriverSnapshot }
+    finally { Restore-Environment $generationPrevious }
+    Write-NewJson (Get-GenerationValidationReceiptPath) ([ordered]@{
+        SchemaVersion = 1
+        PlanId = $plan.PlanId
+        Variant = $Variant
+        Workload = $Workload
+        CompletedAtUtc = [DateTimeOffset]::UtcNow.ToString('O')
+        GeneratorHostSha256 = $expected
+        ClangDriverTraceSha256 = $plan.ToolchainSnapshot.ClangDriverTraceSha256
+        ClangResourceInventorySha256 = $plan.ToolchainSnapshot.ClangResourceInventorySha256
+    })
+}
+
+function Assert-ConsumeGenerationValidationReceipt {
+    param([hashtable] $VariantPlan, [bool] $ChangedHost)
+
+    $path = Get-GenerationValidationReceiptPath
+    if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
+        throw 'Generate requires a fresh pre-measurement toolchain validation receipt.'
+    }
+    $receipt = Read-Json $path
+    $expectedHost = if ($ChangedHost) { $VariantPlan.ChangedHostSha256 } else { $VariantPlan.OriginalHostSha256 }
+    $completed = [DateTimeOffset]::Parse($receipt.CompletedAtUtc).ToUniversalTime()
+    $age = [DateTimeOffset]::UtcNow - $completed
+    if ($receipt.SchemaVersion -ne 1 -or $receipt.PlanId -cne $plan.PlanId -or
+        $receipt.Variant -cne $Variant -or $receipt.Workload -cne $Workload -or
+        $receipt.GeneratorHostSha256 -cne $expectedHost -or
+        $receipt.ClangDriverTraceSha256 -cne $plan.ToolchainSnapshot.ClangDriverTraceSha256 -or
+        $receipt.ClangResourceInventorySha256 -cne $plan.ToolchainSnapshot.ClangResourceInventorySha256 -or
+        $age -lt [TimeSpan]::Zero -or $age -gt [TimeSpan]::FromSeconds(30)) {
+        throw 'Generate requires a fresh matching pre-measurement toolchain validation receipt.'
+    }
+    Remove-Item -LiteralPath $path -Force
+}
+
 function Assert-ActiveCompilerEnvironment {
     $environmentBindings = [ordered]@{
         VCToolsInstallDir = 'VCToolsInstallDir'
@@ -419,11 +466,9 @@ function Assert-ActiveCompilerEnvironment {
 function Invoke-Generation {
     param([hashtable] $VariantPlan, [bool] $ChangedHost)
     $generatorHost = if ($ChangedHost) { $VariantPlan.ChangedHost } else { $VariantPlan.OriginalHost }
-    $expected = if ($ChangedHost) { $VariantPlan.ChangedHostSha256 } else { $VariantPlan.OriginalHostSha256 }
-    Assert-Hash $generatorHost $expected
+    Assert-ConsumeGenerationValidationReceipt $VariantPlan $ChangedHost
     $previous = Use-GenerationEnvironment $VariantPlan.InputVcpkgRoot
     try {
-        Assert-ClangDriverSnapshot
         Invoke-Checked $plan.Tools.DotNet @($generatorHost, '--output-root', $generatedRoot)
     }
     finally { Restore-Environment $previous }
@@ -638,6 +683,10 @@ switch ($Action) {
             Remove-Item -LiteralPath $missing
         }
     }
+    'ValidateGenerationToolchain' {
+        $changedHost = $Workload -eq 'generator-change'
+        Invoke-GenerationToolchainValidation $variantPlan $changedHost
+    }
     'Generate' {
         $changedHost = $Workload -eq 'generator-change'
         Invoke-Generation $variantPlan $changedHost
@@ -729,6 +778,7 @@ switch ($Action) {
             [IO.File]::Copy($plan.OriginalHeaderFile, $variantPlan.HeaderPath, $true)
         }
         Assert-FrozenInputs $variantPlan original
+        Invoke-GenerationToolchainValidation $variantPlan $false
         Invoke-Generation $variantPlan $false
         Invoke-NativeBuild
         $settledPath = Join-Path $sample 'artifacts-settled.json'
