@@ -31,11 +31,12 @@ TedToolkit.CppBindings.Occt.SourceGenerators (internal build component)
 TedToolkit.CppBindings.Occt.Windows
 ```
 
-The generic core has no OCCT, CGAL, native-library, or generated-declaration knowledge. It owns the
-semantic-generation framework, provider-neutral metadata and diagnostics, direct-storage
-`Owned<T>`, and the proved Windows generation defaults. A provider owns parsing and classification
-rules, provider-specific lifetimes such as OCCT `Handle<T>`, exceptions, generated declarations,
-and concrete platform packages.
+The generic core has no OCCT- or CGAL-specific parsing/classification rules, concrete native-library
+identity, or provider declaration-set knowledge. It owns the semantic-generation framework,
+provider-neutral metadata and diagnostics, native-library bootstrap and function-table emission,
+direct-storage `Owned<T>`, and the proved Windows generation defaults. A provider owns parsing and
+classification rules, provider-specific lifetimes such as OCCT `Handle<T>`, exceptions, generated
+declarations, and concrete platform packages.
 
 Generated value categories are unmanaged structs rather than owner classes. Borrowing is an
 operation-level fact represented directly by generated signatures, `ref T`, or an approved pointer;
