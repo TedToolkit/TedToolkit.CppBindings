@@ -8,7 +8,8 @@
 - Governing principles: [Repository design principles](../principles/README.md)
 - Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
 - Related ADR: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md)
-- Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26.
+- Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26;
+  declaration-level alignment admission clarified and approved on 2026-09-04 with "是的，继续。".
 
 ## Current architecture
 
@@ -108,7 +109,7 @@ Every supported C++ object has an exact unmanaged C# struct derived from the pin
 complete object layout. The generated representation uses `LayoutKind.Sequential`, typed fields,
 explicit private padding, and alignment-preserving opaque storage. It does not use managed
 `BaseType` fields, `FieldOffsetAttribute`, or a universal `Pack = 1`. Unsupported or unproved
-layouts fail generation.
+layouts are rejected before paired callable emission and reported at the narrowest affected boundary.
 
 C++ inheritance is represented by generated C# interfaces. Generated instance operations are
 extension methods over their semantic receiver: `in T` for const values, `ref T` for mutable
@@ -252,6 +253,16 @@ admission rule, not a Runtime constructor check: observing one fixed address can
 after later GC relocation. A type whose required alignment cannot be proved for this representation
 is rejected before callable binding emission; the generator does not silently select a second
 storage allocation or allow a possibly misaligned native call.
+
+For the pinned win-x64 sequential storage model, supported native alignments are 1, 2, 4 and 8.
+Larger native alignment is not supplied by setting a larger Pack or observing a favorable pinned
+address. Reject the unrepresentable declaration from the supported managed/native operation set and
+report its native identity, alignment and failed target guarantee. Dependency closure removes and
+reports only members or dependent declarations that cannot retain their exact typed representation;
+unrelated members and independently representable nested declarations remain supported. Native-only
+header requirements do not imply managed representation dependency. Do not erase typed references
+to void pointers or introduce allocation/copying fallbacks. Reconsider admission only when stronger
+target storage guarantees are established or a new ownership architecture is explicitly approved.
 
 Generated operations obtain every owner-derived pointer inside a lexical `fixed` scope over
 `owner.Value` through `IOcctOwner<T>` and keep that pointer inside the scope. For `Owned<T>`, the

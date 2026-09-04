@@ -13,6 +13,11 @@ namespace TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 internal sealed class TemplateArgumentProjection
 {
     /// <summary>
+    /// Gets or sets the record required when this argument is exposed as a managed generic type.
+    /// </summary>
+    public RecordModel? ReferencedRecord { get; set; }
+
+    /// <summary>
     /// Gets the source template parameter name.
     /// </summary>
     public required string ParameterName { get; init; }

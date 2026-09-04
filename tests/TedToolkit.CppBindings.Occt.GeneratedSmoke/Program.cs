@@ -5,7 +5,18 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Reflection;
+using System.Runtime.CompilerServices;
+using System.Runtime.InteropServices;
+
+using TedToolkit.CppBindings;
 using TedToolkit.CppBindings.Occt;
+
+GeneratedLayoutProbe.Run();
+if (args is ["--layout-only"])
+{
+    return;
+}
 
 var point = gp_Pnt2dExtensions.Create(1.25, 2.5);
 point.SetCoord(3.5, 4.75);
@@ -102,3 +113,53 @@ if (!rejectedDisposedOwner)
 }
 
 Console.WriteLine("Generated value, Owned, Handle, borrowed receiver, inheritance, and error smoke passed.");
+
+internal static class GeneratedLayoutProbe
+{
+    public static void Run()
+    {
+        var check = typeof(GeneratedLayoutProbe).GetMethod(nameof(Check))!;
+        var count = 0;
+        foreach (var type in typeof(gp_Pnt2d).Assembly.GetTypes().Where(static type =>
+                     type.IsValueType && !type.IsEnum && !type.ContainsGenericParameters
+                     && type.IsDefined(typeof(NativeTypeNameAttribute), inherit: false)))
+        {
+            var layout = type.StructLayoutAttribute!;
+            if (layout.Value != LayoutKind.Sequential || layout.Size <= 0 || layout.Pack <= 0)
+            {
+                throw new InvalidOperationException($"Missing sequential native layout facts: {type}.");
+            }
+
+            check.MakeGenericMethod(type).Invoke(null, [layout.Size, layout.Pack]);
+            count++;
+        }
+
+        if (count == 0)
+        {
+            throw new InvalidOperationException("No generated closed layouts were checked.");
+        }
+
+        Check<OpenGl_SetOfPrograms>(131088, 8);
+        Console.WriteLine($"Loaded and checked {count} generated closed layouts, including large opaque storage.");
+    }
+
+    public static void Check<T>(int size, int alignment)
+        where T : unmanaged
+    {
+        Holder<T> holder = default;
+        var offset = Unsafe.ByteOffset(ref holder.Prefix, ref Unsafe.As<T, byte>(ref holder.Value));
+        if (Unsafe.SizeOf<T>() != size || offset != alignment)
+        {
+            throw new InvalidOperationException(
+                $"Managed/native layout mismatch for {typeof(T)}: size {Unsafe.SizeOf<T>()}/{size}, alignment {offset}/{alignment}.");
+        }
+    }
+
+    [StructLayout(LayoutKind.Sequential)]
+    private struct Holder<T>
+        where T : unmanaged
+    {
+        public byte Prefix;
+        public T Value;
+    }
+}

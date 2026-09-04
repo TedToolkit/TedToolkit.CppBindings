@@ -16,6 +16,26 @@ namespace TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 internal sealed class FieldModel
 {
     /// <summary>
+    /// Gets the native bit width, or null for an ordinary field. Zero-width fields only affect layout.
+    /// </summary>
+    public int? BitWidth { get; init; }
+
+    /// <summary>
+    /// Gets the bit offset within the native allocation unit identified by Offset and Size.
+    /// </summary>
+    public int BitOffset { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether bitfield reads require sign extension.
+    /// </summary>
+    public bool IsSignedBitField { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether the native bitfield is const-qualified.
+    /// </summary>
+    public bool IsReadOnlyBitField { get; init; }
+
+    /// <summary>
     /// Gets the open managed field type when the declaring record is a generic template family.
     /// </summary>
     public string CSharpTemplateType { get; init; } = "";
@@ -31,7 +51,7 @@ internal sealed class FieldModel
     public required IReadOnlyList<IRootDescriptionItem> DescriptionItems { get; init; }
 
     /// <summary>
-    /// Gets the native field offset in bytes.
+    /// Gets the native field or bitfield allocation-unit offset in bytes.
     /// </summary>
     public required long Offset { get; init; }
 

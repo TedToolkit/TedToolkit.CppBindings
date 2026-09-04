@@ -5,6 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Diagnostics;
 using System.Reflection;
 
 using ClangSharp;
@@ -29,6 +30,388 @@ internal sealed class AddTest
     private static readonly FieldInfo SourceBuilderField = typeof(SourceBuilder)
         .GetField("_stringBuilder", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
+
+    /// <summary>
+    /// Verifies alignment admission preserves unrelated members and independently representable nested types.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_exclude_only_unrepresentable_alignment_dependencies_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct alignas(16) Aligned {
+                int Data;
+                Aligned();
+                ~Aligned();
+                struct Nested { int Value; };
+            };
+            struct Api {
+                Aligned* Pointer;
+                int Value;
+                Aligned::Nested Nested;
+                const Aligned& Borrow();
+                Aligned Copy(Aligned value);
+                void Use(Aligned* value);
+                int Keep() const;
+            };
+            """, "__occt__/test.cpp");
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Api"));
+        var records = manager.RecordModels.ToArray();
+        await Assert.That(records.Any(static record => record.Type.CppTypeName == "Aligned")).IsFalse();
+        await Assert.That(records.Any(static record => record.Type.CppTypeName == "Aligned::Nested")).IsTrue();
+        var api = records.Single(static record => record.Type.CppTypeName == "Api");
+        await Assert.That(api.FieldModels.Select(static field => field.Name)).IsEquivalentTo(["Value", "Nested",]);
+        await Assert.That(api.MethodModels.Select(static method => method.MethodName)).IsEquivalentTo(["Keep",]);
+        var exports = NativeExportInventory.GetExports(records);
+        await Assert.That(exports).Contains("Api_Keep");
+        await Assert.That(exports).DoesNotContain("Api_Borrow");
+        await Assert.That(exports).DoesNotContain("Api_Copy");
+        await Assert.That(exports).DoesNotContain("Api_Use");
+        await Assert.That(exports).DoesNotContain("Aligned_Create");
+        await Assert.That(manager.UnsupportedDeclarations.Count).IsEqualTo(5);
+        var diagnostics = string.Join("\n", manager.UnsupportedDeclarations);
+        await Assert.That(diagnostics).Contains("record Aligned: native alignment 16");
+        await Assert.That(diagnostics).Contains("field Pointer in Api: required type Aligned");
+        await Assert.That(diagnostics).Contains("operation Borrow (Api_Borrow) in Api");
+        await Assert.That(manager.RecordModels.ToArray()).IsEquivalentTo(records);
+        await Assert.That(string.Join("\n", manager.UnsupportedDeclarations)).IsEqualTo(diagnostics);
+
+        api.ObjectKind = NativeObjectKind.Value;
+        var native = await new CppGenerator(api).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        await Assert.That(native).Contains("Api_Keep(");
+        await Assert.That(native).DoesNotContain("Api_Borrow(");
+        await Assert.That(native).DoesNotContain("Api_Copy(");
+        await Assert.That(native).DoesNotContain("Api_Use(");
+    }
+
+    /// <summary>
+    /// Verifies an unused unrepresentable template argument retains a closed layout, not a dangling generic type.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_keep_representable_closed_templates_after_alignment_admission_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct alignas(16) Aligned { int Data; };
+            template<class T> struct Box { int Value; };
+            struct Api { Box<Aligned> First; Box<int> Last; };
+            """);
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Api"));
+        var records = manager.RecordModels.ToArray();
+        var closed = records.Single(static record => record.Type.CppTypeName == "Box<Aligned>");
+        await Assert.That(closed.TemplateProjection).IsNull();
+        await Assert.That(closed.Type.CSharpTypeName).IsEqualTo("Box_Aligned");
+        var api = records.Single(static record => record.Type.CppTypeName == "Api");
+        await Assert.That(api.FieldModels.Select(static field => field.Type.CSharpTypeName))
+            .IsEquivalentTo(["Box_Aligned", "Box<int>",]);
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe", DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var sources = new List<string>();
+        foreach (var record in records)
+        {
+            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+                .ConfigureAwait(false));
+        }
+
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                public struct Holder { public byte Prefix; public Api Value; }
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        Holder holder = default;
+                        holder.Value.First.Value = 17;
+                        holder.Value.Last.Value = 29;
+                        return sizeof(Api) == 8 && (byte*)&holder.Value - (byte*)&holder == 4
+                            && holder.Value.First.Value == 17 && holder.Value.Last.Value == 29;
+                    }
+                }
+            }
+            """;
+        await Generators.CSharpGeneratorTests.LayoutTests.AssertCompiledStorageAsync(
+            string.Join("\n", sources), Probe, "LayoutProbe.Api").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies public inheritance dependencies propagate independently of native-only header dependencies.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_close_rejected_base_dependencies_without_header_filtering_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Base { int Value; };
+            struct Derived : Base { int Extra; };
+            struct Leaf : Derived { int Tail; };
+            struct Api { Leaf* Pointer; int Keep; };
+            """, "__occt__/test.cpp");
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Api"));
+        var native = manager.NativePreparationRecords.ToArray();
+
+        // Isolate the dependency rule from the earlier native alignment rule.
+        native.Single(static record => record.Type.CppTypeName == "Base").Alignment = 16;
+        var records = manager.RecordModels.ToArray();
+        await Assert.That(records.Select(static record => record.Type.CppTypeName)).IsEquivalentTo(["Api",]);
+        await Assert.That(records.Single().FieldModels.Select(static field => field.Name)).IsEquivalentTo(["Keep",]);
+        var diagnostics = string.Join("\n", manager.UnsupportedDeclarations);
+        await Assert.That(diagnostics).Contains("record Derived: required public base Base");
+        await Assert.That(diagnostics).Contains("record Leaf: required public base Derived");
+        await Assert.That(diagnostics).Contains("field Pointer in Api: required type Leaf");
+    }
+
+    /// <summary>
+    /// Verifies one generic representation preserves every admitted specialization's native packing.
+    /// </summary>
+    /// <param name="pack">Native packing limit.</param>
+    /// <param name="byteRepresentative">Whether to render the byte-aligned specialization.</param>
+    /// <returns>A task representing the asynchronous verification.</returns>
+    [Test]
+    [Arguments(1, true)]
+    [Arguments(1, false)]
+    [Arguments(2, true)]
+    [Arguments(8, true)]
+    public async Task Should_preserve_generic_family_alignment_Async(int pack, bool byteRepresentative)
+    {
+        using var translationUnit = ParseTranslationUnit($$"""
+            #pragma pack(push, {{pack}})
+            template<typename T> struct Storage { T First; T Last; };
+            #pragma pack(pop)
+            struct Api { Storage<char> Small; Storage<double> Large; };
+            """);
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Api"));
+        var records = manager.RecordModels.Where(static record => record.TemplateProjection?.FamilyName == "Storage")
+            .ToArray();
+        await Assert.That(records.Length).IsEqualTo(2);
+        var record = records.Single(candidate => candidate.Type.CppTypeName.Contains("char", StringComparison.Ordinal)
+            == byteRepresentative);
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
+        });
+        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        var probe = $$"""
+            namespace LayoutProbe
+            {
+                public struct SmallHolder { public byte Prefix; public Storage<sbyte> Value; }
+                public struct LargeHolder { public byte Prefix; public Storage<double> Value; }
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        SmallHolder small = default;
+                        LargeHolder large = default;
+                        return sizeof(Storage<sbyte>) == 2 && sizeof(Storage<double>) == 16
+                            && (byte*)&small.Value - (byte*)&small == 1
+                            && (byte*)&large.Value - (byte*)&large == {{pack}};
+                    }
+                }
+            }
+            """;
+        await Generators.CSharpGeneratorTests.LayoutTests.AssertCompiledStorageAsync(source, probe, "LayoutProbe.Storage`1")
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies actual C++ bitfields retain their widths and do not overwrite adjacent bits.
+    /// </summary>
+    /// <param name="fields">Native field declarations.</param>
+    /// <param name="checks">Managed writes and observable checks.</param>
+    /// <returns>A task representing the asynchronous test.</returns>
+    [Test]
+    [Arguments("unsigned Flag : 1;", "value.Flag = 3; return value.Flag == 1;")]
+    [Arguments("unsigned First : 1; unsigned Last : 3;",
+        "value.First = 1; value.Last = 15; return value.First == 1 && value.Last == 7;")]
+    [Arguments("signed First : 3; unsigned Last : 5;",
+        "value.First = -3; value.Last = 21; return value.First == -3 && value.Last == 21;")]
+    [Arguments("bool First : 1; bool Last : 1;",
+        "value.First = true; value.Last = true; value.First = false; return !value.First && value.Last;")]
+    [Arguments("unsigned First : 31; unsigned Last : 2;",
+        "value.First = 0xffffffffU; value.Last = 3; return value.First == 2147483647 && value.Last == 3;")]
+    [Arguments("unsigned : 2; unsigned Flag : 1; unsigned : 0; unsigned Last : 3;",
+        "value.Flag = 3; value.Last = 9; return value.Flag == 1 && value.Last == 1;")]
+    [Arguments("unsigned long long Wide : 64;",
+        "value.Wide = 0xffffffffffffffffUL; return value.Wide == 0xffffffffffffffffUL;")]
+    [Arguments("signed First : 3; unsigned Last : 5;",
+        "value.First = 7; value.Last = 17; return value.First == -1 && value.Last == 17;")]
+    [Arguments("char Prefix; unsigned First : 1; unsigned Last : 3; char Tail;",
+        "value.First = 1; value.Last = 12; return value.First == 1 && value.Last == 4;")]
+    [Arguments("const unsigned Flag : 1;", "return value.Flag == 0;")]
+    public async Task Should_preserve_native_bitfields_Async(string fields, string checks)
+    {
+        using var translationUnit = ParseTranslationUnit("struct Storage { " + fields + " };");
+        var declaration = translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>().Single();
+        var manager = CreateManager();
+        manager.Add(declaration);
+        var record = manager.RecordModels.Single();
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
+        });
+        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        var returnIndex = checks.LastIndexOf("return ", StringComparison.Ordinal);
+        var writes = checks[..returnIndex];
+        var condition = checks[(returnIndex + 7)..].TrimEnd(';');
+        var nativeBytes = await GetNativeBitFieldBytesAsync(fields, writes, condition, record).ConfigureAwait(false);
+        var readOnly = record.FieldModels.Any(static field => field.IsReadOnlyBitField);
+        var initialize = readOnly ? "" : "new System.Span<byte>(&value, sizeof(Storage)).Fill(0xa5);";
+        var storageCheck = readOnly
+            ? "!typeof(Storage).GetProperty(\"Flag\")!.CanWrite"
+            : "System.Convert.ToHexString(new System.ReadOnlySpan<byte>(&value, sizeof(Storage)))"
+              + $" == \"{nativeBytes}\"";
+        var probe = $$"""
+            namespace LayoutProbe
+            {
+                [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+                public struct Holder { public byte Prefix; public Storage Value; }
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        Holder holder = default;
+                        if (sizeof(Storage) != {{record.Size}}
+                            || (byte*)&holder.Value - (byte*)&holder != {{record.Alignment}}) return false;
+                        Storage value = default;
+                        {{initialize}}
+                        {{writes}}
+                        return ({{condition}}) && {{storageCheck}};
+                    }
+                }
+            }
+            """;
+        await Generators.CSharpGeneratorTests.LayoutTests.AssertCompiledStorageAsync(source, probe)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<string> GetNativeBitFieldBytesAsync(
+        string fields, string writes, string condition, RecordModel record)
+    {
+        var directory = Directory.CreateTempSubdirectory("CppBindings.Bitfields.");
+        try
+        {
+            var sourcePath = Path.Combine(directory.FullName, "probe.cpp");
+            var executablePath = Path.Combine(directory.FullName, "probe.exe");
+            var initialize = record.FieldModels.Any(static field => field.IsReadOnlyBitField)
+                ? ""
+                : "std::memset(&value, 0xa5, sizeof(value));";
+            var source = $$"""
+                #include <cstdio>
+                #include <cstring>
+                struct Storage { {{fields}} };
+                struct Holder { char Prefix; Storage Value; };
+                static_assert(sizeof(Storage) == {{record.Size}});
+                static_assert(alignof(Storage) == {{record.Alignment}});
+                static_assert(__builtin_offsetof(Holder, Value) == {{record.Alignment}});
+                int main()
+                {
+                    Storage value{};
+                    {{initialize}}
+                    {{writes}}
+                    if (!({{condition}})) return 1;
+                    for (unsigned i = 0; i < sizeof(value); ++i)
+                        std::printf("%02X", reinterpret_cast<unsigned char*>(&value)[i]);
+                }
+                """;
+            await File.WriteAllTextAsync(sourcePath, source).ConfigureAwait(false);
+            _ = await RunBitFieldProbeAsync("clang++",
+                ["-std=c++20", "-Wno-bitfield-constant-conversion", sourcePath, "-o", executablePath,])
+                .ConfigureAwait(false);
+            return await RunBitFieldProbeAsync(executablePath, []).ConfigureAwait(false);
+        }
+        finally
+        {
+            directory.Delete(recursive: true);
+        }
+    }
+
+    private static async Task<string> RunBitFieldProbeAsync(string executable, string[] arguments)
+    {
+        var startInfo = new ProcessStartInfo(executable)
+        {
+            CreateNoWindow = true,
+            RedirectStandardError = true,
+            RedirectStandardOutput = true,
+            UseShellExecute = false,
+        };
+        foreach (var argument in arguments)
+        {
+            startInfo.ArgumentList.Add(argument);
+        }
+
+        using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Native probe did not start.");
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        var outputTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
+        var errorTask = process.StandardError.ReadToEndAsync(timeout.Token);
+        try
+        {
+            await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
+            var output = await outputTask.ConfigureAwait(false);
+            var error = await errorTask.ConfigureAwait(false);
+            await Assert.That(process.ExitCode).IsEqualTo(0).Because(error);
+            return output;
+        }
+        finally
+        {
+            if (!process.HasExited)
+            {
+                process.Kill(entireProcessTree: true);
+                await process.WaitForExitAsync().ConfigureAwait(false);
+            }
+        }
+    }
+
+    /// <summary>
+    /// Verifies reference members describe stored addresses rather than their referents.
+    /// </summary>
+    /// <returns>A task representing the asynchronous test.</returns>
+    [Test]
+    public async Task Should_measure_reference_member_storage_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Payload { long long Values[4]; };
+            using PayloadReference = const Payload&;
+            struct Holder
+            {
+                PayloadReference Large;
+                char& Small;
+                Payload&& Movable;
+                int Tail;
+            };
+            """);
+        var declaration = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>().Single(static record => record.Name == "Holder");
+        var manager = CreateManager();
+        manager.Add(declaration);
+        var holder = manager.RecordModels.Single(static record => record.Type.CppTypeName == "Holder");
+
+        foreach (var field in holder.FieldModels.Where(static field => field.Name != "Tail"))
+        {
+            await Assert.That(field.Size).IsEqualTo(8);
+            await Assert.That(field.Alignment).IsEqualTo(8);
+        }
+
+        await Assert.That(holder.FieldModels.Single(static field => field.Name == "Tail").Offset).IsEqualTo(24);
+    }
 
     /// <summary>
     /// Verifies a used standard pair specialization receives a closed, compiler-probed model.

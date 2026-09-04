@@ -206,6 +206,54 @@ families before implementation. A newly discovered material
 public contract or a request to retain an old identity is an escalation trigger and requires renewed
 change approval; work-item planning cannot decide it.
 
+### Approved native bitfield correction
+
+The maintainer explicitly approved the field-to-property compatibility correction with "批准。"
+in this task on 2026-09-04 after the full-generation layout failure. This refines AC-05 and GEN-02;
+it does not add a new platform, ownership representation, or delivery item.
+
+Native bitfields previously emitted as whole overlapping managed fields become same-named,
+same-managed-type value properties over sequential private physical storage. Preserve each native
+bit offset, width, signedness, readable/writable capability, and the pinned compiler's truncation
+and sign-extension behavior. Writes preserve sibling bits and unrelated storage. As in C++, these
+members have no address or ref-return/ref-argument surface; ordinary non-bitfield members retain
+their existing representation. Unnamed and zero-width fields affect layout without adding public
+members. Bitfield support does not authorize declaration-specific exclusions or silent support reduction.
+
+Proof includes real parsed single and adjacent bitfields, signed/unsigned/bool partitions, boundary
+values, cross-allocation-unit layout, and compiled managed read/write/size/alignment observations
+compared with the pinned native compiler. The full existing OCCT and package gates remain required.
+Generic closed-specialization alignment remains a verification obligation. Over-aligned declarations
+follow the separately approved admission disposition below; no new allocation strategy is authorized.
+
+### Approved alignment admission disposition
+
+The maintainer approved narrowing the unrepresentable declaration surface while preserving direct-field
+`Owned<T>` and explicitly requested implementation with "是的，继续。" on 2026-09-04.
+This refines AC-05 under GEN-02/GEN-05 and the existing architecture's alignment admission rule.
+
+The pinned win-x64 sequential storage model admits native alignments 1, 2, 4 and 8 only. A declaration
+requiring unsupported alignment is excluded before either callable layer or their shared export
+inventory is created. Report its native identity, required alignment, target constraint and reason.
+Apply this rule to compiler facts, never a header, namespace, name prefix or template-family denylist.
+In particular, rejecting Standard_ErrorHandler must not reject its independently representable nested
+Callback declaration or Standard_Mutex solely through lexical containment.
+
+Close affected managed type dependencies deterministically: omit and report fields or whole operations
+whose exposed types cannot be represented, retaining unrelated members when the containing layout
+still has an exact opaque-storage representation. Reject a dependent record only when its required
+representation or inheritance surface cannot be emitted without an excluded type. No dangling type,
+interface, generic argument, paired native export or function-table entry may remain. Native-only
+header dependencies are not managed type dependencies. Preserve separately representable template
+specializations, borrowed-reference semantics and every existing ownership surface. Never substitute
+void pointers, copies, wrappers, allocation or unchecked storage for an excluded typed capability.
+
+Proof covers compiler-parsed over-aligned records, nested/same-header survivors, affected fields,
+receiver/parameter/result dependencies, inheritance and template dependencies, stable diagnostics,
+paired export completeness and the real Standard_ErrorHandler disposition. The full generation,
+managed/native compilation, native smoke, deterministic output and package gates remain required.
+Reopening support requires proof for the pinned runtime storage, or a separately approved architecture.
+
 ### Approved provider extension boundary
 
 The maintainer approved the following new public family on 2026-09-04

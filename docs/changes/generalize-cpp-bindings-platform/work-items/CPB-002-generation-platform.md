@@ -50,6 +50,12 @@ OCCT provider produces working exact-layout bindings through the same boundary a
   publication and function-table/loading mechanics. Keep all ownership and fail-closed invariants.
 - Generate separate direct `Handle<T>` and `in handle<T>` receivers to the same NativeApi slot;
   only the owning overload checks owner liveness. No common receiver interface or Core forwarding.
+- Apply the parent's approved native bitfield correction: same-named, same-typed value properties
+  preserve native bit widths and signed read/write behavior without exposing an address or ref.
+  Prove single and adjacent bitfields against the native compiler; retain the complete representable
+  declaration set and verify generic storage without changing ownership allocation. Apply the parent's
+  separately approved alignment admission disposition before paired emission, with deterministic
+  diagnostics and dependency closure at the narrowest affected declaration/member boundary.
 - Investigate the current native-loader implementation versus ADR-001 using repository evidence;
   preserve approved behavior and supply the evidence to CPB-003. A new enduring loading decision
   requires the architecture route and any material contract change requires renewed design approval.

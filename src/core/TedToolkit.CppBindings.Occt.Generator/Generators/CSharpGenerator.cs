@@ -58,17 +58,30 @@ internal sealed class CSharpGenerator(
 
         var templateProjection = recordDecl.TemplateProjection;
         var structName = templateProjection?.FamilyName ?? recordDecl.Type.CSharpPublicType.ToCode();
-        var usesExplicitLayout = UsesExplicitLayout();
         var nameSpace = NameSpace(generationOptions.Value.CSharpNamespace);
         var structDeclaration = Struct(structName).Unsafe
             .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
                 .AddArgument(Argument((templateProjection?.NativeTypePattern
                                        ?? recordDecl.Type.CppTypeName).ToLiteral())));
         var layoutAttribute = Attribute<StructLayoutAttribute>()
-            .AddArgument(Argument((usesExplicitLayout ? LayoutKind.Explicit : LayoutKind.Sequential).ToExpression()));
+            .AddArgument(Argument(LayoutKind.Sequential.ToExpression()));
         if (templateProjection is null)
         {
             layoutAttribute.AddNamedArgument(nameof(StructLayoutAttribute.Size), recordDecl.Size.ToLiteral());
+            if (recordDecl.Alignment > 0)
+            {
+                if (recordDecl.Alignment is not (1 or 2 or 4 or 8))
+                {
+                    throw new NotSupportedException(
+                        $"Managed alignment is not proved for {recordDecl.Type.CppTypeName}: {recordDecl.Alignment}.");
+                }
+
+                layoutAttribute.AddNamedArgument(nameof(StructLayoutAttribute.Pack), recordDecl.Alignment.ToLiteral());
+            }
+        }
+        else
+        {
+            layoutAttribute.AddNamedArgument(nameof(StructLayoutAttribute.Pack), templateProjection.ManagedPack.ToLiteral());
         }
 
         structDeclaration.AddAttribute(layoutAttribute);
@@ -79,7 +92,7 @@ internal sealed class CSharpGenerator(
         structDeclaration = generationOptions.Value.IsInternal
             ? structDeclaration.Internal
             : structDeclaration.Public;
-        GenerateFields(structDeclaration, usesExplicitLayout);
+        GenerateFields(structDeclaration);
         nameSpace.AddMember(structDeclaration);
         GenerateInterfaces(nameSpace, structDeclaration);
 
@@ -115,7 +128,9 @@ internal sealed class CSharpGenerator(
         }
 
         if (recordDecl.ObjectKind is NativeObjectKind.Handle
-            && !recordDecl.Bases.Any(static relation => relation.Base.IsStandardTransient))
+            && !recordDecl.Bases.Any(relation => relation.IsPublic
+                && relation.Base.IsStandardTransient
+                && recordCatalog?.ContainsKey(relation.Base.Type.CppTypeName) is not false))
         {
             interfaceDeclaration.AddBaseType(new DataType("global::TedToolkit.CppBindings.Occt.IStandard_Transient"));
         }
@@ -154,39 +169,13 @@ internal sealed class CSharpGenerator(
             : "I" + record.TemplateProjection.DeclarationTypeName;
     }
 
-    private bool UsesExplicitLayout()
-    {
-        var currentOffset = 0L;
-        foreach (var field in recordDecl.FieldModels.OrderBy(static field => field.Offset))
-        {
-            if (field.Offset < currentOffset)
-            {
-                return true;
-            }
-
-            currentOffset = checked(field.Offset + field.Size);
-        }
-
-        return false;
-    }
-
-    private void GenerateFields(TypeDeclaration structDeclaration, bool usesExplicitLayout)
+    private void GenerateFields(TypeDeclaration structDeclaration)
     {
         if (recordDecl.TemplateProjection is not null)
         {
             foreach (var field in recordDecl.FieldModels.OrderBy(static field => field.Offset))
             {
-                AddField(structDeclaration, field, false);
-            }
-
-            return;
-        }
-
-        if (usesExplicitLayout)
-        {
-            foreach (var field in recordDecl.FieldModels.OrderBy(static field => field.Offset))
-            {
-                AddField(structDeclaration, field, true);
+                AddField(structDeclaration, field);
             }
 
             return;
@@ -194,17 +183,128 @@ internal sealed class CSharpGenerator(
 
         var currentOffset = 0L;
         var paddingIndex = 0;
+        var managedAlignment = 1L;
+        var bitfieldUnits = new HashSet<(long Offset, long Size)>();
         foreach (var fieldDecl in recordDecl.FieldModels.OrderBy(static field => field.Offset))
         {
-            AddPadding(structDeclaration, ref currentOffset, fieldDecl.Offset, ref paddingIndex);
-            AddField(structDeclaration, fieldDecl, false);
+            if (fieldDecl.BitWidth is 0)
+            {
+                continue;
+            }
+
+            if (fieldDecl.BitWidth.HasValue && !bitfieldUnits.Add((fieldDecl.Offset, fieldDecl.Size)))
+            {
+                AddBitFieldProperty(structDeclaration, fieldDecl);
+                continue;
+            }
+
+            var fieldAlignment = recordDecl.Alignment > 0
+                ? Math.Min(recordDecl.Alignment, fieldDecl.Alignment)
+                : Math.Max(fieldDecl.Alignment, 1);
+            if (fieldDecl.Offset < currentOffset || fieldDecl.Offset % fieldAlignment != 0)
+            {
+                throw new NotSupportedException(
+                    $"Sequential field placement is not proved for {recordDecl.Type.CppTypeName}.{fieldDecl.Name}.");
+            }
+
+            managedAlignment = Math.Max(managedAlignment,
+                AddPadding(structDeclaration, ref currentOffset, fieldDecl.Offset, ref paddingIndex));
+            managedAlignment = Math.Max(managedAlignment, fieldAlignment);
+            if (fieldDecl.BitWidth.HasValue)
+            {
+                structDeclaration.AddMember(Field(new DataType(GetUnsignedStorageType(fieldDecl.Size)),
+                    GetBitFieldStorageName(fieldDecl)).Private);
+                AddBitFieldProperty(structDeclaration, fieldDecl);
+            }
+            else
+            {
+                AddField(structDeclaration, fieldDecl);
+            }
+
             currentOffset = checked(fieldDecl.Offset + fieldDecl.Size);
         }
 
-        AddPadding(structDeclaration, ref currentOffset, recordDecl.Size, ref paddingIndex);
+        managedAlignment = Math.Max(managedAlignment,
+            AddPadding(structDeclaration, ref currentOffset, recordDecl.Size, ref paddingIndex));
+        if (currentOffset == recordDecl.Size && (recordDecl.Alignment is 0 || managedAlignment == recordDecl.Alignment))
+        {
+            return;
+        }
+
+        throw new NotSupportedException($"Sequential storage is not proved for {recordDecl.Type.CppTypeName}.");
     }
 
-    private void AddField(TypeDeclaration structDeclaration, FieldModel fieldModel, bool usesExplicitLayout)
+    private static string GetUnsignedStorageType(long size)
+    {
+        return size switch
+        {
+            1 => "byte",
+            2 => "ushort",
+            4 => "uint",
+            8 => "ulong",
+            _ => throw new NotSupportedException($"Bitfield allocation-unit size is not proved: {size}."),
+        };
+    }
+
+    private string GetBitFieldStorageName(FieldModel field)
+    {
+        var name = $"__bits{field.Offset}";
+        while (recordDecl.FieldModels.Any(candidate => candidate.Name == name))
+        {
+            name += "_";
+        }
+
+        return name;
+    }
+
+    private void AddBitFieldProperty(TypeDeclaration declaration, FieldModel field)
+    {
+        var width = field.BitWidth!.Value;
+        if (width <= 0 || width > field.Size * 8 || field.BitOffset < 0 || field.BitOffset + width > field.Size * 8)
+        {
+            throw new NotSupportedException($"Bitfield range is not proved for {recordDecl.Type.CppTypeName}.{field.Name}.");
+        }
+
+        if (string.IsNullOrEmpty(field.Name))
+        {
+            return;
+        }
+
+        var storage = GetBitFieldStorageName(field);
+        var storageType = GetUnsignedStorageType(field.Size);
+        var type = field.Type.CSharpPInvokeType.ToCode();
+        var mask = width is 64 ? ulong.MaxValue : (1UL << width) - 1;
+        var bits = $"(((ulong){storage} >> {field.BitOffset}) & {mask}UL)";
+        var read = (field.IsSignedBitField, type) switch
+        {
+            (true, _) => $"unchecked(({type})((long)({bits} << {64 - width}) >> {64 - width}))",
+            (_, "bool") => $"{bits} != 0",
+            _ => $"unchecked(({type}){bits})",
+        };
+        var property = Property(field.Type.CSharpPInvokeType, field.Name).Public
+            .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
+                .AddArgument(Argument(field.Type.CppTypeName.ToLiteral())));
+        property.IsReadonly = field.IsReadOnlyBitField;
+        var getter = Accessor(AccessorType.GET);
+        getter.IsReadonly = !field.IsReadOnlyBitField;
+        getter.Statements.Add(new Custom($"return {read};"));
+        property.AddAccessor(getter);
+        if (!field.IsReadOnlyBitField)
+        {
+            var value = type is "bool" ? "(value ? 1UL : 0UL)" : "unchecked((ulong)value)";
+            var setter = Accessor(AccessorType.SET);
+            setter.Statements.Add(new Custom(
+                $"{storage} = unchecked(({storageType})(((ulong){storage} & ~({mask}UL << {field.BitOffset}))"
+                + $" | (({value} & {mask}UL) << {field.BitOffset})));"));
+            property.AddAccessor(setter);
+        }
+
+        AddRootDescriptions(property, field.DescriptionItems, static (target, description) =>
+            target.AddRootDescription(description));
+        declaration.AddMember(property);
+    }
+
+    private void AddField(TypeDeclaration structDeclaration, FieldModel fieldModel)
     {
         var managedType = recordDecl.TemplateProjection is null || string.IsNullOrEmpty(fieldModel.CSharpTemplateType)
             ? fieldModel.Type.CSharpPInvokeType
@@ -217,28 +317,49 @@ internal sealed class CSharpGenerator(
             .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
                 .AddArgument(Argument(nativeType.ToLiteral())))
             .Public;
-        if (usesExplicitLayout)
-        {
-            field.AddAttribute(Attribute<FieldOffsetAttribute>()
-                .AddArgument(Argument(fieldModel.Offset.ToLiteral())));
-        }
-
         AddRootDescriptions(field, fieldModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
         structDeclaration.AddMember(field);
     }
 
-    private static void AddPadding(
+    private long AddPadding(
         TypeDeclaration structDeclaration,
         ref long currentOffset,
         long targetOffset,
         ref int paddingIndex)
     {
+        var managedAlignment = 1L;
         while (currentOffset < targetOffset)
         {
-            structDeclaration.AddMember(Field(DataType.Byte, $"__padding{paddingIndex++}").Private);
-            currentOffset++;
+            var alignment = Math.Max(recordDecl.Alignment, 1);
+            var unit = alignment;
+            while (currentOffset % unit != 0 || unit > targetOffset - currentOffset)
+            {
+                unit /= 2;
+            }
+
+            var count = (targetOffset - currentOffset) / unit;
+            if (currentOffset % alignment != 0)
+            {
+                count = Math.Min(count, (alignment - (currentOffset % alignment)) / unit);
+            }
+
+            var type = unit switch
+            {
+                8 => "ulong",
+                4 => "uint",
+                2 => "ushort",
+                _ => "byte",
+            };
+            var name = $"__padding{paddingIndex++}";
+            structDeclaration.AddMember(count is 1
+                ? Field(new DataType(type), name).Private
+                : Field(new DataType("fixed " + type), $"{name}[{count}]").Private);
+            currentOffset += unit * count;
+            managedAlignment = Math.Max(managedAlignment, unit);
         }
+
+        return managedAlignment;
     }
 
     private static void AddRootDescriptions<TTarget>(

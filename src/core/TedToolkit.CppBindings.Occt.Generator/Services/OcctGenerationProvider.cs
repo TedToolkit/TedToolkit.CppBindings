@@ -100,6 +100,10 @@ internal sealed class OcctGenerationProvider : IGenerationProvider, IDisposable
         managed.AddRange(_records.EnumModels.Select(model => new GeneratedSource(
             model.Name.ToGeneratedFileStem() + ".g.cs",
             (writer, token) => RenderEnumAsync(model, writer, token))));
+        var admissionReport = "Target: win-x64; supported sequential native alignments: 1, 2, 4, 8.\n"
+            + string.Join("\n", _records.UnsupportedDeclarations) + "\n";
+        managed.Add(new GeneratedSource("unsupported-declarations.txt",
+            (writer, token) => writer.WriteAsync(admissionReport.AsMemory(), token)));
         var native = records.OrderBy(static record => record.Type.CSharpTypeName, StringComparer.Ordinal)
             .Select(record => new GeneratedSource(
                 record.Type.CppTypeName.ToGeneratedTypeName().ToGeneratedFileStem(80) + ".cpp",

@@ -7,6 +7,7 @@
 
 using Cysharp.Text;
 
+using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -17,6 +18,11 @@ namespace TedToolkit.CppBindings.Occt.Generator.Models.Types;
 /// </summary>
 internal class TypeModel
 {
+    /// <summary>
+    /// Gets or sets the exact record required by this managed type, including pointer and handle views.
+    /// </summary>
+    public RecordModel? ReferencedRecord { get; set; }
+
     /// <summary>
     /// Gets or sets the projected C++ type used in generated <c>extern "C"</c> wrappers.
     /// </summary>

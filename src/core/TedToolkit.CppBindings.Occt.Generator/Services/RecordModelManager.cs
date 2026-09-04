@@ -51,7 +51,22 @@ internal sealed class RecordModelManager(
 
     private readonly Dictionary<string, byte[]> _sourceFiles = new(StringComparer.OrdinalIgnoreCase);
 
+    private readonly List<string> _unsupportedDeclarations = [];
+
     private bool _managedTemplateReferencesFinalized;
+
+    private RecordModel[] _managedRecords = [];
+
+    /// <summary>
+    /// Gets deterministic admission diagnostics for the completed managed declaration graph.
+    /// </summary>
+    internal IReadOnlyList<string> UnsupportedDeclarations
+    {
+        get
+        {
+            return _unsupportedDeclarations;
+        }
+    }
 
     /// <inheritdoc/>
     public IEnumerable<RecordModel> NativePreparationRecords
@@ -79,9 +94,8 @@ internal sealed class RecordModelManager(
     {
         get
         {
-            var records = NativePreparationRecords;
             FinalizeManagedTemplateReferences();
-            return records;
+            return _managedRecords;
         }
     }
 
@@ -142,10 +156,12 @@ internal sealed class RecordModelManager(
             SourceHeader = Path.GetFileName(file.Name.CString),
             Type = projectedType,
             Size = size,
+            Alignment = clang.Type_getAlignOf(type),
             IsAbstract = record.IsAbstract,
             IsStandardTransient = false,
         };
         _recordNames.Add(key, result);
+        projectedType.ReferencedRecord = result;
         var triplet = options.Value.GetTriplet(defaultsResolver);
         var isOcctType =
             file.Name.CString.Contains(vcpkgEnvironment.GetOcctIncludeFolder(triplet), StringComparison.InvariantCulture);
@@ -176,6 +192,18 @@ internal sealed class RecordModelManager(
 
         result.NativeRequiredHeaders = GetNativeRequiredHeaders(record);
         result.NativeDependencyRecords = GetNativeDependencyRecords(record);
+        if (result.TemplateProjection is { } projection && record is ClassTemplateSpecializationDecl specialization)
+        {
+            for (var index = 0; index < projection.Arguments.Count; index++)
+            {
+                if (projection.Arguments[index].Kind is TemplateArgumentProjectionKind.Generic
+                    && resolver.Resolve(specialization.TemplateArgs[index].AsType).Decl is { } argumentRecord)
+                {
+                    projection.Arguments[index].ReferencedRecord = Add(argumentRecord);
+                }
+            }
+        }
+
         result.UsesAllocatorPlacementNew = record.Methods.Any(static method =>
             method.Name is "operator new" && method.Parameters.Count is 2);
 
@@ -195,7 +223,7 @@ internal sealed class RecordModelManager(
         var currentOffset = 0L;
         foreach (var field in record.FieldModels.OrderBy(static field => field.Offset))
         {
-            if (field.Offset != currentOffset)
+            if (field.BitWidth.HasValue || field.Offset != currentOffset)
             {
                 return false;
             }
@@ -227,7 +255,19 @@ internal sealed class RecordModelManager(
         }
 
         _managedTemplateReferencesFinalized = true;
-        var records = _recordNames.Values.ToArray();
+        var records = ManagedLayoutAdmission.Apply(NativePreparationRecords.ToArray(), _unsupportedDeclarations);
+        _managedRecords = records;
+        var admitted = records.ToHashSet();
+        foreach (var record in records.Where(static record => record.TemplateProjection is not null))
+        {
+            if (!HasGenericPhysicalLayout(record)
+                || record.TemplateProjection!.GenericArguments.Any(argument =>
+                    argument.ReferencedRecord is { } dependency && !admitted.Contains(dependency)))
+            {
+                KeepClosedTemplateProjection(record);
+            }
+        }
+
         KeepAmbiguousTemplateSpecializationsClosed(records);
         var replacements = records
             .Where(static record => record.TemplateProjection is not null)
@@ -295,8 +335,14 @@ internal sealed class RecordModelManager(
                 .Distinct(StringComparer.Ordinal)
                 .Take(2)
                 .Count();
-            if (shapes < 2)
+            var pack = GetCommonTemplatePacking(family.ToArray());
+            if (shapes < 2 && pack > 0)
             {
+                foreach (var specialization in family)
+                {
+                    specialization.TemplateProjection!.ManagedPack = pack;
+                }
+
                 continue;
             }
 
@@ -305,6 +351,45 @@ internal sealed class RecordModelManager(
                 KeepClosedTemplateProjection(specialization);
             }
         }
+    }
+
+    private static int GetCommonTemplatePacking(IReadOnlyList<RecordModel> family)
+    {
+        foreach (var pack in new[] { 8, 4, 2, 1, })
+        {
+            if (family.All(record => MatchesSequentialPacking(record, pack)))
+            {
+                return pack;
+            }
+        }
+
+        return 0;
+    }
+
+    private static bool MatchesSequentialPacking(RecordModel record, int pack)
+    {
+        var offset = 0L;
+        var alignment = 1L;
+        foreach (var field in record.FieldModels.OrderBy(static field => field.Offset))
+        {
+            var fieldAlignment = Math.Min(field.Alignment, pack);
+            if (fieldAlignment <= 0 || field.BitWidth.HasValue)
+            {
+                return false;
+            }
+
+            offset = checked(((offset + fieldAlignment - 1) / fieldAlignment) * fieldAlignment);
+            if (offset != field.Offset)
+            {
+                return false;
+            }
+
+            offset = checked(offset + field.Size);
+            alignment = Math.Max(alignment, fieldAlignment);
+        }
+
+        var size = Math.Max(1, checked(((offset + alignment - 1) / alignment) * alignment));
+        return size == record.Size && alignment == record.Alignment;
     }
 
     private static string GetTemplatePhysicalShape(RecordModel record)
@@ -1075,7 +1160,7 @@ internal sealed class RecordModelManager(
 
         if (result.Decl is { } recordDecl)
         {
-            Add(recordDecl);
+            result.Type.ReferencedRecord = Add(recordDecl);
         }
 
         if (result.Enum is not null)
@@ -1647,6 +1732,20 @@ internal sealed class RecordModelManager(
         var offset = fieldDecl.Handle.OffsetOfField / 8;
         var size = clang.Type_getSizeOf(fieldDecl.Type.Handle);
         var alignment = clang.Type_getAlignOf(fieldDecl.Type.Handle);
+        if (fieldDecl.Type.CanonicalType is ReferenceType)
+        {
+            using var target = fieldDecl.TranslationUnit.Handle.TargetInfo;
+            var triple = target.Triple.CString;
+            if (target.PointerWidth != 64 || !triple.Contains("windows-msvc", StringComparison.Ordinal))
+            {
+                throw new NotSupportedException($"Reference member storage is not proved for target {triple}.");
+            }
+
+            // The supported MSVC x64 ABI stores references as naturally aligned addresses.
+            size = target.PointerWidth / 8;
+            alignment = size;
+        }
+
         if (offset < 0 || size <= 0 || alignment <= 0)
         {
             throw new NotSupportedException(
@@ -1654,17 +1753,71 @@ internal sealed class RecordModelManager(
         }
 
         var templateField = GetTemplateField(fieldDecl, declaringRecord, templateProjection);
+        var storageOffset = fieldDecl.IsBitField ? GetBitFieldStorageOffset(fieldDecl, declaringRecord) : offset;
         return new()
         {
+            BitWidth = fieldDecl.IsBitField ? fieldDecl.BitWidthValue : null,
+            BitOffset = fieldDecl.IsBitField ? checked((int)(fieldDecl.Handle.OffsetOfField - (storageOffset * 8))) : 0,
+            IsSignedBitField = fieldDecl.IsBitField && IsSignedBitField(fieldDecl),
+            IsReadOnlyBitField = fieldDecl.IsBitField && fieldDecl.Type.CanonicalType.IsLocalConstQualified,
             CSharpTemplateType = GetDirectTemplateFieldType(templateField, templateProjection),
             CppTemplateType = templateField?.Type.AsString ?? "",
             DescriptionItems = commentProjection.DescriptionItems,
             Name = fieldDecl.Name,
             Type = ToModel(fieldDecl.Type),
-            Offset = offset,
+            Offset = storageOffset,
             Size = size,
             Alignment = alignment,
         };
+    }
+
+    private static bool IsSignedBitField(FieldDecl field)
+    {
+        var type = field.Type.CanonicalType;
+        if (type is EnumType enumeration)
+        {
+            type = enumeration.Decl.IntegerType.CanonicalType;
+        }
+
+        return type.Kind is CXTypeKind.CXType_Char_S or CXTypeKind.CXType_SChar or CXTypeKind.CXType_Short
+            or CXTypeKind.CXType_Int or CXTypeKind.CXType_Long or CXTypeKind.CXType_LongLong;
+    }
+
+    private static long GetBitFieldStorageOffset(FieldDecl field, CXXRecordDecl record)
+    {
+        using var target = field.TranslationUnit.Handle.TargetInfo;
+        if (target.PointerWidth != 64 || !target.Triple.CString.Contains("windows-msvc", StringComparison.Ordinal))
+        {
+            throw new NotSupportedException("Bitfield allocation units are only proved for MSVC x64.");
+        }
+
+        var storageOffset = -1L;
+        var storageSize = 0L;
+        foreach (var candidate in record.Fields)
+        {
+            if (!candidate.IsBitField || candidate.BitWidthValue is 0)
+            {
+                storageOffset = -1;
+            }
+            else
+            {
+                var size = clang.Type_getSizeOf(candidate.Type.Handle);
+                var bitOffset = candidate.Handle.OffsetOfField;
+                if (storageOffset < 0 || size != storageSize
+                    || bitOffset + candidate.BitWidthValue > (storageOffset + storageSize) * 8)
+                {
+                    storageOffset = bitOffset / 8;
+                    storageSize = size;
+                }
+            }
+
+            if (candidate == field)
+            {
+                return storageOffset < 0 ? candidate.Handle.OffsetOfField / 8 : storageOffset;
+            }
+        }
+
+        throw new InvalidOperationException("Bitfield declaration is missing from its record.");
     }
 
     private static FieldDecl? GetTemplateField(

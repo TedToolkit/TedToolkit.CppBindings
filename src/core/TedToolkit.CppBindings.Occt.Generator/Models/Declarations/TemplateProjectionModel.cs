@@ -13,6 +13,11 @@ namespace TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 internal sealed class TemplateProjectionModel
 {
     /// <summary>
+    /// Gets or sets the common managed packing limit proved for all selected native specializations.
+    /// </summary>
+    public int ManagedPack { get; set; } = 8;
+
+    /// <summary>
     /// Gets the former fully closed managed type name used as a replacement key.
     /// </summary>
     public required string FixedTypeName { get; init; }

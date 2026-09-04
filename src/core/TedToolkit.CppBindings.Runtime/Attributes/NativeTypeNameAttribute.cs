@@ -15,6 +15,7 @@ namespace TedToolkit.CppBindings;
                 | AttributeTargets.Interface
                 | AttributeTargets.Parameter
                 | AttributeTargets.ReturnValue
+                | AttributeTargets.Property
                 | AttributeTargets.Field)]
 public sealed class NativeTypeNameAttribute(string nativeTypeName) : Attribute
 {

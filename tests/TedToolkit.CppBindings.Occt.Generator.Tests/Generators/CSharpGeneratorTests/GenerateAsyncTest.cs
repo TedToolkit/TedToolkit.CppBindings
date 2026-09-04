@@ -21,6 +21,56 @@ namespace TedToolkit.CppBindings.Occt.Generator.Tests.Generators.CSharpGenerator
 internal sealed class GenerateAsyncTest
 {
     /// <summary>
+    /// Verifies omitted native base interfaces do not erase the proved intrusive handle constraint.
+    /// </summary>
+    /// <param name="publicBase">Whether the relation is public but the base is not emitted.</param>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Should_preserve_handle_constraint_when_base_interface_is_not_emitted_Async(bool publicBase)
+    {
+        static RecordModel CreateRecord(string name)
+        {
+            return new()
+            {
+                DescriptionItems = [], FieldModels = [], MethodModels = [],
+                IsAbstract = false, IsStandardTransient = true, ObjectKind = NativeObjectKind.Handle,
+                Size = 8, Alignment = 8, SourceHeader = "test.hxx",
+                Type = new() { CppTypeName = name, CSharpPInvokeType = new(name), CSharpPublicType = new(name), },
+            };
+        }
+
+        var hidden = CreateRecord("HiddenBase");
+        var record = CreateRecord("Storage");
+        record.Bases =
+        [
+            new()
+            {
+                Base = hidden, IsPublic = publicBase, IsVirtual = false,
+                PointerAdjustment = PointerAdjustmentKind.Identity,
+            },
+        ];
+        var catalog = new Dictionary<string, RecordModel>(StringComparer.Ordinal) { ["Storage"] = record, };
+        var code = await new CSharpGenerator(record, CreateOptions("LayoutProbe"), catalog)
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                public static class Probe
+                {
+                    public static bool Check()
+                    {
+                        return typeof(TedToolkit.CppBindings.Occt.Handle<Storage>).IsClass
+                            && typeof(TedToolkit.CppBindings.Occt.IStandard_Transient).IsAssignableFrom(typeof(Storage));
+                    }
+                }
+            }
+            """;
+        await LayoutTests.AssertCompiledStorageAsync(code, Probe).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Verifies transient operations support both owning and borrowed handle receivers.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -366,7 +416,7 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("public unsafe struct gp_Pnt2d :");
         await Assert.That(code).Contains("Igp_Pnt2d");
         await Assert.That(code).Contains("public unsafe interface Igp_Pnt2d");
-        await Assert.That(code).Contains("private byte __padding0;");
+        await Assert.That(code).Contains("private fixed byte __padding0[8];");
         await Assert.That(code).Contains("public int myValue;");
     }
 

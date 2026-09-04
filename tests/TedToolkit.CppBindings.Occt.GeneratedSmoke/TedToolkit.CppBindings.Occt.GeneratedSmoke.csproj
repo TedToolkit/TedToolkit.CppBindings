@@ -7,11 +7,14 @@
     <Nullable>enable</Nullable>
     <IsPackable>false</IsPackable>
     <VcpkgRoot>$(VCPKG_ROOT)</VcpkgRoot>
+    <GeneratedSourceDirectory Condition="'$(GeneratedSourceDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\output\generated\csharp</GeneratedSourceDirectory>
   </PropertyGroup>
   <ItemGroup>
     <Compile Include="Program.cs" />
-    <Compile Include="..\..\output\generated\csharp\*.cs" Link="Generated\%(Filename)%(Extension)" />
+    <Compile Include="$(GeneratedSourceDirectory)\*.cs" Link="Generated\%(Filename)%(Extension)" />
     <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LayoutOnly)' != 'true'">
     <None Include="..\..\output\generated\native-build\Release\ted_toolkit_occt.dll"
           CopyToOutputDirectory="PreserveNewest">
       <Link>ted_toolkit_occt.dll</Link>

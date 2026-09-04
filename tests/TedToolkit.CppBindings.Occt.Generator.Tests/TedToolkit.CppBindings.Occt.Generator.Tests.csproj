@@ -12,6 +12,7 @@
   <ItemGroup>
     <Compile Remove="Fixtures\**\*.cs" />
     <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Generator\TedToolkit.CppBindings.Occt.Generator.csproj" />
+    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
   </ItemGroup>
 
   <ItemGroup>
