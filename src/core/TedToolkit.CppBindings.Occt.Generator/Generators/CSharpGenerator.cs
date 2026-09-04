@@ -184,17 +184,60 @@ internal sealed class CSharpGenerator(
         var currentOffset = 0L;
         var paddingIndex = 0;
         var managedAlignment = 1L;
-        var bitfieldUnits = new HashSet<(long Offset, long Size)>();
-        foreach (var fieldDecl in recordDecl.FieldModels.OrderBy(static field => field.Offset))
+        foreach (var group in GetPhysicalFieldGroups())
         {
-            if (fieldDecl.BitWidth is 0)
-            {
-                continue;
-            }
+            managedAlignment = Math.Max(managedAlignment,
+                AddPhysicalFieldGroup(structDeclaration, group, ref currentOffset, ref paddingIndex));
+        }
 
+        managedAlignment = Math.Max(managedAlignment,
+            AddPadding(structDeclaration, ref currentOffset, recordDecl.Size, ref paddingIndex));
+        if (currentOffset == recordDecl.Size && (recordDecl.Alignment is 0 || managedAlignment == recordDecl.Alignment))
+        {
+            return;
+        }
+
+        throw new NotSupportedException($"Sequential storage is not proved for {recordDecl.Type.CppTypeName}.");
+    }
+
+    private IEnumerable<IReadOnlyList<FieldModel>> GetPhysicalFieldGroups()
+    {
+        var fields = recordDecl.FieldModels.Where(static field => field.BitWidth is not 0)
+            .OrderBy(static field => field.Offset).ToArray();
+        for (var index = 0; index < fields.Length;)
+        {
+            var group = new List<FieldModel>();
+            var end = checked(fields[index].Offset + fields[index].Size);
+            do
+            {
+                var field = fields[index++];
+                group.Add(field);
+                end = Math.Max(end, checked(field.Offset + field.Size));
+            }
+            while (index < fields.Length && fields[index].Offset < end);
+
+            yield return group;
+        }
+    }
+
+    private long AddPhysicalFieldGroup(
+        TypeDeclaration declaration,
+        IReadOnlyList<FieldModel> group,
+        ref long currentOffset,
+        ref int paddingIndex)
+    {
+        if (group.Count > 1 && group.Any(static field => !field.BitWidth.HasValue))
+        {
+            return AddOverlappingFields(declaration, group, ref currentOffset, ref paddingIndex);
+        }
+
+        var managedAlignment = 1L;
+        var bitfieldUnits = new HashSet<(long Offset, long Size)>();
+        foreach (var fieldDecl in group)
+        {
             if (fieldDecl.BitWidth.HasValue && !bitfieldUnits.Add((fieldDecl.Offset, fieldDecl.Size)))
             {
-                AddBitFieldProperty(structDeclaration, fieldDecl);
+                AddBitFieldProperty(declaration, fieldDecl);
                 continue;
             }
 
@@ -208,30 +251,115 @@ internal sealed class CSharpGenerator(
             }
 
             managedAlignment = Math.Max(managedAlignment,
-                AddPadding(structDeclaration, ref currentOffset, fieldDecl.Offset, ref paddingIndex));
+                AddPadding(declaration, ref currentOffset, fieldDecl.Offset, ref paddingIndex));
             managedAlignment = Math.Max(managedAlignment, fieldAlignment);
             if (fieldDecl.BitWidth.HasValue)
             {
-                structDeclaration.AddMember(Field(new DataType(GetUnsignedStorageType(fieldDecl.Size)),
+                declaration.AddMember(Field(new DataType(GetUnsignedStorageType(fieldDecl.Size)),
                     GetBitFieldStorageName(fieldDecl)).Private);
-                AddBitFieldProperty(structDeclaration, fieldDecl);
+                AddBitFieldProperty(declaration, fieldDecl);
             }
             else
             {
-                AddField(structDeclaration, fieldDecl);
+                AddField(declaration, fieldDecl);
             }
 
             currentOffset = checked(fieldDecl.Offset + fieldDecl.Size);
         }
 
-        managedAlignment = Math.Max(managedAlignment,
-            AddPadding(structDeclaration, ref currentOffset, recordDecl.Size, ref paddingIndex));
-        if (currentOffset == recordDecl.Size && (recordDecl.Alignment is 0 || managedAlignment == recordDecl.Alignment))
+        return managedAlignment;
+    }
+
+    private long AddOverlappingFields(
+        TypeDeclaration declaration,
+        IReadOnlyList<FieldModel> fields,
+        ref long currentOffset,
+        ref int paddingIndex)
+    {
+        var start = fields[0].Offset;
+        var end = fields.Max(static field => checked(field.Offset + field.Size));
+        var alignment = fields.Max(field => Math.Min(Math.Max(recordDecl.Alignment, 1), field.Alignment));
+        if (start < currentOffset || end > recordDecl.Size || alignment is not (1 or 2 or 4 or 8)
+            || start % alignment != 0 || end - start < alignment)
         {
-            return;
+            throw new NotSupportedException($"Overlapping storage is not proved for {recordDecl.Type.CppTypeName}.");
         }
 
-        throw new NotSupportedException($"Sequential storage is not proved for {recordDecl.Type.CppTypeName}.");
+        var managedAlignment = AddPadding(declaration, ref currentOffset, start, ref paddingIndex);
+        var storage = $"__overlap{start}";
+        while (recordDecl.FieldModels.Any(field => field.Name == storage))
+        {
+            storage += "_";
+        }
+
+        var storageType = GetUnsignedStorageType(alignment);
+        declaration.AddMember(Field(new DataType(storageType), storage).Private);
+        currentOffset = checked(start + alignment);
+        managedAlignment = Math.Max(managedAlignment,
+            AddPadding(declaration, ref currentOffset, end, ref paddingIndex));
+        var viewIndex = 0;
+        foreach (var field in fields)
+        {
+            var reference = $"global::System.Runtime.CompilerServices.Unsafe.As<{storageType}, byte>("
+                            + $"ref global::System.Runtime.CompilerServices.Unsafe.AsRef(in {storage}))";
+            if (field.Offset != start)
+            {
+                reference = $"global::System.Runtime.CompilerServices.Unsafe.AddByteOffset(ref {reference}, "
+                            + $"(nint){field.Offset - start})";
+            }
+
+            if (field.BitWidth.HasValue)
+            {
+                AddBitFieldProperty(declaration, field,
+                    $"global::System.Runtime.CompilerServices.Unsafe.As<byte, {GetUnsignedStorageType(field.Size)}>(ref {reference})");
+            }
+            else
+            {
+                AddOverlappingReferenceProperty(declaration, field, reference, viewIndex++);
+            }
+        }
+
+        return Math.Max(managedAlignment, alignment);
+    }
+
+    private void AddOverlappingReferenceProperty(TypeDeclaration declaration, FieldModel field, string reference, int viewIndex)
+    {
+        var type = field.Type.CSharpPInvokeType.ToCode();
+        var transport = field.Type.Transport;
+        var readOnly = transport.Indirections.Count is 0
+            ? transport.ValueIsConst
+            : transport.Indirections[0].IsConstQualified;
+        var target = $"global::System.Runtime.CompilerServices.Unsafe.As<byte, {type}>(ref {reference})";
+        if (type.Contains('*', StringComparison.Ordinal))
+        {
+            // Pointer types cannot be generic arguments; the nested field preserves an interior reference.
+            var viewName = $"__overlapView{field.Offset}_{viewIndex}";
+            while (recordDecl.FieldModels.Any(candidate => candidate.Name == viewName))
+            {
+                viewName += "_";
+            }
+
+            declaration.AddMember(Struct(viewName).Private.Unsafe
+                .AddMember(Field(field.Type.CSharpPInvokeType, "Value").Public));
+            target = $"global::System.Runtime.CompilerServices.Unsafe.As<byte, {viewName}>(ref {reference}).Value";
+        }
+
+        var modifier = readOnly ? "ref readonly " : "ref ";
+        var property = Property(new DataType(modifier + type), field.Name).Public
+            .AddAttribute(Attribute(new DataType("global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")))
+            .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
+                .AddArgument(Argument(field.Type.CppTypeName.ToLiteral())));
+        property.IsReadonly = readOnly;
+        var getter = Accessor(AccessorType.GET);
+        getter.Statements.Add(new Custom($"return ref {target};"));
+        property.AddAccessor(getter);
+        AddRootDescriptions(property, field.DescriptionItems, static (target, description) =>
+            target.AddRootDescription(description));
+        property.AddRootDescription(new DescriptionRemarks([
+            new DescriptionText("This reference aliases overlapping native storage without copying or changing ownership. "
+                + "The caller must obey native active-member, construction, destruction, owner-lifetime and invalidation rules."),
+        ]));
+        declaration.AddMember(property);
     }
 
     private static string GetUnsignedStorageType(long size)
@@ -257,7 +385,7 @@ internal sealed class CSharpGenerator(
         return name;
     }
 
-    private void AddBitFieldProperty(TypeDeclaration declaration, FieldModel field)
+    private void AddBitFieldProperty(TypeDeclaration declaration, FieldModel field, string? storageReference = null)
     {
         var width = field.BitWidth!.Value;
         if (width <= 0 || width > field.Size * 8 || field.BitOffset < 0 || field.BitOffset + width > field.Size * 8)
@@ -270,7 +398,7 @@ internal sealed class CSharpGenerator(
             return;
         }
 
-        var storage = GetBitFieldStorageName(field);
+        var storage = storageReference ?? GetBitFieldStorageName(field);
         var storageType = GetUnsignedStorageType(field.Size);
         var type = field.Type.CSharpPInvokeType.ToCode();
         var numericType = type switch

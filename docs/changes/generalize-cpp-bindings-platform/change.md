@@ -217,7 +217,8 @@ same-managed-type value properties over sequential private physical storage. Pre
 bit offset, width, signedness, readable/writable capability, and the pinned compiler's truncation
 and sign-extension behavior. Writes preserve sibling bits and unrelated storage. As in C++, these
 members have no address or ref-return/ref-argument surface; ordinary non-bitfield members retain
-their existing representation except for the separately approved cyclic handle correction below.
+their existing representation except for the separately approved cyclic handle and overlapping
+field corrections below.
 Unnamed and zero-width fields affect layout without adding public
 members. Bitfield support does not authorize declaration-specific exclusions or silent support reduction.
 
@@ -273,8 +274,9 @@ Managed reflection observes a property instead of a field; this is the approved 
 
 Determine affected edges from the completed semantic model and the evidenced runtime failure pattern,
 never a declaration-name list, header, namespace or blanket rule for all handle fields. Loadable
-non-cyclic fields and loadable self-references retain their existing representation. Keep the native
-declarations, methods, shared exports, generic support and ordinary by-value fields; a loading failure
+non-cyclic fields and loadable self-references retain their existing representation unless subject
+to the separately approved overlapping-field correction. Keep the native
+declarations, methods, shared exports, generic support and non-overlapping ordinary by-value fields; a loading failure
 does not authorize support reduction. Lowercase handle<T> itself, Owned<T> direct storage and uppercase
 Handle<T> remain unchanged. No public raw pointer, ownership wrapper, retain/release, implicit copy,
 allocation, unsafe escaping pointer or lifetime-extension mechanism is introduced.
@@ -288,6 +290,43 @@ filtering failed types, and all supported closed generic specializations invento
 native facts. Full native compilation, smoke, deterministic output and package gates remain required.
 If typed reference access or exact storage cannot be proved inside this boundary, stop for a new
 contract decision; do not silently exclude the affected declarations.
+
+### Approved ordinary overlapping-field correction
+
+The maintainer approved the same-named ref-property compatibility correction with "批准。" on
+2026-09-05. This refines AC-05 within CPB-002 and GEN-02's existing sequential physical-storage and
+typed-accessor rule; it introduces no new delivery item, platform, Runtime category or ownership
+operation. Approval records the contract; implementation requires explicit continuation.
+
+The current emitter rejects a compiler-admitted named union such as `union Storage { int First;
+float Last; };` because its ordinary fields share offset zero. Preserve these declarations instead
+of rejecting representable overlap. Derive overlapping physical ranges from prepared native facts,
+not names or a union-only allowlist. Store each range once using private, alignment-preserving
+sequential storage. Expose only the affected ordinary fields as same-named, same-typed `ref T`
+properties, or `ref readonly T` for const native storage. Preserve native-name metadata, visibility,
+field offset, total size/alignment, neighboring fields and padding, and existing type eligibility.
+Ordinary non-overlapping fields remain fields; the earlier bitfield and cyclic-handle corrections
+remain in force. Do not generate Explicit layout, FieldOffsetAttribute or overlapping CLR fields.
+
+Each property returns an interior reference to the original field bytes, never a temporary, implicit
+copy, owning wrapper, allocation, retain/release, raw-pointer escape or lifetime extension. Preserve
+permitted whole-field assignment and ref/in access. Shared bytes deliberately alias, but the binding
+does not choose, track or activate a union member. Native construction/destruction, active-member,
+owner-lifetime and invalidation rules remain the caller's responsibility, including when changing
+which member is active. Reference access must remain valid across managed relocation while the
+containing managed owner remains live. Reflection sees properties instead of fields: this is the
+approved compatibility delta, not a promise that all field-specific source syntax remains valid.
+
+Extend AC-05's existing parsed-fixture/native integration proof with named scalar and differently
+sized union members, const and mutable views, embedded unions with unchanged neighboring fields,
+and supported template/closed-layout overlap where present. Compare size, alignment, offsets and
+bytes with the pinned native compiler; exercise permitted mutation/assignment/ref/in use without
+relying on undefined inactive-member reads. Verify property metadata, unchanged non-overlapping
+controls, and managed-heap aliasing across observed GC relocation on net8.0 with the real Runtime.
+Preserve bitfield behavior and the supported declaration/export inventories. Full OCCT generation,
+native build/smoke, determinism and package gates remain required. Reconcile current architecture
+and consumer guidance before completion. If an admitted overlap cannot preserve these semantics,
+stop for a contract decision; do not silently exclude it or restore Explicit layout.
 
 ### Approved provider extension boundary
 

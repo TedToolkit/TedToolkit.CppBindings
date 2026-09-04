@@ -33,6 +33,225 @@ internal sealed class AddTest
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
 
     /// <summary>
+    /// Verifies parsed unions retain exact shared storage and typed interior references.
+    /// </summary>
+    /// <param name="wide">Whether the union has differently sized members.</param>
+    /// <param name="readOnly">Whether the first member is const.</param>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(false, true)]
+    [Arguments(true, false)]
+    [Arguments(true, true)]
+    public async Task Should_preserve_overlapping_union_fields_Async(bool wide, bool readOnly)
+    {
+        var nativeType = wide ? "long long" : "int";
+        var managedType = wide ? "long" : "int";
+        var qualifier = readOnly ? "const " : "";
+        var nativeDeclaration = $$"""
+            union Storage { {{qualifier}}{{nativeType}} First; {{(wide ? "char" : "float")}} Last; };
+            struct Container { char Prefix; Storage Value; int Suffix; };
+            static_assert(__builtin_offsetof(Storage, First) == 0);
+            static_assert(__builtin_offsetof(Storage, Last) == 0);
+            """;
+        using var translationUnit = ParseTranslationUnit(nativeDeclaration);
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static declaration => declaration.Name == "Container"));
+        var records = manager.RecordModels.ToArray();
+        var storage = records.Single(static record => record.Type.CppTypeName == "Storage");
+        var container = records.Single(static record => record.Type.CppTypeName == "Container");
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe", DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var sources = new List<string>();
+        foreach (var record in records)
+        {
+            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+                .ConfigureAwait(false));
+        }
+
+        var nativeBytes = await GetNativeBitFieldBytesAsync("", "value.Last = 42;", "value.Last == 42",
+            storage, nativeDeclaration).ConfigureAwait(false);
+        var writeFirst = readOnly ? "" : "value.First = 123; if (Read(in value.First) != 123) return false;";
+        var suffixOffset = container.FieldModels.Single(static field => field.Name == "Suffix").Offset;
+        var probe = $$"""
+            namespace LayoutProbe
+            {
+                public sealed class Heap { public Container Value; }
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        Storage value = default;
+                        Container container = default;
+                        if (sizeof(Storage) != {{storage.Size}} || sizeof(Container) != {{container.Size}}
+                            || (byte*)&container.Value - (byte*)&container != {{storage.Alignment}}
+                            || (byte*)&container.Suffix - (byte*)&container != {{suffixOffset}})
+                            return false;
+                        {{writeFirst}}
+                        new System.Span<byte>(&value, sizeof(Storage)).Fill(0xa5);
+                        value.Last = 42;
+                        if (System.Convert.ToHexString(new System.ReadOnlySpan<byte>(&value, sizeof(Storage))) != "{{nativeBytes}}")
+                            return false;
+                        ref readonly var first = ref value.First;
+                        if (System.Runtime.CompilerServices.Unsafe.ByteOffset(
+                            ref System.Runtime.CompilerServices.Unsafe.As<Storage, byte>(ref value),
+                            ref System.Runtime.CompilerServices.Unsafe.As<{{managedType}}, byte>(
+                                ref System.Runtime.CompilerServices.Unsafe.AsRef(in first))) != 0) return false;
+                        var property = typeof(Storage).GetProperty("First")!;
+                        if (property.PropertyType != typeof({{managedType}}).MakeByRefType()
+                            || !System.Attribute.IsDefined(property, typeof(TedToolkit.CppBindings.NativeTypeNameAttribute))
+                            || System.Array.Exists(property.GetMethod!.ReturnParameter.GetRequiredCustomModifiers(),
+                                type => type.FullName == "System.Runtime.InteropServices.InAttribute") != {{(readOnly ? "true" : "false")}})
+                            return false;
+                        var moved = false;
+                        for (var attempt = 0; attempt < 8 && !moved; attempt++)
+                        {
+                            var heap = new Heap();
+                            heap.Value.Prefix = 11;
+                            heap.Value.Suffix = 29;
+                            ref readonly var view = ref heap.Value.Value.First;
+                            var before = Address(in view);
+                            System.GC.Collect(2, System.GCCollectionMode.Forced, true, true);
+                            System.GC.WaitForPendingFinalizers();
+                            moved = before != Address(in view);
+                            if (!System.Runtime.CompilerServices.Unsafe.AreSame(
+                                ref System.Runtime.CompilerServices.Unsafe.AsRef(in view),
+                                ref System.Runtime.CompilerServices.Unsafe.AsRef(in heap.Value.Value.First))) return false;
+                            heap.Value.Value.Last = 42;
+                            if (heap.Value.Prefix != 11 || heap.Value.Suffix != 29
+                                || Read(in view) != Read(in heap.Value.Value.First)) return false;
+                            System.GC.KeepAlive(heap);
+                        }
+                        return moved && typeof(Storage).GetField("First") is null
+                            && typeof(Storage).GetProperty("Last") is not null
+                            && typeof(Container).GetField("Value") is not null
+                            && typeof(Container).GetField("Prefix") is not null
+                            && typeof(Container).GetField("Suffix") is not null;
+                    }
+                    private static {{managedType}} Read(in {{managedType}} value) => value;
+                    [System.Runtime.CompilerServices.MethodImpl(System.Runtime.CompilerServices.MethodImplOptions.NoInlining)]
+                    private static nint Address(in {{managedType}} value)
+                    {
+                        fixed ({{managedType}}* pointer = &value) return (nint)pointer;
+                    }
+                }
+            }
+            """;
+        await AssertNet8StorageAsync(string.Join("\n", sources), probe).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies overlapping pointer slots preserve pointer-level rather than pointee-level constness.
+    /// </summary>
+    /// <param name="constantPointer">Whether the pointer slot itself is const.</param>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Should_preserve_overlapping_pointer_fields_Async(bool constantPointer)
+    {
+        var pointerType = constantPointer ? "int* const" : "const int*";
+        using var translationUnit = ParseTranslationUnit($"union Storage {{ {pointerType} Pointer; long long Number; }};");
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>().Single());
+        var record = manager.RecordModels.Single();
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe", DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var write = constantPointer ? "" : "int target = 79; value.Pointer = &target; if (*value.Pointer != 79) return false;";
+        var probe = $$"""
+            namespace LayoutProbe
+            {
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        Storage value = default;
+                        {{write}}
+                        value.Number = 0;
+                        ref readonly var slot = ref value.Pointer;
+                        if (slot != null || sizeof(Storage) != {{record.Size}}) return false;
+                        var property = typeof(Storage).GetProperty("Pointer")!;
+                        return property.PropertyType == typeof(int*).MakeByRefType()
+                            && System.Array.Exists(property.GetMethod!.ReturnParameter.GetRequiredCustomModifiers(),
+                                type => type.FullName == "System.Runtime.InteropServices.InAttribute")
+                                == {{(constantPointer ? "true" : "false")}};
+                    }
+                }
+            }
+            """;
+        await AssertNet8StorageAsync(source, probe).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies overlapping bitfields and closed template unions retain their native bytes.
+    /// </summary>
+    /// <param name="template">Whether the fixture contains differently sized template specializations.</param>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Should_preserve_composed_union_storage_Async(bool template)
+    {
+        var nativeDeclaration = template
+            ? "template<class T> union Choice { T First; int Second; }; struct Storage { Choice<int> Small; Choice<double> Wide; };"
+            : "union Storage { unsigned int Bits : 3; unsigned int Whole; };";
+        var writes = template ? "value.Small.First = 19; value.Wide.First = 3.5;" : "value.Bits = 3;";
+        var condition = template ? "value.Small.First == 19 && value.Wide.First == 3.5" : "value.Bits == 3";
+        using var translationUnit = ParseTranslationUnit(nativeDeclaration);
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static declaration => declaration.Name == "Storage"));
+        var records = manager.RecordModels.ToArray();
+        var storage = records.Single(static record => record.Type.CppTypeName == "Storage");
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe", DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var sources = new List<string>();
+        foreach (var record in records)
+        {
+            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+                .ConfigureAwait(false));
+        }
+
+        var nativeBytes = await GetNativeBitFieldBytesAsync("", writes, condition, storage, nativeDeclaration)
+            .ConfigureAwait(false);
+        var shapeCheck = template
+            ? "typeof(Storage).GetField(\"Small\")!.FieldType.GetProperty(\"First\") is not null"
+            : "!typeof(Storage).GetProperty(\"Bits\")!.PropertyType.IsByRef && typeof(Storage).GetField(\"Whole\") is null";
+        var probe = $$"""
+            namespace LayoutProbe
+            {
+                [System.Runtime.InteropServices.StructLayout(System.Runtime.InteropServices.LayoutKind.Sequential)]
+                public struct Holder { public byte Prefix; public Storage Value; }
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        Storage value = default;
+                        Holder holder = default;
+                        new System.Span<byte>(&value, sizeof(Storage)).Fill(0xa5);
+                        {{writes}}
+                        return ({{condition}}) && ({{shapeCheck}}) && sizeof(Storage) == {{storage.Size}}
+                            && (byte*)&holder.Value - (byte*)&holder == {{storage.Alignment}}
+                            && System.Convert.ToHexString(new System.ReadOnlySpan<byte>(&value, sizeof(Storage))) == "{{nativeBytes}}";
+                    }
+                }
+            }
+            """;
+        await AssertNet8StorageAsync(string.Join("\n", sources), probe).ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Verifies generated cyclic handles remain typed aliases without changing loadable fields.
     /// </summary>
     /// <param name="byValueTail">Whether the return edge contains the list by value.</param>

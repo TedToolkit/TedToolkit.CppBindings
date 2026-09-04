@@ -64,6 +64,12 @@ OCCT provider produces working exact-layout bindings through the same boundary a
 - Investigate the current native-loader implementation versus ADR-001 using repository evidence;
   preserve approved behavior and supply the evidence to CPB-003. A new enduring loading decision
   requires the architecture route and any material contract change requires renewed design approval.
+- Apply the parent's ordinary overlapping-field correction approved on 2026-09-05: one exact
+  sequential physical range with same-named typed ref/ref-readonly views, unchanged non-overlapping
+  fields, metadata and caller-owned native active-member/lifetime rules. Preserve admitted unions,
+  existing bitfields, closed-layout support and shared exports without copies, new ownership,
+  Explicit layout or overlapping CLR fields. Extend AC-05's parsed/native and net8.0 heap-alias
+  proof as specified by the parent; reconcile enduring field/property guidance before completion.
 
 <!-- work-item: proof-plan -->
 ## Proof

@@ -22,23 +22,80 @@ namespace TedToolkit.CppBindings.Occt.Generator.Tests.Generators.CSharpGenerator
 internal sealed class LayoutTests
 {
     /// <summary>
-    /// Verifies unsupported overlapping or over-aligned storage is not emitted as an incorrect struct.
+    /// Verifies transitive overlap at nonzero offsets keeps neighboring fields and packed alignment.
     /// </summary>
-    /// <param name="alignment">Required native alignment.</param>
-    /// <param name="overlap">Whether native fields overlap.</param>
-    /// <returns>A task representing the asynchronous test.</returns>
+    /// <returns>A task representing the assertions.</returns>
     [Test]
-    [Arguments(4, true)]
-    [Arguments(8, false)]
-    [Arguments(16, false)]
-    public async Task Should_reject_unproved_sequential_storage_Async(int alignment, bool overlap)
+    public async Task Should_share_transitively_overlapping_physical_ranges_Async()
     {
         var record = new RecordModel()
         {
             DescriptionItems = [],
-            FieldModels = overlap
-                ? [CreateField("First", "int", 0, 4), CreateField("Last", "int", 0, 4),]
-                : [CreateField("First", "int", 0, 4),],
+            FieldModels =
+            [
+                CreateField("Prefix", "int", 0, 4),
+                CreateField("First", "long", 8, 8),
+                CreateField("Middle", "long", 12, 8),
+                CreateField("Last", "long", 16, 8),
+                CreateField("Suffix", "int", 24, 4),
+            ],
+            MethodModels = [], IsAbstract = false, IsStandardTransient = false,
+            Size = 28, Alignment = 4, SourceHeader = "Storage.hxx",
+            Type = new() { CppTypeName = "Storage", CSharpPInvokeType = new("Storage"), CSharpPublicType = new("Storage"), },
+        };
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe", DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string probe = """
+            namespace LayoutProbe
+            {
+                public struct Holder { public byte Prefix; public Storage Value; }
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        Holder holder = default;
+                        Storage value = default;
+                        value.Prefix = 17;
+                        value.Suffix = 29;
+                        value.First = 0x1122334455667788;
+                        value.Middle = 0x0102030405060708;
+                        value.Last = 0x2132435465760708;
+                        return sizeof(Storage) == 28 && (byte*)&holder.Value - (byte*)&holder == 4
+                            && value.Prefix == 17 && value.Suffix == 29
+                            && value.First == *(long*)((byte*)&value + 8)
+                            && value.Middle == *(long*)((byte*)&value + 12)
+                            && value.Last == *(long*)((byte*)&value + 16)
+                            && (uint)value.First == 0x55667788
+                            && typeof(Storage).GetField("Prefix") is not null
+                            && typeof(Storage).GetField("Suffix") is not null
+                            && typeof(Storage).GetProperty("First") is not null
+                            && typeof(Storage).GetProperty("Middle") is not null
+                            && typeof(Storage).GetProperty("Last") is not null;
+                    }
+                }
+            }
+            """;
+        await AssertCompiledStorageAsync(source, probe).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies unproved alignment is not emitted as an incorrect struct.
+    /// </summary>
+    /// <param name="alignment">Required native alignment.</param>
+    /// <returns>A task representing the asynchronous test.</returns>
+    [Test]
+    [Arguments(8)]
+    [Arguments(16)]
+    public async Task Should_reject_unproved_sequential_storage_Async(int alignment)
+    {
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            FieldModels = [CreateField("First", "int", 0, 4),],
             MethodModels = [],
             IsAbstract = false,
             IsStandardTransient = false,

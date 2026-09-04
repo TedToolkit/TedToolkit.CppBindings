@@ -10,7 +10,8 @@
 - Related ADR: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md)
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26;
   declaration-level alignment admission clarified and approved on 2026-09-04 with "是的，继续。";
-  cyclic handle field reference projection approved on 2026-09-04 with "同意。".
+  cyclic handle field reference projection approved on 2026-09-04 with "同意。";
+  ordinary overlapping-field reference projection approved on 2026-09-05 with "批准。".
 
 ## Current architecture
 
@@ -229,7 +230,7 @@ the pinned runtime, its containing layout uses private pointer-sized storage at 
 offset and exposes a same-named ref handle<T> property (ref readonly for const native storage).
 This is an exact typed view of the original bytes, not a copied handle, new owner or public pointer.
 The Model selects only the responsible storage edges; loadable self-references, acyclic handle
-fields and other ordinary fields remain fields. Metadata consumers must account for the approved
+fields and other non-overlapping ordinary fields remain fields. Metadata consumers must account for the approved
 field-to-property distinction. The property preserves native-name metadata, allowed ref/in access,
 writability and caller-owned lifetime/invalidation obligations, without retain, release, allocation
 or pointer escape. It must remain an interior managed reference when its containing storage moves.
@@ -241,6 +242,22 @@ runtime; dropping its declarations would unnecessarily remove native capabilitie
 view must prove exact native storage and loading for the complete supported closed-type set before
 shipping. Reconsider this projection if the supported runtime's loading rules change or either
 reference identity or complete layout equality cannot be established.
+
+Ordinary native fields whose byte ranges overlap, including representable named unions, share one
+private sequential physical range. Their same-named typed `ref T` properties alias the original
+bytes; const native storage uses `ref readonly T`. Pointer-slot constness is distinct from pointee
+constness. Non-overlapping fields retain their existing field representation, and native bitfields
+remain value properties without an address/ref surface. Native-name metadata and complete native
+size, alignment, offsets, padding and neighboring storage remain authoritative.
+
+These views are interior managed references across relocation, not copied values, escaping raw
+pointers or owners. They introduce no allocation, retain/release or lifetime extension. The caller
+remains responsible for native union active-member rules, explicit construction/destruction, owner
+lifetime and invalidation; generated accessors do not select or activate a member. Reflection and
+field-specific source syntax must account for the field-to-property distinction. A supported
+closed specialization still needs its own exact-layout proof. Reconsider the view if those storage
+or reference guarantees cannot be established; do not silently drop representable overlap or use
+Explicit layout to bypass the sequential-storage boundary.
 
 Each applicable transient operation is generated as two direct extension overloads: one accepts
 `IOcctOwner<T>` and therefore supports owning `Handle<T>` or `Owned<T>`, and one accepts borrowed

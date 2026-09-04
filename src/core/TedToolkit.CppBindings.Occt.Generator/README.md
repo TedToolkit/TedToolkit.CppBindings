@@ -73,6 +73,13 @@ the same slot; only the owning overload checks owner liveness. Lowercase `handle
 storage, not an owner interface. Handles returned by value use owning `Handle<T>`; non-transient
 RAII uses generic `Owned<T>`.
 
+Overlapping ordinary fields, including union members, use same-named `ref T` properties over shared
+sequential storage (`ref readonly T` for const storage). References alias native bytes without
+copying, retaining or allocating. Non-overlapping fields remain fields; bitfields remain value
+properties. Reflection and field-specific syntax must account for the property distinction.
+Callers must obey native union active-member, construction/destruction, owner-lifetime and
+invalidation rules; accessing a generated property does not activate a union member.
+
 Representable template type arguments stay generic; non-type values and unrepresentable arguments
 such as `void` are fixed into the family name. A shared managed family requires a valid physical
 graph. Each selected closed native specialization retains direct invocation slots without runtime
