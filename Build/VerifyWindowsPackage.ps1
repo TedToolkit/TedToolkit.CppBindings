@@ -47,6 +47,9 @@ $null = New-Item -ItemType Directory -Path $consumer
 Get-ChildItem -LiteralPath (Join-Path $repository 'tests/TedToolkit.CppBindings.Occt.Generator.Tests/Fixtures/WindowsPackageConsumer') -File |
     Copy-Item -Destination $consumer
 Copy-Item -LiteralPath (Join-Path $repository 'tests/TedToolkit.CppBindings.Occt.GeneratedSmoke/Program.cs') -Destination $consumer
+& (Join-Path $repository 'tests/TedToolkit.CppBindings.Occt.GeneratedSmoke/GenerateLayoutChecks.ps1') `
+    -InputPath (Join-Path $repository 'output/generated/csharp/native-layouts.json') `
+    -OutputPath (Join-Path $consumer 'PreparedLayoutProbe.g.cs')
 $buildLog = Join-Path $report 'consumer-build.log'
 $arguments = @('build', (Join-Path $consumer 'WindowsPackageConsumer.csproj'), '-c', 'Release', '--disable-build-servers', '--maxcpucount:1',
     ('-p:RestoreSources=' + $feed), '-p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json',

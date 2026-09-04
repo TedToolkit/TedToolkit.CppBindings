@@ -256,11 +256,13 @@ internal sealed class RecordModelManager(
 
         _managedTemplateReferencesFinalized = true;
         var records = ManagedLayoutAdmission.Apply(NativePreparationRecords.ToArray(), _unsupportedDeclarations);
+        ManagedHandleCycles.Mark(records);
         _managedRecords = records;
         var admitted = records.ToHashSet();
         foreach (var record in records.Where(static record => record.TemplateProjection is not null))
         {
-            if (!HasGenericPhysicalLayout(record)
+            if (record.FieldModels.Any(static field => field.UsesHandleReferenceStorage)
+                || !HasGenericPhysicalLayout(record)
                 || record.TemplateProjection!.GenericArguments.Any(argument =>
                     argument.ReferencedRecord is { } dependency && !admitted.Contains(dependency)))
             {

@@ -9,7 +9,8 @@
 - Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
 - Related ADR: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md)
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26;
-  declaration-level alignment admission clarified and approved on 2026-09-04 with "是的，继续。".
+  declaration-level alignment admission clarified and approved on 2026-09-04 with "是的，继续。";
+  cyclic handle field reference projection approved on 2026-09-04 with "同意。".
 
 ## Current architecture
 
@@ -222,6 +223,24 @@ native result. An `opencascade::handle<T>` returned by value therefore becomes `
 the lowercase type remains the representation for fields, parameters, and borrowed references.
 The compiler probe proves the native handle specialization has pointer size and alignment before
 generated code relies on the lowercase layout.
+
+When a direct handle<T> field participates in an evidenced cyclic managed type-loading failure on
+the pinned runtime, its containing layout uses private pointer-sized storage at the same native
+offset and exposes a same-named ref handle<T> property (ref readonly for const native storage).
+This is an exact typed view of the original bytes, not a copied handle, new owner or public pointer.
+The Model selects only the responsible storage edges; loadable self-references, acyclic handle
+fields and other ordinary fields remain fields. Metadata consumers must account for the approved
+field-to-property distinction. The property preserves native-name metadata, allowed ref/in access,
+writability and caller-owned lifetime/invalidation obligations, without retain, release, allocation
+or pointer escape. It must remain an interior managed reference when its containing storage moves.
+
+This refines the existing sequential storage/typed-view boundary under GEN-01 through GEN-05; it
+does not change Runtime ownership or add a representation category. Keeping the failing generic
+field graph, including explicit-layout variants, does not establish loadability on the pinned
+runtime; dropping its declarations would unnecessarily remove native capabilities. The selected
+view must prove exact native storage and loading for the complete supported closed-type set before
+shipping. Reconsider this projection if the supported runtime's loading rules change or either
+reference identity or complete layout equality cannot be established.
 
 Each applicable transient operation is generated as two direct extension overloads: one accepts
 `IOcctOwner<T>` and therefore supports owning `Handle<T>` or `Owned<T>`, and one accepts borrowed

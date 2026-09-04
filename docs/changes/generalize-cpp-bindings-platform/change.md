@@ -217,7 +217,8 @@ same-managed-type value properties over sequential private physical storage. Pre
 bit offset, width, signedness, readable/writable capability, and the pinned compiler's truncation
 and sign-extension behavior. Writes preserve sibling bits and unrelated storage. As in C++, these
 members have no address or ref-return/ref-argument surface; ordinary non-bitfield members retain
-their existing representation. Unnamed and zero-width fields affect layout without adding public
+their existing representation except for the separately approved cyclic handle correction below.
+Unnamed and zero-width fields affect layout without adding public
 members. Bitfield support does not authorize declaration-specific exclusions or silent support reduction.
 
 Proof includes real parsed single and adjacent bitfields, signed/unsigned/bool partitions, boundary
@@ -253,6 +254,40 @@ receiver/parameter/result dependencies, inheritance and template dependencies, s
 paired export completeness and the real Standard_ErrorHandler disposition. The full generation,
 managed/native compilation, native smoke, deterministic output and package gates remain required.
 Reopening support requires proof for the pinned runtime storage, or a separately approved architecture.
+
+### Approved cyclic handle field correction
+
+The maintainer approved converting only cyclic handle fields that cause managed type-loading failure
+to same-named reference properties with "同意。" on 2026-09-04. This refines AC-05 and the existing
+CPB-002 delivery, not its ownership categories, target matrix or work-item map. Approval records this
+contract; implementation resumes only on explicit continuation.
+
+On the pinned .NET 8 win-x64 runtime, mutually dependent handle fields and handle-plus-by-value-tail
+cycles can fail type loading even when native size and alignment match. Replace only the implicated
+handle storage edges with private pointer-sized, alignment-preserving storage and expose the original
+name and lowercase handle<T> type through a direct ref handle<T> property, or ref readonly handle<T>
+when native storage is const. The reference aliases the original field bytes at the native offset;
+it is not a temporary or copied handle. Preserve permitted whole-handle assignment and ref/in access,
+native-name metadata, neighboring storage, and the original owner's lifetime/invalidation obligations.
+Managed reflection observes a property instead of a field; this is the approved compatibility delta.
+
+Determine affected edges from the completed semantic model and the evidenced runtime failure pattern,
+never a declaration-name list, header, namespace or blanket rule for all handle fields. Loadable
+non-cyclic fields and loadable self-references retain their existing representation. Keep the native
+declarations, methods, shared exports, generic support and ordinary by-value fields; a loading failure
+does not authorize support reduction. Lowercase handle<T> itself, Owned<T> direct storage and uppercase
+Handle<T> remain unchanged. No public raw pointer, ownership wrapper, retain/release, implicit copy,
+allocation, unsafe escaping pointer or lifetime-extension mechanism is introduced.
+
+Proof includes compiler-parsed mutual-handle and handle/by-value cycles, unchanged self-reference and
+acyclic controls, const/mutable access, same-address aliasing, permitted whole-handle writes, native
+byte/offset/size/alignment comparison, and a managed-heap embedding with a reference surviving GC
+relocation without a raw pointer escape. Run the generated result with the real Runtime on net8.0.
+The complete OCCT load/layout gate must include the real TopLoc, MAT and StepShape cycles without
+filtering failed types, and all supported closed generic specializations inventoried from prepared
+native facts. Full native compilation, smoke, deterministic output and package gates remain required.
+If typed reference access or exact storage cannot be proved inside this boundary, stop for a new
+contract decision; do not silently exclude the affected declarations.
 
 ### Approved provider extension boundary
 

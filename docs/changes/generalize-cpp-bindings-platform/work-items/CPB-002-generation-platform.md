@@ -56,6 +56,11 @@ OCCT provider produces working exact-layout bindings through the same boundary a
   declaration set and verify generic storage without changing ownership allocation. Apply the parent's
   separately approved alignment admission disposition before paired emission, with deterministic
   diagnostics and dependency closure at the narrowest affected declaration/member boundary.
+- Apply the parent's separately approved cyclic handle field correction only to storage edges
+  responsible for type-loading failure. Preserve typed in-place references, constness, native
+  metadata, exact storage, all loadable ordinary fields and the complete representable declaration
+  set. Prove the generated cycles on net8.0, including managed-heap aliasing across relocation and
+  the actual closed-generic inventory; do not change either handle type or Owned<T> storage.
 - Investigate the current native-loader implementation versus ADR-001 using repository evidence;
   preserve approved behavior and supply the evidence to CPB-003. A new enduring loading decision
   requires the architecture route and any material contract change requires renewed design approval.

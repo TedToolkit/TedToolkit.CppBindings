@@ -13,6 +13,8 @@ using TedToolkit.CppBindings;
 using TedToolkit.CppBindings.Occt;
 
 GeneratedLayoutProbe.Run();
+PreparedLayoutProbe.Run();
+GeneratedCycleProbe.Run();
 if (args is ["--layout-only"])
 {
     return;
@@ -161,5 +163,61 @@ internal static class GeneratedLayoutProbe
     {
         public byte Prefix;
         public T Value;
+    }
+}
+
+internal static class GeneratedCycleProbe
+{
+    public static unsafe void Run()
+    {
+        MAT_Edge native = default;
+        var moved = false;
+        for (var attempt = 0; attempt < 8 && !moved; attempt++)
+        {
+            var heap = new Heap();
+            ref var view = ref heap.Value.thefirstedge;
+            Unsafe.As<handle<MAT_Edge>, nint>(ref view) = (nint)(&native);
+            var before = Address(ref view);
+            GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+            GC.WaitForPendingFinalizers();
+            moved = before != Address(ref view);
+            if (!Unsafe.AreSame(ref view, ref heap.Value.thefirstedge))
+            {
+                throw new InvalidOperationException("Cyclic handle reference stopped aliasing its original field.");
+            }
+
+            view.Value.theedgenumber = 73;
+            if (native.theedgenumber != 73)
+            {
+                throw new InvalidOperationException("Cyclic handle reference copied the native target.");
+            }
+
+            heap.Value.thefirstedge = default;
+            if (Unsafe.As<handle<MAT_Edge>, nint>(ref view) != 0)
+            {
+                throw new InvalidOperationException("Whole-handle assignment did not update the original slot.");
+            }
+        }
+
+        if (!moved)
+        {
+            throw new InvalidOperationException("No heap relocation was observed; cyclic reference proof is incomplete.");
+        }
+
+        Console.WriteLine("Cyclic handle aliases survived observed GC relocation, target mutation and whole-slot assignment.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static unsafe nint Address(ref handle<MAT_Edge> value)
+    {
+        fixed (handle<MAT_Edge>* pointer = &value)
+        {
+            return (nint)pointer;
+        }
+    }
+
+    private sealed class Heap
+    {
+        public MAT_Bisector Value;
     }
 }

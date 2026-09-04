@@ -16,6 +16,11 @@ namespace TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 internal sealed class FieldModel
 {
     /// <summary>
+    /// Gets or sets whether cyclic handle storage requires an in-place reference property.
+    /// </summary>
+    public bool UsesHandleReferenceStorage { get; set; }
+
+    /// <summary>
     /// Gets the native bit width, or null for an ordinary field. Zero-width fields only affect layout.
     /// </summary>
     public int? BitWidth { get; init; }

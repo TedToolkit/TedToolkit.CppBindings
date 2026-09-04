@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Text.Json;
+
 using Microsoft.Extensions.Options;
 
 using TedToolkit.CppBindings.Generator;
@@ -104,6 +106,20 @@ internal sealed class OcctGenerationProvider : IGenerationProvider, IDisposable
             + string.Join("\n", _records.UnsupportedDeclarations) + "\n";
         managed.Add(new GeneratedSource("unsupported-declarations.txt",
             (writer, token) => writer.WriteAsync(admissionReport.AsMemory(), token)));
+        var layouts = JsonSerializer.Serialize(new
+        {
+            Namespace = _options.Value.CSharpNamespace,
+            Records = records.OrderBy(static record => record.Type.CppTypeName, StringComparer.Ordinal).Select(static record => new
+            {
+                NativeType = record.Type.CppTypeName,
+                ManagedType = record.Type.CSharpTypeName,
+                record.Size,
+                record.Alignment,
+                IsGeneric = record.TemplateProjection is not null,
+            }),
+        });
+        managed.Add(new GeneratedSource("native-layouts.json",
+            (writer, token) => writer.WriteAsync(layouts.AsMemory(), token)));
         var native = records.OrderBy(static record => record.Type.CSharpTypeName, StringComparer.Ordinal)
             .Select(record => new GeneratedSource(
                 record.Type.CppTypeName.ToGeneratedTypeName().ToGeneratedFileStem(80) + ".cpp",

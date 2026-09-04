@@ -17,6 +17,7 @@ using TedToolkit.CppBindings.Occt.Generator.Generators;
 using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
+using TedToolkit.CppBindings.Occt.Generator.Services.Rules;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -30,6 +31,143 @@ internal sealed class AddTest
     private static readonly FieldInfo SourceBuilderField = typeof(SourceBuilder)
         .GetField("_stringBuilder", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
+
+    /// <summary>
+    /// Verifies generated cyclic handles remain typed aliases without changing loadable fields.
+    /// </summary>
+    /// <param name="byValueTail">Whether the return edge contains the list by value.</param>
+    /// <param name="readOnly">Whether the handle storage is const.</param>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    [Arguments(false, false)]
+    [Arguments(true, false)]
+    [Arguments(false, true)]
+    [Arguments(true, true)]
+    public async Task Should_load_cyclic_handle_storage_Async(bool byValueTail, bool readOnly)
+    {
+        var tail = byValueTail ? "Storage" : "opencascade::handle<Storage>";
+        var qualifier = readOnly ? "const " : "";
+        var nativeDeclaration = $$"""
+            namespace opencascade { template<class T> struct handle { T* Pointer; }; }
+            struct Node;
+            struct Leaf { int Value; };
+            struct Self { opencascade::handle<Self> Next; };
+            struct Storage {
+                char Prefix;
+                {{qualifier}}opencascade::handle<Node> Head;
+                opencascade::handle<Leaf> Other;
+                Self SelfReference;
+                int Value;
+            };
+            struct Node { {{tail}} Tail; int Value; };
+            """;
+        using var translationUnit = ParseTranslationUnit(nativeDeclaration);
+        var manager = CreateManager(new HandleTypeRule());
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Storage"));
+        var records = manager.RecordModels.ToArray();
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe", DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+        });
+        var sources = new List<string>();
+        foreach (var record in records)
+        {
+            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+                .ConfigureAwait(false));
+        }
+
+        var storage = records.Single(static record => record.Type.CppTypeName == "Storage");
+        var headOffset = storage.FieldModels.Single(static field => field.Name == "Head").Offset;
+        var write = readOnly ? "" : $"value.Head = default; if (*(nint*)((byte*)&value + {headOffset}) != 0) return false;";
+        var nativeWrite = readOnly ? "value.Value = 17;" : "value.Head = {}; value.Value = 17;";
+        var readOnlyLiteral = readOnly ? "true" : "false";
+        var nativeBytes = await GetNativeBitFieldBytesAsync("", nativeWrite, "value.Value == 17", storage, nativeDeclaration)
+            .ConfigureAwait(false);
+        var probe = $$"""
+            namespace LayoutProbe
+            {
+                public sealed class Heap { public byte Prefix; public Storage Value; }
+                public static unsafe class Probe
+                {
+                    public static bool Check()
+                    {
+                        _ = typeof(Storage).Assembly.GetTypes();
+                        Storage value = default;
+                        Node node = default;
+                        *(Node**)((byte*)&value + {{headOffset}}) = &node;
+                        ref readonly var head = ref value.Head;
+                        head.Value.Value = 79;
+                        if (node.Value != 79 || sizeof(Storage) != {{storage.Size}}) return false;
+                        if (System.Runtime.CompilerServices.Unsafe.ByteOffset(
+                            ref System.Runtime.CompilerServices.Unsafe.As<Storage, byte>(ref value),
+                            ref System.Runtime.CompilerServices.Unsafe.As<TedToolkit.CppBindings.Occt.handle<Node>, byte>(
+                                ref System.Runtime.CompilerServices.Unsafe.AsRef(in head))) != {{headOffset}}) return false;
+                        new System.Span<byte>(&value, sizeof(Storage)).Fill(0xa5);
+                        {{write}}
+                        value.Value = 17;
+                        if (System.Convert.ToHexString(new System.ReadOnlySpan<byte>(&value, sizeof(Storage)))
+                            != "{{nativeBytes}}") return false;
+                        var getter = typeof(Storage).GetProperty("Head")!.GetMethod!;
+                        if (System.Array.Exists(getter.ReturnParameter.GetRequiredCustomModifiers(),
+                            type => type.FullName == "System.Runtime.InteropServices.InAttribute")
+                            != {{readOnlyLiteral}}) return false;
+                        var heap = new Heap();
+                        ref readonly var heapHead = ref heap.Value.Head;
+                        System.GC.Collect(2, System.GCCollectionMode.Forced, true, true);
+                        System.GC.WaitForPendingFinalizers();
+                        if (!System.Runtime.CompilerServices.Unsafe.AreSame(
+                            ref System.Runtime.CompilerServices.Unsafe.AsRef(in heapHead),
+                            ref System.Runtime.CompilerServices.Unsafe.AsRef(in heap.Value.Head))) return false;
+                        return typeof(Storage).GetProperty("Head") is not null
+                            && typeof(Storage).GetField("Other") is not null
+                            && typeof(Self).GetField("Next") is not null;
+                    }
+                }
+            }
+            """;
+        await Generators.CSharpGeneratorTests.LayoutTests.AssertCompiledStorageAsync(string.Join("\n", sources), probe)
+            .ConfigureAwait(false);
+        await AssertNet8StorageAsync(string.Join("\n", sources), probe).ConfigureAwait(false);
+    }
+
+    private static async Task AssertNet8StorageAsync(string source, string probe)
+    {
+        var directory = Directory.CreateTempSubdirectory("CppBindings.Cycles.Net8.");
+        try
+        {
+            var runtime = System.Security.SecurityElement.Escape(typeof(NativeTypeNameAttribute).Assembly.Location);
+            var occtRuntime = System.Security.SecurityElement.Escape(typeof(IStandard_Transient).Assembly.Location);
+            var project = $$"""
+                <Project Sdk="Microsoft.NET.Sdk">
+                  <PropertyGroup>
+                    <OutputType>Exe</OutputType><TargetFramework>net8.0</TargetFramework>
+                    <AllowUnsafeBlocks>true</AllowUnsafeBlocks><NuGetAudit>false</NuGetAudit>
+                  </PropertyGroup>
+                  <ItemGroup>
+                    <Reference Include="TedToolkit.CppBindings.Runtime"><HintPath>{{runtime}}</HintPath></Reference>
+                    <Reference Include="TedToolkit.CppBindings.Occt.Runtime"><HintPath>{{occtRuntime}}</HintPath></Reference>
+                  </ItemGroup>
+                </Project>
+                """;
+            var projectPath = Path.Combine(directory.FullName, "Probe.csproj");
+            await File.WriteAllTextAsync(projectPath, project).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(directory.FullName, "Storage.cs"), source).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(directory.FullName, "Probe.cs"), probe).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(directory.FullName, "Program.cs"), """
+                if (!LayoutProbe.Probe.Check()) throw new System.InvalidOperationException("Cycle probe failed.");
+                System.Console.WriteLine("net8 cycle probe passed");
+                """).ConfigureAwait(false);
+            var output = await RunBitFieldProbeAsync("dotnet",
+                ["run", "--project", projectPath, "-c", "Release", "--disable-build-servers",], 90).ConfigureAwait(false);
+            await Assert.That(output).Contains("net8 cycle probe passed");
+        }
+        finally
+        {
+            await DeleteProbeDirectoryAsync(directory).ConfigureAwait(false);
+        }
+    }
 
     /// <summary>
     /// Verifies alignment admission preserves unrelated members and independently representable nested types.
@@ -330,7 +468,7 @@ internal sealed class AddTest
     }
 
     private static async Task<string> GetNativeBitFieldBytesAsync(
-        string fields, string writes, string condition, RecordModel record)
+        string fields, string writes, string condition, RecordModel record, string? nativeDeclaration = null)
     {
         var directory = Directory.CreateTempSubdirectory("CppBindings.Bitfields.");
         try
@@ -343,7 +481,7 @@ internal sealed class AddTest
             var source = $$"""
                 #include <cstdio>
                 #include <cstring>
-                struct Storage { {{fields}} };
+                {{nativeDeclaration ?? ("struct Storage { " + fields + " };")}}
                 struct Holder { char Prefix; Storage Value; };
                 static_assert(sizeof(Storage) == {{record.Size}});
                 static_assert(alignof(Storage) == {{record.Alignment}});
@@ -366,11 +504,27 @@ internal sealed class AddTest
         }
         finally
         {
-            directory.Delete(recursive: true);
+            await DeleteProbeDirectoryAsync(directory).ConfigureAwait(false);
         }
     }
 
-    private static async Task<string> RunBitFieldProbeAsync(string executable, string[] arguments)
+    private static async Task DeleteProbeDirectoryAsync(DirectoryInfo directory)
+    {
+        for (var attempt = 0; ; attempt++)
+        {
+            try
+            {
+                directory.Delete(recursive: true);
+                return;
+            }
+            catch (Exception error) when (attempt < 4 && error is IOException or UnauthorizedAccessException)
+            {
+                await Task.Delay(100).ConfigureAwait(false);
+            }
+        }
+    }
+
+    private static async Task<string> RunBitFieldProbeAsync(string executable, string[] arguments, int timeoutSeconds = 30)
     {
         var startInfo = new ProcessStartInfo(executable)
         {
@@ -385,7 +539,7 @@ internal sealed class AddTest
         }
 
         using var process = Process.Start(startInfo) ?? throw new InvalidOperationException("Native probe did not start.");
-        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(30));
+        using var timeout = new CancellationTokenSource(TimeSpan.FromSeconds(timeoutSeconds));
         var outputTask = process.StandardOutput.ReadToEndAsync(timeout.Token);
         var errorTask = process.StandardError.ReadToEndAsync(timeout.Token);
         try
@@ -393,7 +547,7 @@ internal sealed class AddTest
             await process.WaitForExitAsync(timeout.Token).ConfigureAwait(false);
             var output = await outputTask.ConfigureAwait(false);
             var error = await errorTask.ConfigureAwait(false);
-            await Assert.That(process.ExitCode).IsEqualTo(0).Because(error);
+            await Assert.That(process.ExitCode).IsEqualTo(0).Because(error + output);
             return output;
         }
         finally
@@ -1778,7 +1932,7 @@ internal sealed class AddTest
             .IsEquivalentTo(expectedFields);
     }
 
-    private static RecordModelManager CreateManager()
+    private static RecordModelManager CreateManager(params ITypeRule[] rules)
     {
         return new(
             Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
@@ -1787,7 +1941,7 @@ internal sealed class AddTest
                 CSharpFolder = new(Path.GetTempPath()),
                 CppFolder = new(Path.GetTempPath()),
             }),
-            new Resolver([]),
+            new Resolver(rules),
             new FakeVcpkgDefaultTripletResolver(),
             new FakeVcpkgEnvironment());
     }

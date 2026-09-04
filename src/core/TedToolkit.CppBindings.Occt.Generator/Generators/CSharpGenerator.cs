@@ -318,6 +318,12 @@ internal sealed class CSharpGenerator(
 
     private void AddField(TypeDeclaration structDeclaration, FieldModel fieldModel)
     {
+        if (fieldModel.UsesHandleReferenceStorage)
+        {
+            AddHandleReferenceProperty(structDeclaration, fieldModel);
+            return;
+        }
+
         var managedType = recordDecl.TemplateProjection is null || string.IsNullOrEmpty(fieldModel.CSharpTemplateType)
             ? fieldModel.Type.CSharpPInvokeType
             : new DataType(fieldModel.CSharpTemplateType);
@@ -332,6 +338,44 @@ internal sealed class CSharpGenerator(
         AddRootDescriptions(field, fieldModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
         structDeclaration.AddMember(field);
+    }
+
+    private void AddHandleReferenceProperty(TypeDeclaration declaration, FieldModel field)
+    {
+        if (field.Size is not 8 || field.Alignment is not 8 || !field.Type.IsOcctHandle)
+        {
+            throw new NotSupportedException($"Cyclic handle storage is not proved for {recordDecl.Type.CppTypeName}.{field.Name}.");
+        }
+
+        var storage = $"__handle{field.Offset}";
+        while (recordDecl.FieldModels.Any(candidate => candidate.Name == storage))
+        {
+            storage += "_";
+        }
+
+        declaration.AddMember(Field(new DataType("nint"), storage).Private);
+        var type = field.Type.CSharpPInvokeType.ToCode();
+        var readOnly = field.Type.Transport.ValueIsConst;
+        var modifier = readOnly ? "ref readonly " : "ref ";
+        var property = Property(new DataType(modifier + type), field.Name).Public
+            .AddAttribute(Attribute(new DataType("global::System.Diagnostics.CodeAnalysis.UnscopedRefAttribute")))
+            .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
+                .AddArgument(Argument(field.Type.CppTypeName.ToLiteral())));
+        property.IsReadonly = readOnly;
+        var storageReference = readOnly
+            ? $"global::System.Runtime.CompilerServices.Unsafe.AsRef(in {storage})"
+            : storage;
+        var getter = Accessor(AccessorType.GET);
+        getter.Statements.Add(new Custom(
+            $"return ref global::System.Runtime.CompilerServices.Unsafe.As<nint, {type}>(ref {storageReference});"));
+        property.AddAccessor(getter);
+        AddRootDescriptions(property, field.DescriptionItems, static (target, description) =>
+            target.AddRootDescription(description));
+        property.AddRootDescription(new DescriptionRemarks([
+            new DescriptionText("This reference aliases native handle storage and neither retains nor releases its target. "
+                + "The caller must preserve the original owner's lifetime and obey native invalidation rules."),
+        ]));
+        declaration.AddMember(property);
     }
 
     private long AddPadding(

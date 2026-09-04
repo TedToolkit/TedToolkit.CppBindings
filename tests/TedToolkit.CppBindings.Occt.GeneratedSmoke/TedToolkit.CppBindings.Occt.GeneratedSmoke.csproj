@@ -23,4 +23,10 @@
           CopyToOutputDirectory="PreserveNewest"
           Link="%(Filename)%(Extension)" />
   </ItemGroup>
+  <Target Name="GeneratePreparedLayoutChecks" BeforeTargets="CoreCompile">
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)\GenerateLayoutChecks.ps1&quot; -InputPath &quot;$(GeneratedSourceDirectory)\native-layouts.json&quot; -OutputPath &quot;$(IntermediateOutputPath)PreparedLayoutProbe.g.cs&quot;" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)PreparedLayoutProbe.g.cs" />
+    </ItemGroup>
+  </Target>
 </Project>
