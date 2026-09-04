@@ -194,10 +194,14 @@ The initial plan intentionally retains `commit:PENDING-FINAL-HARNESS-COMMIT`; re
 the final harness commit before execution. `Invoke-OcctBenchmarkWorkload.ps1` rejects that pending
 binding, so a template plan cannot accidentally become a performance run.
 
-Create each host receipt with `New-OcctBenchmarkHostReceipt.ps1` after its independently recorded
-build stage. A receipt covers every file in the host directory, requires a real managed
-`TedToolkit.CppBindings.Occt.Console` assembly plus runtime metadata, binds the build specification
-and successful result, and records the clean source revision. Original hosts must use the exact
+Create each host with `Publish-OcctBenchmarkHost.ps1`, giving it an absent unique host directory
+and absent completion-receipt path. It runs the exact Release/net10.0 `dotnet publish` for the
+repository Console project and writes a non-overwriting completion receipt only after a successful
+publish from the exact clean source revision. The receipt binds the exact command, captured output,
+publisher, dotnet and project hashes, and every file in the newly produced host. Then create the
+provenance receipt with `New-OcctBenchmarkHostReceipt.ps1`; it independently rechecks that fresh-build
+relationship, the real managed `TedToolkit.CppBindings.Occt.Console` assembly, and runtime metadata.
+Original hosts must use the exact
 variant revision. Changed hosts must use clean commits whose complete `git diff --binary
 --full-index` is byte-identical to the same frozen harmless patch. Fixture-only receipts can test
 the plan schema, but make the resulting plan permanently non-executable; a text file named `.dll`
@@ -212,7 +216,8 @@ artifact roots must have equal path lengths and share the candidate repository's
 which is the volume checked by matrix resource preflight. Corresponding original/changed host paths
 and private input paths must also have equal lengths; both variants use one neutral working directory.
 
-Plan creation loads the exact declared `vcvars64.bat`, verifies that it selects the declared x64
+Plan creation revalidates and freezes every publish completion receipt, host file, publishing and
+receipt script, then loads the exact declared `vcvars64.bat`, verifies that it selects the declared x64
 `cl.exe`, records compiler `/Bv`, MSVC and Windows SDK roots/version, and records direct CMake,
 Ninja, and dotnet version probes. Prepare rechecks that receipt outside material timing; no PATH-only
 tool identity is accepted. Prepare and verify stages also hash the live private-header inventory. Generator stages invoke the exact
@@ -249,9 +254,11 @@ infrastructure only and grants no production-adoption authority.
 ./benchmarks/Verify-OcctBenchmarkPlan.ps1
 ```
 
-The verifier compiles only a tiny managed Console-shaped fixture, generates cryptographically valid
-synthetic receipts and oracles, exercises junction/case/shared-target/nested-reparse failures, and
-runs matrix `-PlanOnly`; it does not run the OCCT generator, compile native code, or collect timing.
+The verifier publishes only a tiny managed Console-shaped fixture, generates cryptographically valid
+receipts and oracles, exercises pre-existing/stale/mismatched-output and
+junction/case/shared-target/nested-reparse failures, and runs matrix `-PlanOnly`. An external-process
+formal Prepare fixture transports manifest root/file arrays as JSON and verifies both root categories;
+the verifier does not run the OCCT generator, compile native code, or collect timing.
 
 ## Reference workload inventory
 

@@ -1,12 +1,35 @@
 param(
-    [Parameter(Mandatory)] [string[]] $Roots,
+    [string[]] $Roots,
+    [string] $RootsJson,
     [Parameter(Mandatory)] [string] $ReportPath,
     [string[]] $Files = @(),
+    [string] $FilesJson,
     [string] $CompareTo
 )
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+
+if ($PSBoundParameters.ContainsKey('Roots') -eq $PSBoundParameters.ContainsKey('RootsJson')) {
+    throw 'Specify exactly one of Roots or RootsJson.'
+}
+if ($PSBoundParameters.ContainsKey('Files') -and $PSBoundParameters.ContainsKey('FilesJson')) {
+    throw 'Specify at most one of Files or FilesJson.'
+}
+if ($PSBoundParameters.ContainsKey('RootsJson')) {
+    try { $Roots = [Text.Json.JsonSerializer]::Deserialize[string[]]($RootsJson) }
+    catch { throw 'RootsJson must be a JSON string array.' }
+}
+if ($PSBoundParameters.ContainsKey('FilesJson')) {
+    try { $Files = [Text.Json.JsonSerializer]::Deserialize[string[]]($FilesJson) }
+    catch { throw 'FilesJson must be a JSON string array.' }
+}
+if ($null -eq $Roots -or $Roots.Count -eq 0 -or @($Roots | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+    throw 'Artifact roots must be a nonempty string array.'
+}
+if ($null -eq $Files -or @($Files | Where-Object { [string]::IsNullOrWhiteSpace($_) }).Count -gt 0) {
+    throw 'Additional artifact files must be a string array.'
+}
 
 function Assert-NoReparsePointInPath {
     param([string] $Path)

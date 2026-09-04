@@ -7,8 +7,7 @@ param(
     [Parameter(Mandatory)] [string] $SourceBaseRevision,
     [Parameter(Mandatory)] [string] $HostDirectory,
     [Parameter(Mandatory)] [string] $HostEntryPointRelativePath,
-    [Parameter(Mandatory)] [string] $BuildSpecificationPath,
-    [Parameter(Mandatory)] [string] $BuildResultPath,
+    [Parameter(Mandatory)] [string] $PublishCompletionReceiptPath,
     [string] $FrozenPatchPath,
     [switch] $FixtureOnly
 )
@@ -83,22 +82,33 @@ else {
     $patchHash = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($patchBytes))
 }
 
-$specificationPath = (Resolve-Path -LiteralPath $BuildSpecificationPath).Path
-$resultPath = (Resolve-Path -LiteralPath $BuildResultPath).Path
-$specification = Get-Content -LiteralPath $specificationPath -Raw | ConvertFrom-Json
-$result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
-if ($result.SchemaVersion -ne 1 -or -not $result.Succeeded -or $result.ExitCode -ne 0 -or
-    $result.SpecificationSha256 -cne (Get-FileHash -LiteralPath $specificationPath -Algorithm SHA256).Hash) {
-    throw 'The host build result is not a successful bound stage receipt.'
+$publishReceiptPath = (Resolve-Path -LiteralPath $PublishCompletionReceiptPath).Path
+$publish = Get-Content -LiteralPath $publishReceiptPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+$expectedProject = [IO.Path]::GetFullPath((Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'))
+$expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net10.0',
+    '--no-restore', '--output', $hostRoot, '--nologo')
+if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-host-publish' -or
+    -not $publish.Succeeded -or $publish.ExitCode -ne 0 -or -not $publish.FreshHostDirectory -or
+    -not $publish.SourceCleanBeforeAndAfter -or $publish.SourceRevision -cne $sourceRevision -or
+    -not [IO.Path]::GetFullPath($publish.SourceRepositoryRoot).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    -not [IO.Path]::GetFullPath($publish.ProjectPath).Equals($expectedProject, [StringComparison]::OrdinalIgnoreCase) -or
+    $publish.ProjectRelativePath -cne 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj' -or
+    (Get-FileHash -LiteralPath $expectedProject -Algorithm SHA256).Hash -cne $publish.ProjectSha256 -or
+    -not [IO.Path]::GetFullPath($publish.HostDirectory).Equals($hostRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    $publish.HostEntryPointRelativePath -cne $HostEntryPointRelativePath.Replace('\', '/') -or
+    -not [IO.Path]::GetFullPath($publish.Command.WorkingDirectory).Equals($sourceRoot, [StringComparison]::OrdinalIgnoreCase) -or
+    $publish.Command.Executable -cne $publish.DotNetPath -or
+    (@($publish.Command.Arguments) -join "`n") -cne ($expectedArguments -join "`n") -or
+    $publish.Output -isnot [hashtable] -or $publish.Output.StandardOutput -isnot [string] -or
+    $publish.Output.StandardError -isnot [string] -or $publish.HostFiles -isnot [array] -or
+    $publish.HostAssemblyIdentity -cne $assemblyIdentity) {
+    throw 'The host publish completion receipt does not prove the exact fresh build relationship.'
 }
-if ($result.Command.Executable -cne $specification.Executable -or
-    $result.Command.WorkingDirectory -cne $specification.WorkingDirectory -or
-    (@($result.Command.Arguments) -join "`n") -cne (@($specification.Arguments) -join "`n")) {
-    throw 'The host build command does not match its frozen specification.'
-}
-if (-not [IO.Path]::GetFullPath($result.Command.WorkingDirectory).Equals($sourceRoot,
-        [StringComparison]::OrdinalIgnoreCase)) {
-    throw 'The host build did not run in its clean source repository.'
+foreach ($bindingName in @('DotNet', 'PublishWrapper')) {
+    $boundPath = (Resolve-Path -LiteralPath $publish["${bindingName}Path"]).Path
+    if ((Get-FileHash -LiteralPath $boundPath -Algorithm SHA256).Hash -cne $publish["${bindingName}Sha256"]) {
+        throw "The host publish $bindingName binding changed."
+    }
 }
 
 $files = [Collections.Generic.List[object]]::new()
@@ -110,9 +120,17 @@ foreach ($file in Get-ChildItem -LiteralPath $hostRoot -Recurse -File | Sort-Obj
     })
 }
 if ($files.Count -lt 3) { throw 'A complete Console host receipt requires the entry point and runtime metadata.' }
+if ($files.Count -ne $publish.HostFiles.Count) { throw 'The fresh publish output inventory changed.' }
+for ($index = 0; $index -lt $files.Count; $index++) {
+    if ($files[$index].Path -cne $publish.HostFiles[$index].Path -or
+        $files[$index].Bytes -ne $publish.HostFiles[$index].Bytes -or
+        $files[$index].Sha256 -cne $publish.HostFiles[$index].Sha256) {
+        throw "The fresh publish output changed: $($files[$index].Path)"
+    }
+}
 
 $document = [ordered]@{
-    SchemaVersion = 1
+    SchemaVersion = 2
     ReceiptKind = 'occt-console-host'
     FixtureOnly = [bool] $FixtureOnly
     Variant = $Variant
@@ -124,10 +142,10 @@ $document = [ordered]@{
     FrozenPatchPath = $patchPath
     FrozenPatchSha256 = $patchHash
     SourceDeltaSha256 = [Convert]::ToHexString([Security.Cryptography.SHA256]::HashData($deltaBytes))
-    BuildSpecificationPath = $specificationPath
-    BuildSpecificationSha256 = (Get-FileHash -LiteralPath $specificationPath -Algorithm SHA256).Hash
-    BuildResultPath = $resultPath
-    BuildResultSha256 = (Get-FileHash -LiteralPath $resultPath -Algorithm SHA256).Hash
+    PublishCompletionReceiptPath = $publishReceiptPath
+    PublishCompletionReceiptSha256 = (Get-FileHash -LiteralPath $publishReceiptPath -Algorithm SHA256).Hash
+    PublishWrapperPath = $publish.PublishWrapperPath
+    PublishWrapperSha256 = $publish.PublishWrapperSha256
     HostDirectory = $hostRoot
     HostEntryPointRelativePath = $HostEntryPointRelativePath.Replace('\', '/')
     HostAssemblyIdentity = $assemblyIdentity
