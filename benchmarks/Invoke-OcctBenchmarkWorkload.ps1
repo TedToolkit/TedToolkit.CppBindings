@@ -231,10 +231,13 @@ function Invoke-NativeBuild {
 
 function Get-Manifest {
     param([string] $Path, [string] $CompareTo)
-    $arguments = @('-NoProfile', '-File', $plan.Tools.Manifest, '-Roots', $csharpRoot, $cppRoot,
-        '-Files', $unsupportedHeaders, '-ReportPath', $Path)
-    if ($CompareTo) { $arguments += @('-CompareTo', $CompareTo) }
-    Invoke-Checked (Get-Process -Id $PID).Path $arguments
+    $arguments = @{
+        Roots = @($csharpRoot, $cppRoot)
+        Files = @($unsupportedHeaders)
+        ReportPath = $Path
+    }
+    if ($CompareTo) { $arguments.CompareTo = $CompareTo }
+    $null = & $plan.Tools.Manifest @arguments
 }
 
 function Assert-CompleteArtifacts {
