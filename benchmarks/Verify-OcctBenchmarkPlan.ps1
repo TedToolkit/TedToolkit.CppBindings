@@ -139,6 +139,17 @@ try {
 
     $validReceipt = Get-Content -LiteralPath $receipts.baselineOriginal -Raw | ConvertFrom-Json -AsHashtable
     $validPublishPath = $validReceipt.PublishCompletionReceiptPath
+    $wrongDotNetPublish = Get-Content -LiteralPath $validPublishPath -Raw | ConvertFrom-Json -AsHashtable
+    $wrongDotNetPublish.DotNetPath = $wrongDotNetPublish.PublishWrapperPath
+    $wrongDotNetPublish.DotNetSha256 = $wrongDotNetPublish.PublishWrapperSha256
+    $wrongDotNetPublish.Command.Executable = $wrongDotNetPublish.PublishWrapperPath
+    $wrongDotNetPublishPath = Join-Path $proofRoot 'publishes/wrong-dotnet.json'
+    Write-JsonFile $wrongDotNetPublishPath $wrongDotNetPublish
+    $wrongDotNetReceipt = $validReceipt.Clone()
+    $wrongDotNetReceipt.PublishCompletionReceiptPath = $wrongDotNetPublishPath
+    $wrongDotNetReceipt.PublishCompletionReceiptSha256 = (Get-FileHash -LiteralPath $wrongDotNetPublishPath).Hash
+    $wrongDotNetReceiptPath = Join-Path $proofRoot 'receipts/wrong-dotnet.json'
+    Write-JsonFile $wrongDotNetReceiptPath $wrongDotNetReceipt
     $stalePublish = Get-Content -LiteralPath $validPublishPath -Raw | ConvertFrom-Json -AsHashtable
     $stalePublish.SourceRevision = '0000000000000000000000000000000000000000'
     $stalePublishPath = Join-Path $proofRoot 'publishes/stale.json'
@@ -245,6 +256,15 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
         NinjaPath = $toolchain.Ninja; CompilerPath = $toolchain.Compiler; VcVarsPath = $toolchain.VcVars
         DeadlineUtc = [DateTimeOffset]::UtcNow.AddHours(2); MemoryLimitBytes = 1073741824; MemoryReserveBytes = 1073741824
     }
+
+    $wrongDotNetArguments = $arguments.Clone()
+    $wrongDotNetArguments.SpecificationDirectory = Join-Path $proofRoot 'wrong-dotnet-spec'
+    $wrongDotNetArguments.BaselineOriginalHostReceipt = $wrongDotNetReceiptPath
+    $wrongDotNetRejected = $false
+    try { & $builder @wrongDotNetArguments }
+    catch { $wrongDotNetRejected = $_.Exception.Message -like '*plan-resolved dotnet path and SHA-256*' }
+    Require $wrongDotNetRejected 'A host publish from a different dotnet executable was accepted by the plan.'
+
     & $builder @arguments
     $specification = $arguments.SpecificationDirectory
     $plan = Get-Content -LiteralPath (Join-Path $specification 'occt-plan.json') -Raw | ConvertFrom-Json
@@ -310,6 +330,33 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     try { & $builder @junctionArguments }
     catch { $junctionRejected = $_.Exception.Message -like '*reparse*' -or $_.Exception.Message -like '*overlap*' }
     Require $junctionRejected 'A junction/shared physical input target was accepted.'
+
+    $shortAlias = $null
+    try { $shortAlias = [OcctBenchmarkNative.PathIdentity]::ShortPath($baselineInput) }
+    catch { Write-Warning "8.3 alias fixture skipped: $($_.Exception.Message)" }
+    if ([string]::IsNullOrWhiteSpace($shortAlias) -or
+        $shortAlias.Equals($baselineInput, [StringComparison]::OrdinalIgnoreCase)) {
+        Write-Warning '8.3 alias fixture skipped: short-name generation is disabled on the fixture volume.'
+    }
+    else {
+        $aliasArguments = $arguments.Clone(); $aliasArguments.SpecificationDirectory = Join-Path $proofRoot 'alias-spec'
+        $aliasArguments.CandidateInputVcpkgRoot = $shortAlias
+        $aliasRejected = $false
+        try { & $builder @aliasArguments }
+        catch { $aliasRejected = $_.Exception.Message -like '*must remain separate*' -or $_.Exception.Message -like '*overlap*' }
+        Require $aliasRejected 'A Windows 8.3 alias bypassed physical root isolation.'
+        Write-Output "8.3 alias fixture exercised: $shortAlias"
+    }
+
+    $crossVolumeArguments = $arguments.Clone()
+    $crossVolumeArguments.SpecificationDirectory = Join-Path $proofRoot 'cross-volume-spec'
+    $crossVolumeArguments.FixtureVolumeIdentityOverrides = @{
+        (Resolve-Path -LiteralPath $candidateInput).Path = '\\?\Volume{fixture-other-volume}\'
+    }
+    $crossVolumeRejected = $false
+    try { & $builder @crossVolumeArguments }
+    catch { $crossVolumeRejected = $_.Exception.Message -like '*must share one physical volume*candidateInput*' }
+    Require $crossVolumeRejected 'A cross-volume measured input was accepted.'
 
     $executablePlanPath = Join-Path $specification 'occt-plan-executable-fixture.json'
     $executablePlan = Get-Content -LiteralPath (Join-Path $specification 'occt-plan.json') -Raw | ConvertFrom-Json -AsHashtable

@@ -10,6 +10,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $utf8 = [Text.UTF8Encoding]::new($false)
+. (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 
 function Read-Json {
     param([string] $Path)
@@ -36,12 +37,27 @@ function Assert-FrozenBindings {
     foreach ($binding in $plan.FrozenFileBindings) {
         Assert-Hash $binding.Path $binding.Sha256
     }
+    if ($plan.HostPublishBindings -isnot [array] -or $plan.HostPublishBindings.Count -ne 4) {
+        throw 'The plan must retain all four host publish bindings.'
+    }
+    $dotnetPath = Resolve-BenchmarkPhysicalPath $plan.Tools.DotNet
+    $dotnetSha256 = (Get-FileHash -LiteralPath $dotnetPath -Algorithm SHA256).Hash
+    foreach ($binding in $plan.HostPublishBindings) {
+        $publish = Read-Json $binding.PublishCompletionReceiptPath
+        if (-not (Test-BenchmarkPathEqual $binding.DotNetPath $dotnetPath) -or
+            $binding.DotNetSha256 -cne $dotnetSha256 -or
+            -not (Test-BenchmarkPathEqual $publish.DotNetPath $dotnetPath) -or
+            $publish.DotNetSha256 -cne $dotnetSha256 -or
+            -not (Test-BenchmarkPathEqual $publish.Command.Executable $dotnetPath)) {
+            throw 'A frozen Console host publish no longer matches the plan-resolved dotnet path and SHA-256.'
+        }
+    }
 }
 
 function Assert-WithinRoot {
     param([string] $Path, [string] $Root)
-    $fullPath = [IO.Path]::GetFullPath($Path)
-    $fullRoot = [IO.Path]::GetFullPath($Root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
+    $fullPath = Resolve-BenchmarkPhysicalPath $Path
+    $fullRoot = (Resolve-BenchmarkPhysicalPath $Root).TrimEnd('\', '/') + [IO.Path]::DirectorySeparatorChar
     if (-not $fullPath.StartsWith($fullRoot, [StringComparison]::OrdinalIgnoreCase)) {
         throw "Path escapes its isolated benchmark root: $fullPath"
     }
@@ -50,17 +66,19 @@ function Assert-WithinRoot {
 
 function Assert-NoReparseComponents {
     param([string] $Path)
-    $current = [IO.Path]::GetFullPath($Path)
-    while (-not [string]::IsNullOrEmpty($current)) {
-        if (Test-Path -LiteralPath $current) {
-            $item = Get-Item -LiteralPath $current -Force
-            if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
-                throw "Benchmark paths cannot contain reparse-point components: $($item.FullName)"
+    foreach ($candidate in @([IO.Path]::GetFullPath($Path), (Resolve-BenchmarkPhysicalPath $Path))) {
+        $current = $candidate
+        while (-not [string]::IsNullOrEmpty($current)) {
+            if (Test-Path -LiteralPath $current) {
+                $item = Get-Item -LiteralPath $current -Force
+                if ($item.Attributes -band [IO.FileAttributes]::ReparsePoint) {
+                    throw "Benchmark paths cannot contain reparse-point components: $($item.FullName)"
+                }
             }
+            $parent = [IO.Path]::GetDirectoryName($current)
+            if ([string]::IsNullOrEmpty($parent) -or $parent -ceq $current) { break }
+            $current = $parent
         }
-        $parent = [IO.Path]::GetDirectoryName($current)
-        if ([string]::IsNullOrEmpty($parent) -or $parent -ceq $current) { break }
-        $current = $parent
     }
 }
 
@@ -89,10 +107,10 @@ function Assert-IsolatedRoots {
     }
     $names = @($roots.Keys)
     for ($leftIndex = 0; $leftIndex -lt $names.Count; $leftIndex++) {
-        $left = [IO.Path]::GetFullPath($roots[$names[$leftIndex]]).TrimEnd('\', '/')
+        $left = (Resolve-BenchmarkPhysicalPath $roots[$names[$leftIndex]]).TrimEnd('\', '/')
         Assert-NoReparseComponents $left
         for ($rightIndex = $leftIndex + 1; $rightIndex -lt $names.Count; $rightIndex++) {
-            $right = [IO.Path]::GetFullPath($roots[$names[$rightIndex]]).TrimEnd('\', '/')
+            $right = (Resolve-BenchmarkPhysicalPath $roots[$names[$rightIndex]]).TrimEnd('\', '/')
             if ($left.Equals($right, [StringComparison]::OrdinalIgnoreCase) -or
                 $left.StartsWith($right + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase) -or
                 $right.StartsWith($left + [IO.Path]::DirectorySeparatorChar, [StringComparison]::OrdinalIgnoreCase)) {
@@ -100,34 +118,6 @@ function Assert-IsolatedRoots {
             }
         }
     }
-}
-
-if (-not ('OcctBenchmarkNative.Volume' -as [type])) {
-    Add-Type -TypeDefinition @'
-using System;
-using System.Runtime.InteropServices;
-using System.Text;
-namespace OcctBenchmarkNative {
-    public static class Volume {
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern bool GetVolumePathName(string fileName, StringBuilder volumePathName, int bufferLength);
-        [DllImport("kernel32.dll", CharSet = CharSet.Unicode, SetLastError = true)]
-        private static extern bool GetVolumeNameForVolumeMountPoint(string volumeMountPoint, StringBuilder volumeName, int bufferLength);
-        public static string Identity(string path) {
-            var mount = new StringBuilder(1024);
-            if (!GetVolumePathName(path, mount, mount.Capacity)) throw new InvalidOperationException("GetVolumePathName failed: " + Marshal.GetLastWin32Error());
-            var volume = new StringBuilder(1024);
-            if (!GetVolumeNameForVolumeMountPoint(mount.ToString(), volume, volume.Capacity)) throw new InvalidOperationException("GetVolumeNameForVolumeMountPoint failed: " + Marshal.GetLastWin32Error());
-            return volume.ToString();
-        }
-    }
-}
-'@
-}
-
-function Get-VolumeIdentity {
-    param([string] $Path)
-    [OcctBenchmarkNative.Volume]::Identity([IO.Path]::GetFullPath($Path))
 }
 
 function Assert-RootMarker {
@@ -221,8 +211,8 @@ function Assert-ActiveCompilerEnvironment {
             throw "vcvars-selected toolchain changed: $($binding.Value)"
         }
     }
-    $selectedCompiler = [IO.Path]::GetFullPath((Join-Path $plan.ToolchainSnapshot.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe'))
-    if (-not $selectedCompiler.Equals($plan.Tools.Compiler, [StringComparison]::OrdinalIgnoreCase)) {
+    $selectedCompiler = Resolve-BenchmarkPhysicalPath (Join-Path $plan.ToolchainSnapshot.VCToolsInstallDir 'bin/Hostx64/x64/cl.exe')
+    if (-not (Test-BenchmarkPathEqual $selectedCompiler $plan.Tools.Compiler)) {
         throw 'VCToolsInstallDir selected a different compiler.'
     }
 }
@@ -365,7 +355,7 @@ function Copy-NewFile {
     finally { $stream.Dispose() }
 }
 
-$resolvedPlan = (Resolve-Path -LiteralPath $PlanPath).Path
+$resolvedPlan = Resolve-BenchmarkPhysicalPath $PlanPath
 $plan = Read-Json $resolvedPlan
 if ($plan.SchemaVersion -ne 1 -or $plan.ProductionAdoptionAuthorized -ne $false) {
     throw 'This adapter accepts only schema-1 experiment plans with no production authority.'
@@ -393,14 +383,18 @@ if ($plan.Variants.baseline.OriginalHost.Length -ne $plan.Variants.candidate.Ori
     throw 'Measured Console host path shape changed.'
 }
 Assert-IsolatedRoots
-if ((Get-VolumeIdentity $plan.Variants.baseline.ArtifactRoot) -cne $plan.ArtifactVolumeIdentity -or
-    (Get-VolumeIdentity $plan.Variants.candidate.ArtifactRoot) -cne $plan.ArtifactVolumeIdentity -or
-    (Get-VolumeIdentity $plan.Variants.candidate.RepositoryRoot) -cne $plan.ArtifactVolumeIdentity) {
-    throw 'Artifact roots moved away from the physical volume checked by resource preflight.'
+foreach ($path in @($resolvedPlan, $plan.Variants.candidate.RepositoryRoot,
+        $plan.Variants.baseline.ArtifactRoot, $plan.Variants.candidate.ArtifactRoot,
+        $plan.Variants.baseline.InputVcpkgRoot, $plan.Variants.candidate.InputVcpkgRoot,
+        $plan.Variants.baseline.OriginalHostRoot, $plan.Variants.baseline.ChangedHostRoot,
+        $plan.Variants.candidate.OriginalHostRoot, $plan.Variants.candidate.ChangedHostRoot)) {
+    if ((Get-BenchmarkVolumeIdentity $path) -cne $plan.ArtifactVolumeIdentity) {
+        throw 'A repository, specification/report, artifact, input, or host root moved away from the frozen physical volume.'
+    }
 }
 
 $variantPlan = $plan.Variants[$Variant]
-$sample = [IO.Path]::GetFullPath($SampleRoot)
+$sample = Resolve-BenchmarkPhysicalPath $SampleRoot
 if (-not (Test-Path -LiteralPath $sample -PathType Container)) { throw 'SampleRoot must already exist.' }
 Assert-RootMarker $variantPlan
 $generatedRoot = Join-Path $variantPlan.ArtifactRoot 'generated'

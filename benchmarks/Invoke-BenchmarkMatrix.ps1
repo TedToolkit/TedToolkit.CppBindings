@@ -8,11 +8,12 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $jsonSnapshots = @{}
+. (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 
 function Read-JsonSnapshot {
     param([string] $Path)
 
-    $resolved = (Resolve-Path -LiteralPath $Path).Path
+    $resolved = Resolve-BenchmarkPhysicalPath $Path
     if ($jsonSnapshots.ContainsKey($resolved)) { return $jsonSnapshots[$resolved] }
 
     $stream = [IO.File]::Open($resolved, [IO.FileMode]::Open, [IO.FileAccess]::Read, [IO.FileShare]::Read)
@@ -71,8 +72,9 @@ function Read-StageGroup {
         Assert-StageArgumentTemplates $value.Arguments
         if ($value.TimeLimitSeconds -isnot [long] -or $value.TimeLimitSeconds -lt 1 -or
             $value.TimeLimitSeconds -gt 43200) { throw 'Invalid stage time limit.' }
-        $null = Get-Command $value.Executable -CommandType Application -ErrorAction Stop
-        $null = Resolve-Path -LiteralPath $value.WorkingDirectory
+        $command = Get-Command $value.Executable -CommandType Application -ErrorAction Stop | Select-Object -First 1
+        $value.Executable = Resolve-BenchmarkPhysicalPath $command.Source
+        $value.WorkingDirectory = Resolve-BenchmarkPhysicalPath $value.WorkingDirectory
         [pscustomobject]@{
             Path = $snapshot.Path
             Sha256 = $snapshot.Sha256
@@ -128,7 +130,8 @@ function Invoke-Sample {
     Assert-Bindings $bindings
     $sampleRoot = Join-Path $destination ('{0:D3}-{1}-{2}' -f $Entry.Sequence, $Entry.Workload, $Entry.Variant)
     $null = New-Item -ItemType Directory -Path $sampleRoot
-    & $environmentRunner -RepositoryRoot $repository -ReportPath (Join-Path $sampleRoot 'environment-before.json')
+    & $environmentRunner -RepositoryRoot $repository -ReportPath (Join-Path $sampleRoot 'environment-before.json') `
+        -ArtifactProbePath $artifactProbe -ExpectedArtifactVolumeIdentity $artifactVolume
     $before = Get-Content -LiteralPath (Join-Path $sampleRoot 'environment-before.json') -Raw | ConvertFrom-Json
     if (-not $before.ResourcePreflightPassed -or
         $before.Memory.FreeBytes -lt ($spec.MemoryLimitBytes + $spec.MemoryReserveBytes)) {
@@ -159,7 +162,8 @@ function Invoke-Sample {
         }
     }
     Assert-Bindings $bindings
-    & $environmentRunner -RepositoryRoot $repository -ReportPath (Join-Path $sampleRoot 'environment-after.json')
+    & $environmentRunner -RepositoryRoot $repository -ReportPath (Join-Path $sampleRoot 'environment-after.json') `
+        -ArtifactProbePath $artifactProbe -ExpectedArtifactVolumeIdentity $artifactVolume
     $after = Get-Content -LiteralPath (Join-Path $sampleRoot 'environment-after.json') -Raw | ConvertFrom-Json
     if (-not $after.ResourcePreflightPassed) { throw 'Post-sample resource preflight failed.' }
     if ([DateTimeOffset]::UtcNow -ge $deadline) { throw 'The shared experiment deadline has expired.' }
@@ -176,7 +180,8 @@ function Invoke-Sample {
 $specSnapshot = Read-JsonSnapshot $SpecificationPath
 $specPath = $specSnapshot.Path
 $spec = $specSnapshot.Value
-foreach ($member in @('RepositoryRoot', 'Scope', 'DeadlineUtc', 'MemoryLimitBytes', 'MemoryReserveBytes',
+foreach ($member in @('RepositoryRoot', 'ArtifactProbePath', 'ArtifactVolumeIdentity', 'Scope',
+        'DeadlineUtc', 'MemoryLimitBytes', 'MemoryReserveBytes',
         'InputFiles', 'Workloads')) {
     if (-not $spec.ContainsKey($member)) { throw "Missing matrix member: $member" }
 }
@@ -189,9 +194,17 @@ $deadline = [DateTimeOffset]::Parse($spec.DeadlineUtc).ToUniversalTime()
 if ($deadline -le [DateTimeOffset]::UtcNow -or $deadline -gt [DateTimeOffset]::UtcNow.AddHours(12)) {
     throw 'Supply the shared, unexpired experiment deadline within 12 hours; never renew it per variant.'
 }
-$repository = (Resolve-Path -LiteralPath $spec.RepositoryRoot).Path
-$destination = [IO.Path]::GetFullPath($ReportDirectory)
+$repository = Resolve-BenchmarkPhysicalPath $spec.RepositoryRoot
+$destination = Resolve-BenchmarkPhysicalPath $ReportDirectory
 if (Test-Path -LiteralPath $destination) { throw 'Use a new matrix report directory; evidence is never overwritten.' }
+$artifactProbe = Resolve-BenchmarkPhysicalPath $spec.ArtifactProbePath
+$artifactVolume = [string] $spec.ArtifactVolumeIdentity
+if ([string]::IsNullOrWhiteSpace($artifactVolume) -or
+    (Get-BenchmarkVolumeIdentity $artifactProbe) -cne $artifactVolume -or
+    (Get-BenchmarkVolumeIdentity $repository) -cne $artifactVolume -or
+    (Get-BenchmarkVolumeIdentity $destination) -cne $artifactVolume) {
+    throw 'Matrix repository, artifact probe, and report directory must remain on the frozen physical volume.'
+}
 $stageRunner = Join-Path $PSScriptRoot 'Measure-BenchmarkStage.ps1'
 $environmentRunner = Join-Path $PSScriptRoot 'Get-BenchmarkEnvironment.ps1'
 $bindings = @{ $specPath = $specSnapshot.Sha256 }
@@ -202,7 +215,7 @@ if ($spec.InputFiles -isnot [array] -or $spec.InputFiles.Count -eq 0) {
     throw 'Bind source/toolchain/input manifests before sampling.'
 }
 foreach ($inputFile in $spec.InputFiles) {
-    $path = (Resolve-Path -LiteralPath $inputFile.Path).Path
+    $path = Resolve-BenchmarkPhysicalPath $inputFile.Path
     if ($inputFile.Sha256 -notmatch '^[0-9a-fA-F]{64}$') { throw 'Invalid input SHA-256.' }
     if ($bindings.ContainsKey($path) -and $bindings[$path] -cne $inputFile.Sha256.ToUpperInvariant()) {
         throw 'Conflicting input bindings.'
@@ -250,6 +263,8 @@ foreach ($workload in $spec.Workloads) {
         }
     }
 }
+$pathTool = Resolve-BenchmarkPhysicalPath (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
+$bindings[$pathTool] = (Get-FileHash -LiteralPath $pathTool -Algorithm SHA256).Hash
 Assert-Bindings $bindings
 $null = New-Item -ItemType Directory -Path $destination
 Write-Evidence (Join-Path $destination 'plan.json') ([ordered]@{

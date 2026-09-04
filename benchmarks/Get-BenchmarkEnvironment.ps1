@@ -5,6 +5,12 @@ param(
     [Parameter(Mandatory)]
     [string] $ReportPath,
 
+    [Parameter(Mandatory)]
+    [string] $ArtifactProbePath,
+
+    [Parameter(Mandatory)]
+    [string] $ExpectedArtifactVolumeIdentity,
+
     [ValidateRange(1, 1024)]
     [int] $MinimumFreeMemoryGiB = 10,
 
@@ -14,6 +20,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 
 function Invoke-ProbeCommand {
     param([string] $Executable, [string[]] $Arguments)
@@ -50,9 +57,15 @@ function Test-CompetingBuild {
 }
 
 if (-not $IsWindows) { throw 'This experiment currently requires Windows.' }
-$root = (Resolve-Path -LiteralPath $RepositoryRoot).Path
-$report = [IO.Path]::GetFullPath($ReportPath)
+$root = Resolve-BenchmarkPhysicalPath $RepositoryRoot
+$report = Resolve-BenchmarkPhysicalPath $ReportPath
+$artifactProbe = Resolve-BenchmarkPhysicalPath $ArtifactProbePath
 if (Test-Path -LiteralPath $report) { throw "Refusing to overwrite an existing report: $report" }
+if ([string]::IsNullOrWhiteSpace($ExpectedArtifactVolumeIdentity) -or
+    (Get-BenchmarkVolumeIdentity $artifactProbe) -cne $ExpectedArtifactVolumeIdentity -or
+    (Get-BenchmarkVolumeIdentity $report) -cne $ExpectedArtifactVolumeIdentity) {
+    throw 'The explicit artifact probe and environment report must use the frozen physical volume.'
+}
 
 $revision = @(& git -C $root rev-parse HEAD)
 if ($LASTEXITCODE -ne 0) { throw 'The baseline Git revision could not be read.' }
@@ -63,7 +76,7 @@ if ($LASTEXITCODE -ne 0) { throw 'The native/submodule revision inventory could 
 
 $os = Get-CimInstance Win32_OperatingSystem
 $cpu = @(Get-CimInstance Win32_Processor | Select-Object Name, NumberOfCores, NumberOfLogicalProcessors)
-$driveId = [IO.Path]::GetPathRoot($report).TrimEnd('\')
+$driveId = [IO.Path]::GetPathRoot($artifactProbe).TrimEnd('\')
 if ($driveId -notmatch '^[A-Za-z]:$') { throw 'Use a local drive for benchmark artifacts.' }
 $disk = Get-CimInstance Win32_LogicalDisk -Filter "DeviceID='$driveId'"
 if ($null -eq $disk) { throw 'The artifact drive could not be measured.' }
@@ -103,6 +116,8 @@ $snapshot = [ordered]@{
         MinimumFreeBytes = $MinimumFreeMemoryGiB * 1GB
     }
     ArtifactDrive = [ordered]@{
+        ProbePath = $artifactProbe
+        VolumeIdentity = $ExpectedArtifactVolumeIdentity
         Id = $driveId
         SizeBytes = [long] $disk.Size
         FreeBytes = [long] $disk.FreeSpace
