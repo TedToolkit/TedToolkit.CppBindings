@@ -850,7 +850,8 @@ Write-NewJson $planPath $plan
 $stageDirectory = Join-Path $destination 'stages'
 $workloads = [Collections.Generic.List[object]]::new()
 foreach ($workload in @('artifact-cold', 'unchanged', 'declaration-edit', 'generator-change', 'missing-output')) {
-    $entry = [ordered]@{ Name = $workload; Samples = if ($workload -eq 'artifact-cold') { 3 } else { 5 } }
+    $samples = if ($Scope -eq 'screening') { 1 } elseif ($workload -eq 'artifact-cold') { 3 } else { 5 }
+    $entry = [ordered]@{ Name = $workload; Samples = $samples }
     foreach ($variant in @('baseline', 'candidate')) {
         $prepare = New-Stage $stageDirectory $variant $workload Prepare 7200
         $measure = [Collections.Generic.List[string]]::new()

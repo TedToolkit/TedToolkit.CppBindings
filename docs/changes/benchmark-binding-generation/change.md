@@ -49,15 +49,19 @@ unbounded Task.WhenAll while C# uses separate bounded loops. More tasks alone is
 - Workloads: full cold artifact build; unchanged warm rebuild; one representative declaration edit;
   a generator change; and deletion of one generated output. Distinguish artifact-cold from OS-cache
   cold and report unavailable measurements. Do not run competing builds during samples.
-- Sampling: one unrecorded warmup plus at least five warm samples; at least three independent
-  artifact-cold samples for any claimed cold-build win. Alternate baseline/candidate order and
-  retain raw samples, medians, ranges, failures, and the exact commands. Use a representative subset
-  for screening, then confirm any recommendation on the full public-header workload.
-- Decision signal: recommend further production design only for a repeatable median improvement
-  of at least 20% in a declared primary workload, no correctness failures, no greater than 5%
+- Sampling: screening runs exactly one recorded baseline/candidate pair, no warmup, for each of all
+  five full-public-header workloads; alternate which variant runs first across workloads. Screening
+  supports correctness, resource, and directional-feasibility decisions only. Full sampling adds
+  one unrecorded warmup per variant/workload, at least five warm samples, and at least three
+  independent artifact-cold samples. Alternate baseline/candidate order and retain raw samples,
+  medians, ranges, failures, and exact commands.
+- Decision signal: apply the 20% improvement and 5% regression thresholds only to a successful full
+  sampling result. Recommend further production design only for a repeatable median improvement of
+  at least 20% in a declared primary workload, no correctness failures, no greater than 5%
   regression in another measured workload beyond observed noise, and peak memory within the
-  recorded machine budget. An unchanged warm generation must rewrite zero sources; a missing or
-  stale output must be restored or fail closed. Report trade-offs and inconclusive results honestly.
+  recorded machine budget. Screening and failed/partial matrices never satisfy recommendation
+  sampling requirements. An unchanged warm generation must rewrite zero sources; a missing or stale
+  output must be restored or fail closed. Report trade-offs and inconclusive results honestly.
 - Stop condition: stop at 12 machine-hours, a correctness failure, or a resource-budget violation;
   stop a failing variant rather than silently changing the workload. Rebaseline if code, native
   inputs, or toolchain changes. Unconfirmed results remain inconclusive.
