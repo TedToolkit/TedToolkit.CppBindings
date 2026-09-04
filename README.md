@@ -17,7 +17,7 @@ provider：它从 vcpkg 安装的 Open CASCADE Technology（OCCT）头文件建�
 - 只从指定的 OCCT 类型开始生成，并递归加入实际依赖，避免无条件包装整个 OCCT。
 - 保留 OCCT 的值类型、继承和 `Standard_Transient` 生命周期语义。
 - The target boundary keeps exported declarations C11-compatible while passing pointers to
-  compiler-matched native object storage; that generated export layer is still under migration.
+  compiler-matched native object storage.
 - Every supported C++ object has one exact-layout unmanaged C# struct generated from native size,
   alignment, fields, hidden storage, and padding. Managed and native layout cannot evolve
   independently inside one supported artifact set.
@@ -36,7 +36,7 @@ C++ 源码；源码生成完成后才可以选择编译 native DLL。即用包�
 Generator 调用可以停在源码输出。Model 的内容可以随受支持语义演进，但 emitter 不得绕过它。
 
 ```text
-GenerationOptions / DeclOptions
+OcctGenerationOptions / OcctDeclarationOptions
               │
               ▼
 读取 VCPKG_ROOT 下的 OCCT 头文件和目标 triplet
@@ -64,15 +64,17 @@ generated C++ project      generated C# binding set
 
 ### 1. 从 vcpkg 获取真实 OCCT 环境
 
-生成器读取 `VCPKG_ROOT`，在 `installed/<triplet>/include/opencascade` 中查找 OCCT 头文件。未显式指定 `GenerationOptions.Triplet` 时，它会从已安装 OCCT 的 triplet 中选择与当前操作系统和进程架构最匹配的一项。
+生成器读取 `VCPKG_ROOT`，在 `installed/<triplet>/include/opencascade` 中查找 OCCT 头文件。未显式指定 `OcctGenerationOptions.Triplet` 时，它会从已安装 OCCT 的 triplet 中选择与当前操作系统和进程架构最匹配的一项。
 
 当前环境不是由仓库清单锁定的：仓库尚无 `vcpkg.json`，因此生成结果取决于本机 vcpkg 安装。
 
 ### 2. 解析 C++ AST 并建立依赖图
 
-ClangSharp/libclang 将头文件解析为 C++ AST。生成器先寻找 `DeclOptions` 指定的声明，再递归分析：
+ClangSharp/libclang 将头文件解析为 C++ AST。生成器先寻找
+`OcctGenerationOptions.DeclOptions` 中指定的声明，再递归分析：
 
-Each `DeclOptions.FileName` selects the exact public header `<FileName>.hxx`; unrelated OCCT headers are not added to the relay translation unit.
+Each `OcctDeclarationOptions.FileName` selects the exact public header `<FileName>.hxx`; unrelated
+OCCT headers are not added to the relay translation unit.
 
 - 基类；
 - 字段类型；

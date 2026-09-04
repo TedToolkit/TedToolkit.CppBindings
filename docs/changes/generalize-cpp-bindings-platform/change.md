@@ -144,9 +144,10 @@ Scenario: Generate and run the representative OCCT binding after migration
 - [ADR-002](../../adr/ADR-002-cpp-bindings-platform.md) and the
   [C++ bindings platform architecture](../../architecture/cpp-bindings-platform.md) govern product
   identity, package allocation, and generic/provider dependency direction. The repository design
-  principles, generated binding architecture, Runtime/analyzer boundary, and ADR-001 continue to
-  govern exact generation, ownership, native loading, and failure behavior. Before completion their
-  current terminology must match the delivered platform without claiming CGAL support.
+  principles, generated binding architecture, Runtime/analyzer boundary, and ADR-003 govern exact
+  generation, ownership, native loading, and failure behavior. ADR-001 remains superseded historical
+  evidence. Before completion current terminology must match the delivered platform without claiming
+  CGAL support.
 - `TedToolkit.CppBindings.Runtime` owns only declaration-agnostic mechanisms. OCCT-specific
   intrusive reference counting, exception types, classifications, symbols, layouts, and generated
   sets stay in `TedToolkit.CppBindings.Occt.*`.

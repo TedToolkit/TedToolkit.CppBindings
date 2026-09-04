@@ -48,10 +48,9 @@ APIs use `TedToolkit.CppBindings.Occt`. `.Windows` identifies a concrete package
 generated API namespace. CGAL and other providers are added only by separate changes with real
 deliverables; symmetric empty projects are not architecture.
 
-This record governs product identity, package allocation, and generic/provider dependency direction
-where older OCCT-specific architecture records still describe the pre-migration implementation.
-Those records continue to govern exact layout, generation, native loading, ownership behavior, and
-failure boundaries until the migration updates their terminology.
+This record governs product identity, package allocation, and generic/provider dependency direction.
+The current generated-binding and analyzer-boundary records govern exact layout, generation, native
+loading, ownership behavior, diagnostics, and failure boundaries under the same platform identity.
 
 ## Constraints for change design
 
