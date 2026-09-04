@@ -273,14 +273,25 @@ internal sealed class CSharpGenerator(
         var storage = GetBitFieldStorageName(field);
         var storageType = GetUnsignedStorageType(field.Size);
         var type = field.Type.CSharpPInvokeType.ToCode();
+        var numericType = type switch
+        {
+            var name when name == DataType.FromType<CLong>().ToCode() => "int",
+            var name when name == DataType.FromType<CULong>().ToCode() => "uint",
+            _ => type,
+        };
         var mask = width is 64 ? ulong.MaxValue : (1UL << width) - 1;
         var bits = $"(((ulong){storage} >> {field.BitOffset}) & {mask}UL)";
-        var read = (field.IsSignedBitField, type) switch
+        var read = (field.IsSignedBitField, numericType) switch
         {
-            (true, _) => $"unchecked(({type})((long)({bits} << {64 - width}) >> {64 - width}))",
+            (true, _) => $"unchecked(({numericType})((long)({bits} << {64 - width}) >> {64 - width}))",
             (_, "bool") => $"{bits} != 0",
-            _ => $"unchecked(({type}){bits})",
+            _ => $"unchecked(({numericType}){bits})",
         };
+        if (numericType != type)
+        {
+            read = $"new {type}({read})";
+        }
+
         var property = Property(field.Type.CSharpPInvokeType, field.Name).Public
             .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
                 .AddArgument(Argument(field.Type.CppTypeName.ToLiteral())));
@@ -291,7 +302,8 @@ internal sealed class CSharpGenerator(
         property.AddAccessor(getter);
         if (!field.IsReadOnlyBitField)
         {
-            var value = type is "bool" ? "(value ? 1UL : 0UL)" : "unchecked((ulong)value)";
+            var numericValue = numericType != type ? "value.Value" : "value";
+            var value = type is "bool" ? "(value ? 1UL : 0UL)" : $"unchecked((ulong){numericValue})";
             var setter = Accessor(AccessorType.SET);
             setter.Statements.Add(new Custom(
                 $"{storage} = unchecked(({storageType})(((ulong){storage} & ~({mask}UL << {field.BitOffset}))"

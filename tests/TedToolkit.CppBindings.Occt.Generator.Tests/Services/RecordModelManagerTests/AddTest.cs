@@ -255,6 +255,30 @@ internal sealed class AddTest
     [Arguments("const unsigned Flag : 1;", "return value.Flag == 0;")]
     public async Task Should_preserve_native_bitfields_Async(string fields, string checks)
     {
+        await AssertNativeBitFieldsAsync(fields, checks, checks).ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies native long bitfields retain their platform-sized managed projection.
+    /// </summary>
+    /// <param name="fields">Native field declarations.</param>
+    /// <param name="managedChecks">Managed writes and observable checks.</param>
+    /// <param name="nativeChecks">Equivalent native writes and observable checks.</param>
+    /// <returns>A task representing the asynchronous test.</returns>
+    [Test]
+    [Arguments("long First : 3; unsigned long Last : 5;",
+        "value.First = new System.Runtime.InteropServices.CLong(7); value.Last = new System.Runtime.InteropServices.CULong(49U); return value.First.Value == -1 && value.Last.Value == 17;",
+        "value.First = 7; value.Last = 49; return value.First == -1 && value.Last == 17;")]
+    [Arguments("long First : 32; unsigned long Last : 32;",
+        "value.First = new System.Runtime.InteropServices.CLong(-2147483648); value.Last = new System.Runtime.InteropServices.CULong(0xffffffffU); return value.First.Value == -2147483648 && value.Last.Value == 0xffffffffU;",
+        "value.First = -2147483648; value.Last = 0xffffffffU; return value.First == -2147483648 && value.Last == 0xffffffffU;")]
+    public async Task Should_preserve_native_long_bitfields_Async(string fields, string managedChecks, string nativeChecks)
+    {
+        await AssertNativeBitFieldsAsync(fields, managedChecks, nativeChecks).ConfigureAwait(false);
+    }
+
+    private static async Task AssertNativeBitFieldsAsync(string fields, string checks, string nativeChecks)
+    {
         using var translationUnit = ParseTranslationUnit("struct Storage { " + fields + " };");
         var declaration = translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>().Single();
         var manager = CreateManager();
@@ -272,7 +296,9 @@ internal sealed class AddTest
         var returnIndex = checks.LastIndexOf("return ", StringComparison.Ordinal);
         var writes = checks[..returnIndex];
         var condition = checks[(returnIndex + 7)..].TrimEnd(';');
-        var nativeBytes = await GetNativeBitFieldBytesAsync(fields, writes, condition, record).ConfigureAwait(false);
+        var nativeReturnIndex = nativeChecks.LastIndexOf("return ", StringComparison.Ordinal);
+        var nativeBytes = await GetNativeBitFieldBytesAsync(fields, nativeChecks[..nativeReturnIndex],
+            nativeChecks[(nativeReturnIndex + 7)..].TrimEnd(';'), record).ConfigureAwait(false);
         var readOnly = record.FieldModels.Any(static field => field.IsReadOnlyBitField);
         var initialize = readOnly ? "" : "new System.Span<byte>(&value, sizeof(Storage)).Fill(0xa5);";
         var storageCheck = readOnly
