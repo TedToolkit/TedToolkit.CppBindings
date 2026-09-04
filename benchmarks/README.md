@@ -183,6 +183,45 @@ timing, build success, workload isolation, and resource evidence still come from
 Custom multi-object commands need a separate source inventory. These diagnostics are not a speedup
 claim, and historical verification builds are not benchmark samples.
 
+## OCCT workload plan
+
+`New-OcctBenchmarkPlan.ps1` freezes the approved five-workload OCCT matrix. It requires the exact
+baseline commit `e94f10a9bb9490d47363cf43d8ce17600b435b8a`, candidate behavior commit
+`9952e5a76358028c22c8ec215a23d7b82413ad4f`, clean repositories, prebuilt original and harmless
+generator-change hosts, equal-length isolated artifact and input roots, and a shared deadline.
+The initial plan intentionally retains `commit:PENDING-FINAL-HARNESS-COMMIT`; regenerate it with
+the final harness commit before execution. `Invoke-OcctBenchmarkWorkload.ps1` rejects that pending
+binding, so a template plan cannot accidentally become a performance run.
+
+The editable inputs are private physical copies of `installed/x64-windows/include` and the vcpkg
+status file. The real vcpkg root is used only as the CMake toolchain and must be a different path.
+Prepare and verify stages hash the live private-header inventory. Generator stages invoke the exact
+Console DLL directly with `dotnet <Console.dll> --output-root <isolated-root>`; they never call
+`Build/GenerateWindowsBindings.ps1` and therefore cannot be hidden by its generation cache.
+
+The generated stage plan has these fixed semantics:
+
+| Workload | Measured stages | Preparation and verification |
+| --- | --- | --- |
+| `artifact-cold` | generate, `cmake --fresh` configure, build | Remove only a marker-owned artifact root, then retain source and Ninja evidence |
+| `unchanged` | generate, build | Compare source manifests and Ninja-log delta; candidate must rewrite zero sources |
+| `declaration-edit` | generate, build | Apply one frozen header replacement in the private copy, verify a content delta, then restore canonical state outside timing |
+| `generator-change` | changed-host generate, build | Use a prebuilt immutable changed host, verify unchanged output content, then restore with the original host outside timing |
+| `missing-output` | generate, build | Delete one frozen `cpp/*.cpp`, verify restoration and the source/Ninja delta |
+
+All native builds use the declared fixed parallelism. Every sample receives manifests and parsed
+Ninja evidence through `{SampleRoot}`. `cmake --fresh` is rejected outside artifact-cold. Root
+ownership markers, immutable file bindings, reparse-point rejection, private-input inventory checks,
+and non-overwrite evidence make destructive or stale execution fail closed. This is experiment
+infrastructure only and grants no production-adoption authority.
+
+```powershell
+./benchmarks/Verify-OcctBenchmarkPlan.ps1
+```
+
+The verifier creates only tiny header/host/tool fixtures, generates a plan, and exercises matrix
+`-PlanOnly`; it does not run the OCCT generator or compile native code.
+
 ## Reference workload inventory
 
 The 2026-09-04 manifest of the previously verified isolated build contains 14,514 source/support
@@ -203,8 +242,8 @@ rollback, and file/directory transitions. It is correctness evidence, not a timi
 
 ## Remaining experiment work
 
-The paired execution control is implemented; actual OCCT workload preparation/verification commands,
-isolated prototypes, repeated measurements, native boundary comparison, generation per-file timings,
-sample-bound native command metrics, and the decision report remain unfinished. Resource reports and synthetic fixtures are not
+The paired execution control and OCCT workload adapter are implemented; prepared full-workload inputs,
+final harness binding, repeated measurements, native boundary comparison, generation per-file timings,
+and the decision report remain unfinished. Resource reports and synthetic fixtures are not
 timing samples. Do not count the earlier build-verification duration as a benchmark or recommend
 production adoption from it.
