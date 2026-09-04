@@ -407,8 +407,8 @@ foreach ($path in @($planPath, $inputManifestPath, $originalHeaderCopy, $changed
         $manifestTool, $ninjaMetricsTool, $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
         $statusFiles.baseline, $statusFiles.candidate)) { $null = $boundFiles.Add($path) }
 foreach ($variant in @('baseline', 'candidate')) {
-    foreach ($host in @($hosts[$variant].original, $hosts[$variant].changed)) {
-        foreach ($file in Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($host)) -Recurse -File) {
+    foreach ($generatorHost in @($hosts[$variant].original, $hosts[$variant].changed)) {
+        foreach ($file in Get-ChildItem -LiteralPath ([IO.Path]::GetDirectoryName($generatorHost)) -Recurse -File) {
             $null = $boundFiles.Add($file.FullName)
         }
     }
