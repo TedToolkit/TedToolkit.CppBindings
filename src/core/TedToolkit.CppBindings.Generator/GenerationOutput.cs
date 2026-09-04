@@ -5,6 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Buffers;
 using System.Text;
 using System.Text.RegularExpressions;
 
@@ -15,6 +16,10 @@ namespace TedToolkit.CppBindings.Generator;
 /// </summary>
 internal static class GenerationOutput
 {
+    private const int ComparisonBufferSize = 16 * 1024;
+
+    private static readonly SemaphoreSlim ComparisonSlots = new(Math.Max(1, Environment.ProcessorCount));
+
     private static readonly Regex Identifier = new(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant);
 
     private static readonly Regex DeviceName = new(
@@ -116,30 +121,34 @@ internal static class GenerationOutput
     }
 
     /// <summary>
-    /// Clears a dedicated root after rejecting filesystem links.
+    /// Removes stale output while retaining expected files after rejecting filesystem links.
     /// </summary>
     /// <param name="root">The validated output directory.</param>
-    internal static void Clean(DirectoryInfo root)
+    /// <param name="sources">The complete expected source inventory.</param>
+    internal static void Reconcile(DirectoryInfo root, IReadOnlyList<GeneratedSource> sources)
     {
         ValidateRoot(root.FullName);
         root.Create();
-        var entries = root.GetFileSystemInfos();
-        foreach (var entry in entries)
+        foreach (var entry in root.GetFileSystemInfos())
         {
             RejectLinks(entry);
         }
 
-        foreach (var entry in entries)
+        var expectedFiles = sources
+            .Select(source => Resolve(root, source.RelativePath))
+            .ToHashSet(StringComparer.OrdinalIgnoreCase);
+        var expectedDirectories = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
+        foreach (var path in expectedFiles)
         {
-            if (entry is DirectoryInfo directory)
+            for (var parent = Path.GetDirectoryName(path);
+                 parent is not null && IsBelow(parent, Path.TrimEndingDirectorySeparator(root.FullName));
+                 parent = Path.GetDirectoryName(parent))
             {
-                directory.Delete(recursive: true);
-            }
-            else
-            {
-                entry.Delete();
+                _ = expectedDirectories.Add(parent);
             }
         }
+
+        ReconcileDirectory(root, expectedFiles, expectedDirectories);
     }
 
     /// <summary>
@@ -165,14 +174,125 @@ internal static class GenerationOutput
         cancellationToken.ThrowIfCancellationRequested();
         var path = Resolve(root, source.RelativePath);
         _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 4096, useAsync: true);
-        await using (stream.ConfigureAwait(false))
+        var stagingPath = path + "." + Guid.NewGuid().ToString("N") + ".tmp";
+        try
         {
-            var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            await using (writer.ConfigureAwait(false))
+            var stream = new FileStream(stagingPath, FileMode.CreateNew, FileAccess.Write, FileShare.Read, 4096, useAsync: true);
+            await using (stream.ConfigureAwait(false))
             {
-                await source.RenderAsync(writer, cancellationToken).ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
+                var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
+                await using (writer.ConfigureAwait(false))
+                {
+                    await source.RenderAsync(writer, cancellationToken).ConfigureAwait(false);
+                    cancellationToken.ThrowIfCancellationRequested();
+                }
+            }
+
+            cancellationToken.ThrowIfCancellationRequested();
+            if (File.Exists(path) && await FilesEqualAsync(path, stagingPath, cancellationToken).ConfigureAwait(false))
+            {
+                File.Delete(stagingPath);
+            }
+            else
+            {
+                File.Move(stagingPath, path, overwrite: true);
+            }
+        }
+        finally
+        {
+            if (File.Exists(stagingPath))
+            {
+                File.Delete(stagingPath);
+            }
+        }
+    }
+
+    private static async Task<bool> FilesEqualAsync(
+        string firstPath,
+        string secondPath,
+        CancellationToken cancellationToken)
+    {
+        await ComparisonSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
+        var firstBuffer = ArrayPool<byte>.Shared.Rent(ComparisonBufferSize);
+        var secondBuffer = ArrayPool<byte>.Shared.Rent(ComparisonBufferSize);
+        try
+        {
+            var first = new FileStream(
+                firstPath,
+                FileMode.Open,
+                FileAccess.Read,
+                FileShare.Read,
+                ComparisonBufferSize,
+                useAsync: true);
+            await using (first.ConfigureAwait(false))
+            {
+                var second = new FileStream(
+                    secondPath,
+                    FileMode.Open,
+                    FileAccess.Read,
+                    FileShare.Read,
+                    ComparisonBufferSize,
+                    useAsync: true);
+                await using (second.ConfigureAwait(false))
+                {
+                    if (first.Length != second.Length)
+                    {
+                        return false;
+                    }
+
+                    while (true)
+                    {
+                        var firstRead = await first.ReadAsync(
+                            firstBuffer.AsMemory(0, ComparisonBufferSize), cancellationToken).ConfigureAwait(false);
+                        var secondRead = await second.ReadAsync(
+                            secondBuffer.AsMemory(0, ComparisonBufferSize), cancellationToken).ConfigureAwait(false);
+                        if (firstRead != secondRead
+                            || !firstBuffer.AsSpan(0, firstRead).SequenceEqual(secondBuffer.AsSpan(0, secondRead)))
+                        {
+                            return false;
+                        }
+
+                        if (firstRead == 0)
+                        {
+                            return true;
+                        }
+                    }
+                }
+            }
+        }
+        finally
+        {
+            ArrayPool<byte>.Shared.Return(firstBuffer);
+            ArrayPool<byte>.Shared.Return(secondBuffer);
+            _ = ComparisonSlots.Release();
+        }
+    }
+
+    private static void ReconcileDirectory(
+        DirectoryInfo directory,
+        IReadOnlySet<string> expectedFiles,
+        IReadOnlySet<string> expectedDirectories)
+    {
+        foreach (var entry in directory.GetFileSystemInfos())
+        {
+            if (entry is DirectoryInfo child && expectedDirectories.Contains(child.FullName))
+            {
+                ReconcileDirectory(child, expectedFiles, expectedDirectories);
+            }
+            else if (!expectedFiles.Contains(entry.FullName))
+            {
+                if (entry is DirectoryInfo staleDirectory)
+                {
+                    staleDirectory.Delete(recursive: true);
+                }
+                else
+                {
+                    entry.Delete();
+                }
+            }
+            else if (entry is DirectoryInfo fileConflict)
+            {
+                fileConflict.Delete(recursive: true);
             }
         }
     }

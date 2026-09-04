@@ -11,7 +11,7 @@ using ModularPipelines.Modules;
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
-/// Validates the completed provider plan before clearing dedicated generation output roots.
+/// Validates the completed provider plan before reconciling dedicated generation output roots.
 /// </summary>
 public sealed class CleanGenerationOutputModule : Module<bool>
 {
@@ -39,10 +39,10 @@ public sealed class CleanGenerationOutputModule : Module<bool>
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
-        _ = await _session.GetPlanAsync(cancellationToken).ConfigureAwait(false);
+        var plan = await _session.GetPlanAsync(cancellationToken).ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
-        GenerationOutput.Clean(_session.Options.CSharpFolder);
-        GenerationOutput.Clean(_session.Options.CppFolder);
+        GenerationOutput.Reconcile(_session.Options.CSharpFolder, plan.CSharpSources);
+        GenerationOutput.Reconcile(_session.Options.CppFolder, plan.CppSources);
         return true;
     }
 }
