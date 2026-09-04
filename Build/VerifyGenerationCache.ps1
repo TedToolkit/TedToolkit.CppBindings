@@ -2,7 +2,7 @@ $ErrorActionPreference = 'Stop'
 $coordinator = Join-Path $PSScriptRoot 'GenerateWindowsBindings.ps1'
 $testRoot = Join-Path ([IO.Path]::GetTempPath()) ('occt-generation-proof-' + [Guid]::NewGuid().ToString('N'))
 $generatedRoot = Join-Path $testRoot 'output\generated'
-$state = @{ Generations = 0; FailNative = $false }
+$state = @{ Generations = 0; FailNative = $false; WarnNativePaths = $false; NativeBuilds = 0 }
 $originalComSpec = $env:COMSPEC
 $originalPath = $env:PATH
 $probeName = 'OCCT_ENV_PROOF_' + [Guid]::NewGuid().ToString('N')
@@ -31,6 +31,12 @@ function dotnet {
 }
 
 function cmake {
+    if ($args -contains '--build') { $state.NativeBuilds++ }
+    if ($state.WarnNativePaths) {
+        'CMake Warning: object file cannot be safely placed under this directory.'
+        $global:LASTEXITCODE = 0
+        return
+    }
     if ($state.SyntheticEnvironment -and
         ($env:PATH -cne "$originalPath;last" -or
             [Environment]::GetEnvironmentVariable($probeName, 'Process') -cne 'last')) {
@@ -66,7 +72,7 @@ function Invoke-Coordinator {
 
 try {
     $env:COMSPEC = 'Invoke-TestCompilerEnvironment'
-    $sourceRoot = Join-Path $testRoot 'src\core\TedToolkit.Occt.Generator'
+    $sourceRoot = Join-Path $testRoot 'src\core\TedToolkit.CppBindings.Generator'
     New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
     $source = Join-Path $sourceRoot 'Input.cs'
     Set-Content -LiteralPath $source -Value 'first input'
@@ -128,6 +134,14 @@ try {
     Remove-Item -LiteralPath $stamp
     Invoke-Coordinator
     Assert-GenerationCount 11 'Real compiler environment restoration'
+    Remove-Item -LiteralPath $stamp
+    $state.WarnNativePaths = $true
+    $nativeBuilds = $state.NativeBuilds
+    $failed = $false
+    try { Invoke-Coordinator } catch { $failed = $_.Exception.Message -like '*compiler budget*' }
+    if (-not $failed -or $state.NativeBuilds -ne $nativeBuilds -or (Test-Path -LiteralPath $stamp)) {
+        throw 'Unsafe object paths must fail during configuration, before native compilation or stamp publication.'
+    }
     Write-Output 'Generation cache proof passed: cold, unchanged, missing/empty managed, missing native, changed/deleted input, failed build, failed output recovery, retry and duplicate-case/real compiler environment restoration.'
 }
 finally {

@@ -21,7 +21,7 @@ $resolvedGeneratedRoot = [IO.Path]::GetFullPath($GeneratedRoot)
 $mutexHash = [Convert]::ToHexString(
     [Security.Cryptography.SHA256]::HashData(
         [Text.Encoding]::UTF8.GetBytes($resolvedGeneratedRoot)))
-$mutex = [Threading.Mutex]::new($false, "Local\TedToolkit.Occt.Windows.$mutexHash")
+$mutex = [Threading.Mutex]::new($false, "Local\TedToolkit.CppBindings.Occt.Windows.$mutexHash")
 $previousEnvironment = @{}
 
 try {
@@ -36,9 +36,10 @@ try {
     $manifestPath = Join-Path $resolvedGeneratedRoot "native-build\$Configuration\managed-files.txt"
     $nativeLibraryPath = Join-Path $resolvedGeneratedRoot "native-build\$Configuration\ted_toolkit_occt.dll"
     $generatorInputRoots = @(
-        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.Occt.Generator'),
-        (Join-Path $resolvedRepositoryRoot 'tests\TedToolkit.Occt.Console'),
-        (Join-Path $resolvedRepositoryRoot 'src\tools\TedToolkit.Occt.Analyzer'),
+        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.CppBindings.Generator'),
+        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.CppBindings.Occt.Generator'),
+        (Join-Path $resolvedRepositoryRoot 'tests\TedToolkit.CppBindings.Occt.Console'),
+        (Join-Path $resolvedRepositoryRoot 'src\tools\TedToolkit.CppBindings.Occt.SourceGenerators'),
         (Join-Path $resolvedRepositoryRoot 'externals\TedToolkit\TedToolkit.RoslynHelper'),
         (Join-Path $resolvedRepositoryRoot 'externals\TedToolkit\props')
     )
@@ -51,7 +52,7 @@ try {
         (Join-Path $resolvedRepositoryRoot 'Directory.Build.props'),
         (Join-Path $resolvedRepositoryRoot 'Directory.Build.targets'),
         (Join-Path $resolvedRepositoryRoot 'Directory.Packages.props'),
-        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.Occt.Windows\TedToolkit.Occt.Windows.csproj'),
+        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.CppBindings.Occt.Windows\TedToolkit.CppBindings.Occt.Windows.csproj'),
         (Join-Path $VcpkgRoot 'installed\vcpkg\status')
     ) | Where-Object { Test-Path -LiteralPath $_ } | Get-Item
     $inputHashes = @($inputFiles | Sort-Object -Property FullName -Unique | ForEach-Object {
@@ -86,7 +87,7 @@ try {
         Remove-Item -LiteralPath $stampPath
     }
 
-    & dotnet $GeneratorHost
+    & dotnet $GeneratorHost --output-root $resolvedGeneratedRoot
     if ($LASTEXITCODE -ne 0) {
         throw "The OCCT generator exited with code $LASTEXITCODE."
     }
@@ -129,9 +130,14 @@ try {
         [Environment]::SetEnvironmentVariable($entry.Key, $entry.Value, 'Process')
     }
 
-    & cmake --fresh -G 'Ninja Multi-Config' -Wno-unused-cli -S "$resolvedGeneratedRoot\cpp" -B "$resolvedGeneratedRoot\native-build" "-DCMAKE_MAKE_PROGRAM=$($toolchain.Ninja)" "-DCMAKE_CXX_COMPILER=$($toolchain.Compiler)" "-DCMAKE_TOOLCHAIN_FILE=$VcpkgRoot\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_APPLOCAL_DEPS=OFF
-    if ($LASTEXITCODE -ne 0) {
-        throw "CMake configuration exited with code $LASTEXITCODE."
+    $configureOutput = @(& cmake --fresh -G 'Ninja Multi-Config' -Wno-unused-cli -S "$resolvedGeneratedRoot\cpp" -B "$resolvedGeneratedRoot\native-build" "-DCMAKE_MAKE_PROGRAM=$($toolchain.Ninja)" "-DCMAKE_CXX_COMPILER=$($toolchain.Compiler)" "-DCMAKE_TOOLCHAIN_FILE=$VcpkgRoot\scripts\buildsystems\vcpkg.cmake" -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_APPLOCAL_DEPS=OFF 2>&1)
+    $configureExit = $LASTEXITCODE
+    $configureOutput | Write-Output
+    if ($configureExit -ne 0) {
+        throw "CMake configuration exited with code $configureExit."
+    }
+    if (($configureOutput -join "`n") -match 'cannot be safely placed') {
+        throw 'The native object paths exceed the compiler budget. Use a shorter GeneratedRoot before compiling.'
     }
 
     & cmake --build "$resolvedGeneratedRoot\native-build" --config $Configuration --parallel 8

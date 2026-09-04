@@ -10,6 +10,7 @@
     <PackageVersion Include="libClangSharp.runtime.win-x64" Version="21.1.8.2" />
     <PackageVersion Include="ModularPipelines" Version="3.2.8" />
     <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <PackageVersion Include="Sourcy.DotNet" Version="1.1.1" />
     <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.6.19" />
     <PackageVersion Include="TUnit" Version="1.54.0" />

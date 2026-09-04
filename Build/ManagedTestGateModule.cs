@@ -45,7 +45,7 @@ public sealed class ManagedTestGateModule(
             ?? throw new InvalidOperationException("The repository root could not be resolved.");
         var projects = new[]
         {
-            "tests/TedToolkit.Occt.Generator.Tests/TedToolkit.Occt.Generator.Tests.csproj",
+            "tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj",
             "tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBindings.Runtime.Tests.csproj",
             "tests/TedToolkit.CppBindings.Analyzers.Tests/TedToolkit.CppBindings.Analyzers.Tests.csproj",
         }.Select(path => new FileInfo(Path.Combine(root.FullName, path))).ToArray();

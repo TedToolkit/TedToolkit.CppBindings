@@ -41,7 +41,7 @@ public sealed class WindowsBindingsModule(
         }
 
         var configuration = options.Value.Configuration;
-        var hostDirectory = Path.Combine(root.FullName, "tests", "TedToolkit.Occt.Console");
+        var hostDirectory = Path.Combine(root.FullName, "tests", "TedToolkit.CppBindings.Occt.Console");
         await BuildProcess.RunAsync(
                 "pwsh",
                 ["-NoProfile", "-File", Path.Combine(root.FullName, "Build", "VerifyGenerationCache.ps1"),],
@@ -50,7 +50,7 @@ public sealed class WindowsBindingsModule(
             .ConfigureAwait(false);
         await BuildProcess.RunAsync(
                 "dotnet",
-                ["build", Path.Combine(hostDirectory, "TedToolkit.Occt.Console.csproj"), "-c", configuration,],
+                ["build", Path.Combine(hostDirectory, "TedToolkit.CppBindings.Occt.Console.csproj"), "-c", configuration,],
                 root.FullName,
                 cancellationToken)
             .ConfigureAwait(false);
@@ -59,7 +59,7 @@ public sealed class WindowsBindingsModule(
                 [
                     "-NoProfile", "-File", Path.Combine(root.FullName, "Build", "GenerateWindowsBindings.ps1"),
                     "-RepositoryRoot", root.FullName,
-                    "-GeneratorHost", Path.Combine(hostDirectory, "bin", configuration, "net10.0", "TedToolkit.Occt.Console.dll"),
+                    "-GeneratorHost", Path.Combine(hostDirectory, "bin", configuration, "net10.0", "TedToolkit.CppBindings.Occt.Console.dll"),
                     "-GeneratedRoot", Path.Combine(root.FullName, "output", "generated"),
                     "-VcpkgRoot", vcpkgRoot,
                     "-Configuration", configuration,

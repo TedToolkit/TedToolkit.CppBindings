@@ -1,0 +1,36 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <Title>TedToolkit C++ Bindings OCCT Generator</Title>
+    <Description>Generate exact-layout managed and native OCCT bindings through the reusable C++ bindings platform.</Description>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
+    <ProjectReference Include="..\..\tools\TedToolkit.CppBindings.Occt.SourceGenerators\TedToolkit.CppBindings.Occt.SourceGenerators.csproj"
+                      ReferenceOutputAssembly="false" PrivateAssets="all" />
+    <EmbeddedResource Include="Resources\UnsupportedNativeExports.txt" />
+    <PackageReference Include="ClangSharp" />
+    <PackageReference Include="libclang.runtime.win-x64" />
+    <PackageReference Include="libClangSharp.runtime.win-x64" />
+    <PackageReference Include="ModularPipelines" />
+    <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
+    <None Include="..\..\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\TedToolkit.CppBindings.Occt.SourceGenerators.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" PrivateAssets="All" />
+    <None Include="..\..\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\TedToolkit.RoslynHelper.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" PrivateAssets="All" />
+    <None Include="..\..\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\ZString.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" PrivateAssets="All" />
+    <None Include="..\..\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\System.Memory.dll" Pack="true" PackagePath="analyzers/dotnet/cs" Visible="false" PrivateAssets="All" />
+    <PackageReference Include="TedToolkit.RoslynHelper" />
+    <PackageReference Include="ZString" />
+  </ItemGroup>
+
+  <Target Name="ExcludePublicModuleHelpers" BeforeTargets="CoreCompile">
+    <ItemGroup>
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'ModularPipelines.SourceGenerator'" />
+    </ItemGroup>
+  </Target>
+
+</Project>

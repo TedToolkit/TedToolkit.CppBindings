@@ -13,9 +13,9 @@ var pipeline = new TedPipeline(
     {
         BuildFiles =
         [
-            Solutions.TedToolkit_Occt,
+            Solutions.TedToolkit_CppBindings,
         ],
-        Solution = Solutions.TedToolkit_Occt,
+        Solution = Solutions.TedToolkit_CppBindings,
         TestFiles = [],
     },
     new FileInfo(Path.Combine(Projects.Build.Directory!.FullName, "appsettings.json")));

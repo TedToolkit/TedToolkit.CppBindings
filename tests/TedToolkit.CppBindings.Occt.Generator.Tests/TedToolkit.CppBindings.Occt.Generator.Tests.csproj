@@ -1,0 +1,22 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <NoWarn>$(NoWarn);RCS1046</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <Compile Remove="Fixtures\**\*.cs" />
+    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Generator\TedToolkit.CppBindings.Occt.Generator.csproj" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <PackageReference Include="TUnit" />
+    <PackageReference Include="TUnit.Mocks" />
+  </ItemGroup>
+
+</Project>
