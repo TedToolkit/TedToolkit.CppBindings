@@ -8,6 +8,22 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+function Assert-StageArgumentTemplates {
+    param([string[]] $Arguments)
+
+    $placeholders = @('{SampleRoot}', '{Sequence}', '{Workload}', '{Variant}', '{Repetition}', '{IsWarmup}')
+    foreach ($argument in $Arguments) {
+        if ($argument -match '^\{[^{}]+\}$' -and $argument -cnotin $placeholders) {
+            throw "Unknown sample placeholder: $argument"
+        }
+        foreach ($placeholder in $placeholders) {
+            if ($argument -cne $placeholder -and $argument.Contains($placeholder, [StringComparison]::Ordinal)) {
+                throw "Sample placeholders must occupy a whole stage argument: $argument"
+            }
+        }
+    }
+}
+
 function Read-StageGroup {
     param($Paths, [string] $Group)
 
@@ -24,6 +40,7 @@ function Read-StageGroup {
             @($value.Arguments | Where-Object { $_ -isnot [string] }).Count -gt 0) {
             throw 'Stage arguments must be a JSON string array.'
         }
+        Assert-StageArgumentTemplates $value.Arguments
         if ($value.TimeLimitSeconds -isnot [long] -or $value.TimeLimitSeconds -lt 1 -or
             $value.TimeLimitSeconds -gt 43200) { throw 'Invalid stage time limit.' }
         $null = Get-Command $value.Executable -CommandType Application -ErrorAction Stop
@@ -39,6 +56,27 @@ function Assert-Bindings {
         if ((Get-FileHash -LiteralPath $path -Algorithm SHA256).Hash -cne $Bindings[$path]) {
             throw "Input changed; rebaseline before sampling: $path"
         }
+    }
+}
+
+function Expand-StageArguments {
+    param([string[]] $Arguments, $Entry, [string] $SampleRoot)
+
+    $values = @{
+        '{SampleRoot}' = $SampleRoot
+        '{Sequence}' = $Entry.Sequence.ToString([Globalization.CultureInfo]::InvariantCulture)
+        '{Workload}' = $Entry.Workload
+        '{Variant}' = $Entry.Variant
+        '{Repetition}' = $Entry.Repetition.ToString([Globalization.CultureInfo]::InvariantCulture)
+        '{IsWarmup}' = ([bool] $Entry.IsWarmup).ToString().ToLowerInvariant()
+    }
+    Assert-StageArgumentTemplates $Arguments
+    foreach ($argument in $Arguments) {
+        if ($values.ContainsKey($argument)) {
+            $values[$argument]
+            continue
+        }
+        $argument
     }
 }
 
@@ -73,6 +111,7 @@ function Invoke-Sample {
             $phaseName = '{0}-{1:D2}' -f $group, $index++
             $phase = $stage.Specification.Clone()
             $phase.Label = "$($Entry.Workload)/$($Entry.Variant)/$($Entry.Repetition)/$phaseName"
+            $phase.Arguments = @(Expand-StageArguments $phase.Arguments $Entry $sampleRoot)
             $phase.DeadlineUtc = $deadline.ToString('O')
             $phase.MemoryLimitBytes = $spec.MemoryLimitBytes
             $phasePath = Join-Path $sampleRoot ($phaseName + '.json')
@@ -175,6 +214,7 @@ foreach ($workload in $spec.Workloads) {
         }
     }
 }
+Assert-Bindings $bindings
 $null = New-Item -ItemType Directory -Path $destination
 Write-Evidence (Join-Path $destination 'plan.json') ([ordered]@{
     SchemaVersion = 1; Scope = $spec.Scope; DeadlineUtc = $deadline.ToString('O')
@@ -208,7 +248,7 @@ $statistics = @($samples | Where-Object { -not $_.IsWarmup } |
 Write-Evidence (Join-Path $destination 'result.json') ([ordered]@{
     SchemaVersion = 1; Succeeded = $null -eq $failure; Failure = $failure
     DeadlineUtc = $deadline.ToString('O'); CompletedSamples = $samples.Count
-    Samples = @($samples.ToArray()); Statistics = $statistics
+    Bindings = $bindings; Samples = @($samples.ToArray()); Statistics = $statistics
     Limitations = @(
         'Warmups are retained for diagnosis but excluded from statistics. Setup and verification are not timed stages.',
         'Stage sums are not end-to-end elapsed time; inspect individual stage logs and sampled counters.',

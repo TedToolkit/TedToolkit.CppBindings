@@ -25,11 +25,13 @@ function New-MatrixFixture {
     $successPath = Join-Path $root 'success-stage.json'
     $verifyPath = Join-Path $root 'verify-stage.json'
     $stage = @{
-        Executable = $pwshPath; Arguments = @('success')
+        Executable = $pwshPath
+        Arguments = @('success', '{SampleRoot}', '{Sequence}', '{Workload}', '{Variant}', '{Repetition}', '{IsWarmup}')
         WorkingDirectory = $root; TimeLimitSeconds = 20
     }
     $stage | ConvertTo-Json | Set-Content -LiteralPath $successPath -Encoding utf8
-    $stage.Arguments = @($VerifyMode, $inputPath)
+    $stage.Arguments = @($VerifyMode, $inputPath, '{SampleRoot}', '{Sequence}', '{Workload}', '{Variant}',
+        '{Repetition}', '{IsWarmup}')
     $stage | ConvertTo-Json | Set-Content -LiteralPath $verifyPath -Encoding utf8
     $variant = @{ Prepare = @($successPath); Measure = @($successPath); Verify = @($verifyPath) }
     $workloads = @('artifact-cold', 'unchanged', 'declaration-edit', 'generator-change', 'missing-output') |
@@ -71,6 +73,31 @@ if (-not $result.Succeeded -or $result.CompletedSamples -ne 56 -or $result.Stati
     throw 'The full paired schedule did not finish.'
 }
 if (@($result.Samples | Where-Object IsWarmup).Count -ne 10) { throw 'Warmup accounting failed.' }
+$planBindings = @($plan.Bindings.PSObject.Properties)
+$resultBindings = @($result.Bindings.PSObject.Properties)
+if ($planBindings.Count -eq 0 -or $resultBindings.Count -ne $planBindings.Count) {
+    throw 'The final result did not retain the exact plan bindings.'
+}
+foreach ($binding in $planBindings) {
+    if ($result.Bindings.PSObject.Properties[$binding.Name].Value -cne $binding.Value) {
+        throw 'The final result changed a plan binding.'
+    }
+}
+$warmupPhase = Get-Content -LiteralPath (Join-Path $happy.Report '000-artifact-cold-baseline/Prepare-00.json') -Raw |
+    ConvertFrom-Json
+$nextVariantPhase = Get-Content -LiteralPath (Join-Path $happy.Report '001-artifact-cold-candidate/Prepare-00.json') -Raw |
+    ConvertFrom-Json
+$recordedPhase = Get-Content -LiteralPath (Join-Path $happy.Report '002-artifact-cold-candidate/Prepare-00.json') -Raw |
+    ConvertFrom-Json
+$expectedWarmupRoot = Join-Path $happy.Report '000-artifact-cold-baseline'
+if ($warmupPhase.Arguments[1] -cne $expectedWarmupRoot -or $warmupPhase.Arguments[2] -cne '0' -or
+    $warmupPhase.Arguments[3] -cne 'artifact-cold' -or $warmupPhase.Arguments[4] -cne 'baseline' -or
+    $warmupPhase.Arguments[5] -cne '0' -or $warmupPhase.Arguments[6] -cne 'true' -or
+    $nextVariantPhase.Arguments[1] -ceq $warmupPhase.Arguments[1] -or
+    $recordedPhase.Arguments[2] -cne '2' -or $recordedPhase.Arguments[4] -cne 'candidate' -or
+    $recordedPhase.Arguments[5] -cne '1' -or $recordedPhase.Arguments[6] -cne 'false') {
+    throw 'Sample placeholders were not expanded into unique exact sample context.'
+}
 foreach ($group in ($plan.Schedule | Group-Object Workload)) {
     $rows = @($group.Group)
     for ($index = 0; $index -lt $rows.Count; $index += 2) {
@@ -103,7 +130,8 @@ Invoke-Fixture $planOnly '' -PlanOnly
 if (Test-Path -LiteralPath (Join-Path $planOnly.Report 'result.json')) { throw 'Planning produced a measurement result.' }
 if (@(Get-ChildItem -LiteralPath $planOnly.Report -Directory).Count -ne 0) { throw 'Planning ran a sample.' }
 
-foreach ($case in @('few-warm', 'few-cold', 'duplicate', 'no-verify', 'wrong-hash', 'expired', 'extended')) {
+foreach ($case in @('few-warm', 'few-cold', 'duplicate', 'no-verify', 'wrong-hash', 'expired', 'extended',
+        'unknown-placeholder', 'embedded-placeholder')) {
     $fixture = New-MatrixFixture $case
     $expected = switch ($case) {
         'few-warm' { $fixture.Specification.Workloads[1].Samples = 4; 'Invalid sample count*' }
@@ -113,6 +141,20 @@ foreach ($case in @('few-warm', 'few-cold', 'duplicate', 'no-verify', 'wrong-has
         'wrong-hash' { $fixture.Specification.InputFiles[0].Sha256 = ('0' * 64); 'Input changed*' }
         'expired' { $fixture.Specification.DeadlineUtc = [DateTimeOffset]::UtcNow.AddMinutes(-1).ToString('O'); '*shared, unexpired experiment deadline*' }
         'extended' { $fixture.Specification.DeadlineUtc = [DateTimeOffset]::UtcNow.AddHours(13).ToString('O'); '*shared, unexpired experiment deadline*' }
+        'unknown-placeholder' {
+            $stage = Get-Content -LiteralPath $fixture.Specification.Workloads[0].baseline.Prepare[0] -Raw |
+                ConvertFrom-Json -AsHashtable
+            $stage.Arguments = @('success', '{Unknown}')
+            $stage | ConvertTo-Json | Set-Content -LiteralPath $fixture.Specification.Workloads[0].baseline.Prepare[0] -Encoding utf8
+            'Unknown sample placeholder*'
+        }
+        'embedded-placeholder' {
+            $stage = Get-Content -LiteralPath $fixture.Specification.Workloads[0].baseline.Prepare[0] -Raw |
+                ConvertFrom-Json -AsHashtable
+            $stage.Arguments = @('success', "prefix-{SampleRoot}")
+            $stage | ConvertTo-Json | Set-Content -LiteralPath $fixture.Specification.Workloads[0].baseline.Prepare[0] -Encoding utf8
+            'Sample placeholders must occupy a whole stage argument*'
+        }
     }
     Invoke-Fixture $fixture $expected -PlanOnly
     if (Test-Path -LiteralPath $fixture.Report) { throw 'Invalid specification created execution artifacts.' }
@@ -150,4 +192,4 @@ if ($RealProcess) {
         $phase.ProcessElapsedSeconds -le 0) { throw 'The actual stage failure did not invalidate the sample.' }
     Write-Output 'Real process integration passed: actual process capture and failing verification reject the sample.'
 }
-Write-Output "Matrix proof passed: paired schedule, warmup exclusion, budget sharing, evidence guard, plan-only, seven invalid plans and three fail-closed runs. Fixture-only evidence: $proofRoot"
+Write-Output "Matrix proof passed: paired schedule, exact sample placeholders, retained bindings, warmup exclusion, budget sharing, evidence guard, plan-only, nine invalid plans and three fail-closed runs. Fixture-only evidence: $proofRoot"
