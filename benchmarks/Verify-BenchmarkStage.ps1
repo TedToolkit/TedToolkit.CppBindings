@@ -179,8 +179,9 @@ try { & $runner -SpecificationPath $preHungSpec -ReportDirectory $preHungReport 
 catch { $preHungFailure = $_.Exception.Message }
 $preHungResult = Get-Content -LiteralPath (Join-Path $preHungReport 'result.json') -Raw | ConvertFrom-Json
 $preHungOutput = Get-Content -LiteralPath (Join-Path $preHungReport 'pre-validation-stdout.log') -Raw
-if ($preHungOutput -notmatch 'child:(\d+)') { throw 'The hung validation descendant did not start.' }
-$preHungChildId = [int] $Matches[1]
+$preHungChildMatch = [regex]::Match($preHungOutput, 'child:(\d+)')
+if (-not $preHungChildMatch.Success) { throw 'The hung validation descendant did not start.' }
+$preHungChildId = [int] $preHungChildMatch.Groups[1].Value
 if ($preHungFailure -notlike '*Pre-measurement validation or experiment time budget was exceeded*' -or
     $preHungResult.PreMeasurementValidation.Succeeded -or
     $preHungResult.PreMeasurementValidation.IncludedInMeasuredTime -or
