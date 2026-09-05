@@ -29,8 +29,11 @@ if ($declarations.Count -eq 0 -or $declarations.Count -ne $slots.Count -or
 if ($text -notmatch 'extern "C" __declspec\(dllexport\) const std::uintptr_t\* NativeApi_GetFunctionTable\(\) noexcept') {
     throw 'NativeFunctionTable.cpp is missing the sole function-table export.'
 }
-if (@($declarations | Sort-Object -Unique).Count -ne $declarations.Count) {
-    throw 'NativeFunctionTable.cpp contains duplicate slots.'
+$uniqueDeclarations = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+foreach ($declaration in $declarations) {
+    if (-not $uniqueDeclarations.Add($declaration)) {
+        throw 'NativeFunctionTable.cpp contains duplicate slots.'
+    }
 }
 
 $comparison = $null

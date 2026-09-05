@@ -292,9 +292,15 @@ function Read-ExportInventory {
     $resolved = Resolve-ExistingPath $Path file
     $value = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json -AsHashtable -DateKind String
     if ($value.SchemaVersion -ne 1 -or $value.ExportCount -le 0 -or $value.Exports -isnot [array] -or
-        $value.Exports.Count -ne $value.ExportCount -or
-        @($value.Exports | Sort-Object -Unique).Count -ne $value.Exports.Count) {
+        $value.Exports.Count -ne $value.ExportCount) {
         throw "Invalid canonical export inventory: $resolved"
+    }
+    $uniqueExports = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+    foreach ($export in $value.Exports) {
+        if ($export -isnot [string] -or [string]::IsNullOrWhiteSpace($export) -or
+            -not $uniqueExports.Add($export)) {
+            throw "Invalid canonical export inventory: $resolved"
+        }
     }
     return [pscustomobject]@{ Path = $resolved; Value = $value }
 }
