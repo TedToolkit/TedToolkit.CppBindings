@@ -9,8 +9,8 @@
 - Applicable principles: [GEN-01 through GEN-04](../principles/README.md)
 - Supersedes: [ADR-001](ADR-001-native-release-binding/README.md)
 - Superseded by: None
-- Approval source: The maintainer explicitly approved preserving the verified `NativeLibrary` and
-  native pointer-table direction and authorized this replacement ADR with "批准。" on 2026-09-05.
+- Approval source: On 2026-09-05, the maintainer explicitly approved preserving the verified
+  `NativeLibrary` and native pointer-table direction and authorized this replacement ADR.
 
 ## Decision at a glance
 

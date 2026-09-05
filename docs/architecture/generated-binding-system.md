@@ -9,9 +9,8 @@
 - Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
 - Related ADR: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md)
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26;
-  declaration-level alignment admission clarified and approved on 2026-09-04 with "是的，继续。";
-  cyclic handle field reference projection approved on 2026-09-04 with "同意。";
-  ordinary overlapping-field reference projection approved on 2026-09-05 with "批准。".
+  declaration-level alignment admission and cyclic handle field reference projection approved on
+  2026-09-04; ordinary overlapping-field reference projection approved on 2026-09-05.
 
 ## Current architecture
 

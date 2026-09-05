@@ -7,7 +7,7 @@ $proofRoot = Join-Path $repository ('out/benchmark/stage-proof-' + [Guid]::NewGu
 $null = New-Item -ItemType Directory -Path $proofRoot
 $deadline = [DateTimeOffset]::UtcNow.AddMinutes(5).ToString('O')
 $pwshPath = (Get-Process -Id $PID).Path
-$argument = 'quoted "value" with spaces, Unicode 测试, and literal $()'
+$argument = 'quoted "value" with spaces, Unicode naïve Ω, and literal $()'
 
 # Exercise cleanup against an archived CIM row whose nullable CreationDate is no longer
 # available. The identity captured as the hashtable key is the durable comparison source.

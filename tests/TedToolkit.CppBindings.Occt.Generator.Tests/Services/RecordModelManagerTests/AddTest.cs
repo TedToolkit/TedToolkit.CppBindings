@@ -1908,7 +1908,8 @@ internal sealed class AddTest
     }
 
     /// <summary>
-    /// 验证左值引用、右值引用和指针参数在 PInvoke 签名一致时会折叠为一个方法。
+    /// Verifies that lvalue-reference, rvalue-reference, and pointer parameters collapse into one
+    /// method when their P/Invoke signatures match.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
@@ -1945,7 +1946,8 @@ internal sealed class AddTest
     }
 
     /// <summary>
-    /// 验证赋值类操作符会标记为返回自身以匹配 pinvoke 包装。
+    /// Verifies that assignment-like operators are marked as returning self to match the P/Invoke
+    /// wrapper.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
     [Test]
