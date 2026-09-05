@@ -180,7 +180,7 @@ $preHungSignalPath = Join-Path $proofRoot 'pre-validation-child.pid'
         Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'tree', '-Value', '',
             '-SignalPath', $preHungSignalPath)
         WorkingDirectory = $proofRoot
-        TimeLimitSeconds = 1
+        TimeLimitSeconds = 3
     }
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $preHungSpec -Encoding utf8
 $preHungFailure = $null
