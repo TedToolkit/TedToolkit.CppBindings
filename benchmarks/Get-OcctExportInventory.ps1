@@ -7,6 +7,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+. (Join-Path $PSScriptRoot 'OcctExportInventory.ps1')
 $source = (Resolve-Path -LiteralPath $SourcePath).Path
 $report = [IO.Path]::GetFullPath($ReportPath)
 if (Test-Path -LiteralPath $report) { throw 'Refusing to overwrite an export inventory.' }
@@ -22,8 +23,7 @@ foreach ($line in $text.Split("`n")) {
         $slots.Add($Matches[1])
     }
 }
-if ($declarations.Count -eq 0 -or $declarations.Count -ne $slots.Count -or
-    (@($declarations) -join "`n") -cne (@($slots) -join "`n")) {
+if ($declarations.Count -eq 0 -or -not (Test-OcctExportSequenceEqual $declarations $slots)) {
     throw 'NativeFunctionTable.cpp does not contain one matching ordered declaration/slot inventory.'
 }
 if ($text -notmatch 'extern "C" __declspec\(dllexport\) const std::uintptr_t\* NativeApi_GetFunctionTable\(\) noexcept') {
@@ -38,13 +38,13 @@ foreach ($declaration in $declarations) {
 
 $comparison = $null
 if ($CompareTo) {
-    $previous = Get-Content -LiteralPath $CompareTo -Raw | ConvertFrom-Json
-    if ($previous.SchemaVersion -ne 1 -or $previous.Exports.Count -eq 0) {
+    try { $previous = Read-OcctExportInventoryFile $CompareTo }
+    catch {
         throw 'The comparison export inventory is invalid.'
     }
     $comparison = [ordered]@{
         PreviousInventorySha256 = (Get-FileHash -LiteralPath $CompareTo -Algorithm SHA256).Hash
-        EqualOrderedExports = (@($previous.Exports) -join "`n") -ceq (@($declarations) -join "`n")
+        EqualOrderedExports = Test-OcctExportSequenceEqual $previous.Exports $declarations
     }
 }
 

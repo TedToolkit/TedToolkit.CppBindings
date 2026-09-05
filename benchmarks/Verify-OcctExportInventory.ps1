@@ -30,6 +30,11 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
 "@, [Text.UTF8Encoding]::new($false))
 }
 
+function Copy-Inventory {
+    param($Value)
+    return $Value | ConvertTo-Json -Depth 6 | ConvertFrom-Json -AsHashtable -DateKind String
+}
+
 $source = Join-Path $proofRoot 'NativeFunctionTable.cpp'
 $reorderedSource = Join-Path $proofRoot 'NativeFunctionTable.reordered.cpp'
 $duplicateSource = Join-Path $proofRoot 'NativeFunctionTable.duplicate.cpp'
@@ -55,6 +60,40 @@ if (-not $matching.Comparison.EqualOrderedExports) { throw 'An exact ordered exp
 $reordered = Get-Content -LiteralPath $reorderedPath -Raw | ConvertFrom-Json
 if ($reordered.Comparison.EqualOrderedExports) { throw 'Export order changes were not detected exactly.' }
 
+$validInventory = Get-Content -LiteralPath $inventoryPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
+$malformedCases = [ordered]@{}
+$malformedCases['count-mismatch'] = Copy-Inventory $validInventory
+$malformedCases['count-mismatch'].ExportCount = 3L
+$malformedCases['non-integer-count'] = Copy-Inventory $validInventory
+$malformedCases['non-integer-count'].ExportCount = 2.5
+$malformedCases['negative-count'] = Copy-Inventory $validInventory
+$malformedCases['negative-count'].ExportCount = -1L
+$malformedCases['non-string'] = Copy-Inventory $validInventory
+$malformedCases['non-string'].Exports = @('Fixture_case', 7L)
+$malformedCases['invalid-identifier'] = Copy-Inventory $validInventory
+$malformedCases['invalid-identifier'].Exports = @('Fixture-case', 'Fixture_Case')
+$malformedCases['newline-delimiter-collision'] = Copy-Inventory $validInventory
+$malformedCases['newline-delimiter-collision'].Exports = @("Fixture_case`nFixture_Case")
+$malformedCases['newline-delimiter-collision'].ExportCount = 1L
+$malformedCases['unexpected-member'] = Copy-Inventory $validInventory
+$malformedCases['unexpected-member']['Unexpected'] = $true
+$malformedCases['missing-member'] = Copy-Inventory $validInventory
+$null = $malformedCases['missing-member'].Remove('Comparison')
+$malformedCases['malformed-comparison'] = Copy-Inventory $validInventory
+$malformedCases['malformed-comparison'].Comparison = @{ PreviousInventorySha256 = ('0' * 64) }
+foreach ($case in $malformedCases.GetEnumerator()) {
+    $malformedPath = Join-Path $proofRoot ($case.Key + '.json')
+    $malformedReport = Join-Path $proofRoot ($case.Key + '-comparison.json')
+    $case.Value | ConvertTo-Json -Depth 6 | Set-Content -LiteralPath $malformedPath -Encoding utf8
+    $malformedFailure = $null
+    try { & $tool -SourcePath $source -ReportPath $malformedReport -CompareTo $malformedPath }
+    catch { $malformedFailure = $_.Exception.Message }
+    if ($malformedFailure -notlike '*comparison export inventory is invalid*' -or
+        (Test-Path -LiteralPath $malformedReport)) {
+        throw "Malformed comparison inventory was accepted: $($case.Key)"
+    }
+}
+
 $duplicateFailure = $null
 try { & $tool -SourcePath $duplicateSource -ReportPath $duplicatePath }
 catch { $duplicateFailure = $_.Exception.Message }
@@ -62,4 +101,4 @@ if ($duplicateFailure -notlike '*contains duplicate slots*' -or (Test-Path -Lite
     throw 'An exact duplicate native symbol was accepted or produced evidence.'
 }
 
-Write-Output "OCCT export inventory proof passed: ordinal case-only symbols, exact ordering, and exact-duplicate rejection. Evidence: $proofRoot"
+Write-Output "OCCT export inventory proof passed: ordinal case-only symbols, elementwise ordering, exact-duplicate rejection, and nine malformed inventories. Evidence: $proofRoot"

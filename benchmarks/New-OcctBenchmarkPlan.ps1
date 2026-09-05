@@ -46,6 +46,7 @@ $triplet = 'x64-windows'
 $planId = [Guid]::NewGuid().ToString('N')
 $utf8 = [Text.UTF8Encoding]::new($false)
 . (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
+. (Join-Path $PSScriptRoot 'OcctExportInventory.ps1')
 
 function Resolve-ExistingPath {
     param([string] $Path, [string] $Kind)
@@ -290,17 +291,9 @@ function Read-CanonicalManifest {
 function Read-ExportInventory {
     param([string] $Path)
     $resolved = Resolve-ExistingPath $Path file
-    $value = Get-Content -LiteralPath $resolved -Raw | ConvertFrom-Json -AsHashtable -DateKind String
-    if ($value.SchemaVersion -ne 1 -or $value.ExportCount -le 0 -or $value.Exports -isnot [array] -or
-        $value.Exports.Count -ne $value.ExportCount) {
+    try { $value = Read-OcctExportInventoryFile $resolved }
+    catch {
         throw "Invalid canonical export inventory: $resolved"
-    }
-    $uniqueExports = [Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
-    foreach ($export in $value.Exports) {
-        if ($export -isnot [string] -or [string]::IsNullOrWhiteSpace($export) -or
-            -not $uniqueExports.Add($export)) {
-            throw "Invalid canonical export inventory: $resolved"
-        }
     }
     return [pscustomobject]@{ Path = $resolved; Value = $value }
 }
@@ -786,6 +779,10 @@ $canonicalExports = [ordered]@{
     original = Read-ExportInventory $CanonicalOriginalExportInventory
     declaration = Read-ExportInventory $CanonicalDeclarationExportInventory
 }
+if (-not (Test-OcctExportSequenceEqual -Left $canonicalExports.original.Value.Exports `
+        -Right $canonicalExports.declaration.Value.Exports)) {
+    throw 'Canonical original and declaration export inventories must have the same exact ordered symbols.'
+}
 $gateSpecPath = Resolve-ExistingPath $NativeGateSpecification file
 $gateSpec = Get-Content -LiteralPath $gateSpecPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
 if ($gateSpec.SchemaVersion -ne 1 -or $gateSpec.FixtureOnly -isnot [bool] -or $gateSpec.Arguments -isnot [array] -or
@@ -830,6 +827,7 @@ $adapterPath = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Invoke-OcctBenchma
 $manifestTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-ArtifactManifest.ps1') file
 $ninjaMetricsTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-NinjaBuildMetrics.ps1') file
 $exportInventoryTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Get-OcctExportInventory.ps1') file
+$exportInventoryLibrary = Resolve-ExistingPath (Join-Path $PSScriptRoot 'OcctExportInventory.ps1') file
 $hostPublisher = Resolve-ExistingPath (Join-Path $PSScriptRoot 'Publish-OcctBenchmarkHost.ps1') file
 $hostReceiptTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'New-OcctBenchmarkHostReceipt.ps1') file
 $pathTool = Resolve-ExistingPath (Join-Path $PSScriptRoot 'BenchmarkPath.ps1') file
@@ -993,7 +991,7 @@ foreach ($entry in $sameVolumeRoots.GetEnumerator()) {
 }
 $fileBindings = [Collections.Generic.List[object]]::new()
 foreach ($path in @($inputManifestPath, $clangResourceInventoryPath, $originalHeaderCopy, $changedHeaderCopy, $adapterPath,
-        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool, $pathTool,
+        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $exportInventoryLibrary, $hostPublisher, $hostReceiptTool, $pathTool,
         $dotnet, $cmake, $ninja, $compiler, $clang, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate, $hosts.baseline.original, $hosts.baseline.changed,
         $hosts.candidate.original, $hosts.candidate.changed, $hostReceipts.baseline.original.Path,
@@ -1138,7 +1136,7 @@ foreach ($workload in @('artifact-cold', 'unchanged', 'declaration-edit', 'gener
 
 $boundFiles = [Collections.Generic.SortedSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($path in @($planPath, $inputManifestPath, $clangResourceInventoryPath, $originalHeaderCopy, $changedHeaderCopy, $adapterPath,
-        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $hostPublisher, $hostReceiptTool, $pathTool,
+        $manifestTool, $ninjaMetricsTool, $exportInventoryTool, $exportInventoryLibrary, $hostPublisher, $hostReceiptTool, $pathTool,
         $dotnet, $cmake, $ninja, $compiler, $vcvars, $toolchainFile,
         $toolchainStatus, $statusFiles.baseline, $statusFiles.candidate)) { $null = $boundFiles.Add($path) }
 foreach ($binding in $fileBindings) { $null = $boundFiles.Add($binding.Path) }

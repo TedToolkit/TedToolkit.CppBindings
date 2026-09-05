@@ -267,7 +267,10 @@ on both variants.
 Bind artifact manifests and source-ordered `NativeFunctionTable.cpp` export inventories for the
 canonical original state and the representative declaration edit. Native symbol identity and duplicate
 detection are ordinal and case-sensitive; comparisons preserve and compare the exact source order.
-Every baseline and candidate result must
+Inventory readers require the exact schema, integral counts, generated C identifier grammar, and
+ordinal uniqueness. Original and declaration inventories must contain the same elementwise ordinal
+sequence; add, remove, reorder, or case-only changes invalidate the plan. Every baseline and
+candidate result must
 match its applicable oracle. A bound native boundary/integration gate runs against the immutable
 canonical artifact before preparation and against the sampled artifact after build. Its executable,
 arguments, working directory, and inputs are immutable plan inputs; fixture-only gates cannot execute

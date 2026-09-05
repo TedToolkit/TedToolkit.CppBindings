@@ -299,6 +299,62 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
             "A private input without the complete $requiredDirectory directory was accepted. Error: $missingError"
     }
 
+    $declarationExportValue = Get-Content -LiteralPath $declarationExports -Raw |
+        ConvertFrom-Json -AsHashtable -DateKind String
+    $malformedExportValues = [ordered]@{}
+    $malformedExportValues['count'] = $declarationExportValue | ConvertTo-Json -Depth 6 |
+        ConvertFrom-Json -AsHashtable -DateKind String
+    $malformedExportValues['count'].ExportCount = 3L
+    $malformedExportValues['non-string'] = $declarationExportValue | ConvertTo-Json -Depth 6 |
+        ConvertFrom-Json -AsHashtable -DateKind String
+    $malformedExportValues['non-string'].Exports[1] = 7L
+    $malformedExportValues['identifier'] = $declarationExportValue | ConvertTo-Json -Depth 6 |
+        ConvertFrom-Json -AsHashtable -DateKind String
+    $malformedExportValues['identifier'].Exports[1] = 'Fixture-Case'
+    $malformedExportValues['newline-delimiter'] = $declarationExportValue | ConvertTo-Json -Depth 6 |
+        ConvertFrom-Json -AsHashtable -DateKind String
+    $malformedExportValues['newline-delimiter'].Exports = @("Fixture_case`nFixture_Case")
+    $malformedExportValues['newline-delimiter'].ExportCount = 1L
+    foreach ($malformed in $malformedExportValues.GetEnumerator()) {
+        $malformedPath = Join-Path $proofRoot "exports-declaration-malformed-$($malformed.Key).json"
+        Write-JsonFile $malformedPath $malformed.Value
+        $malformedArguments = $arguments.Clone()
+        $malformedArguments.SpecificationDirectory = Join-Path $proofRoot "export-malformed-$($malformed.Key)-spec"
+        $malformedArguments.CanonicalDeclarationExportInventory = $malformedPath
+        $malformedRejected = $false
+        try { & $builder @malformedArguments }
+        catch { $malformedRejected = $_.Exception.Message -like '*Invalid canonical export inventory*' }
+        Require $malformedRejected "Malformed canonical export inventory was accepted: $($malformed.Key)"
+    }
+    foreach ($drift in @('add', 'remove', 'reorder', 'case-change')) {
+        $driftValue = $declarationExportValue | ConvertTo-Json -Depth 6 |
+            ConvertFrom-Json -AsHashtable -DateKind String
+        switch ($drift) {
+            'add' {
+                $driftValue.Exports = @($driftValue.Exports) + 'Fixture_Added'
+                $driftValue.ExportCount = [long] $driftValue.Exports.Count
+            }
+            'remove' {
+                $driftValue.Exports = @($driftValue.Exports[0])
+                $driftValue.ExportCount = 1L
+            }
+            'reorder' { $driftValue.Exports = @($driftValue.Exports[1], $driftValue.Exports[0]) }
+            'case-change' { $driftValue.Exports[1] = 'Fixture_CASE' }
+        }
+        $driftPath = Join-Path $proofRoot "exports-declaration-$drift.json"
+        Write-JsonFile $driftPath $driftValue
+        $driftArguments = $arguments.Clone()
+        $driftArguments.SpecificationDirectory = Join-Path $proofRoot "export-drift-$drift-spec"
+        $driftArguments.CanonicalDeclarationExportInventory = $driftPath
+        $driftRejected = $false
+        try { & $builder @driftArguments }
+        catch {
+            $driftRejected = $_.Exception.Message -like
+                '*original and declaration export inventories must have the same exact ordered symbols*'
+        }
+        Require $driftRejected "Canonical declaration export drift was accepted: $drift"
+    }
+
     & $builder @arguments
     $specification = $arguments.SpecificationDirectory
     $plan = Get-Content -LiteralPath (Join-Path $specification 'occt-plan.json') -Raw | ConvertFrom-Json
