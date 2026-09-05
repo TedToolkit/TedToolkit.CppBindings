@@ -119,8 +119,10 @@ foreach ($scenario in $scenarios) {
     }
     if ($scenario.Name -eq 'tree') {
         $output = Get-Content -LiteralPath (Join-Path $report 'stdout.log') -Raw
-        if ($output -notmatch 'child:(\d+)') { throw 'The descendant fixture did not start.' }
-        if (Get-Process -Id ([int] $Matches[1]) -ErrorAction SilentlyContinue) { throw 'The descendant survived timeout cleanup.' }
+        $childMatch = [regex]::Match($output, 'child:(\d+)')
+        if (-not $childMatch.Success) { throw 'The descendant fixture did not start.' }
+        $childPid = [int] $childMatch.Groups[1].Value
+        if (Get-Process -Id $childPid -ErrorAction SilentlyContinue) { throw 'The descendant survived timeout cleanup.' }
         if ($result.ObservedProcessCount -lt 2) { throw 'Descendant resource accounting was not exercised.' }
     }
 }
