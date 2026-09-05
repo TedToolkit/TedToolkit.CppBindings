@@ -374,6 +374,8 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
         'Full Clang toolchain validation leaked into the timed Generate action.'
     Require $plan.FixtureOnly 'Synthetic receipts did not force a fixture-only plan.'
     Require ($plan.HarnessBinding -ceq 'commit:PENDING-FINAL-HARNESS-COMMIT') 'Pending harness binding was lost.'
+    Require ($plan.CandidateBehaviorRevision -ceq $arguments.CandidateBehaviorRevision) `
+        'The explicitly bound candidate behavior revision was not retained.'
     Require ($plan.ToolchainSnapshot.CompilerBv.Length -gt 0 -and $plan.ToolchainSnapshot.WindowsSDKVersion.Length -gt 0) 'Exact vcvars/compiler/SDK identity was not pinned.'
     Require ($plan.Tools.Clang -ceq $clang -and $plan.ToolchainSnapshot.ClangPath -ceq $clang -and
         $plan.ToolchainSnapshot.ClangSha256.Length -eq 64 -and
@@ -555,6 +557,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $executablePlanPath = Join-Path $specification 'occt-plan-executable-fixture.json'
     $executablePlan = Get-Content -LiteralPath (Join-Path $specification 'occt-plan.json') -Raw | ConvertFrom-Json -AsHashtable
     $executablePlan.FixtureOnly = $false
+    $executablePlan.CandidateBehaviorRevision = '9952e5a76358028c22c8ec215a23d7b82413ad4f'
     $executablePlan.HarnessBinding = "commit:$($executablePlan.CandidateHead)"
     Write-JsonFile $executablePlanPath $executablePlan
     $fixtureGateRejected = $false
