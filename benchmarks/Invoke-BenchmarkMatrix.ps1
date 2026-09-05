@@ -166,8 +166,10 @@ function Invoke-Sample {
             $phase.Label = "$($Entry.Workload)/$($Entry.Variant)/$($Entry.Repetition)/$phaseName"
             $phase.Arguments = @(Expand-StageArguments $phase.Arguments $Entry $sampleRoot)
             if ($phase.ContainsKey('PreMeasurementValidation')) {
-                $phase.PreMeasurementValidation.Arguments = @(Expand-StageArguments `
-                    $phase.PreMeasurementValidation.Arguments $Entry $sampleRoot)
+                $preMeasurementValidation = $phase.PreMeasurementValidation.Clone()
+                $preMeasurementValidation.Arguments = @(Expand-StageArguments `
+                    $preMeasurementValidation.Arguments $Entry $sampleRoot)
+                $phase.PreMeasurementValidation = $preMeasurementValidation
             }
             $phase.DeadlineUtc = $deadline.ToString('O')
             $phase.MemoryLimitBytes = $spec.MemoryLimitBytes

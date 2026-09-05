@@ -34,11 +34,16 @@ function New-MatrixFixture {
         Executable = $pwshPath
         Arguments = @('success', '{SampleRoot}', '{Sequence}', '{Workload}', '{Variant}', '{Repetition}', '{IsWarmup}')
         WorkingDirectory = $root; TimeLimitSeconds = 20
+        PreMeasurementValidation = @{
+            Executable = $pwshPath
+            Arguments = @('success', '{SampleRoot}', '{Sequence}', '{Workload}', '{Variant}', '{Repetition}', '{IsWarmup}')
+            WorkingDirectory = $root; TimeLimitSeconds = 20
+        }
     }
-    $stage | ConvertTo-Json | Set-Content -LiteralPath $successPath -Encoding utf8
+    $stage | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $successPath -Encoding utf8
     $stage.Arguments = @($VerifyMode, $inputPath, '{SampleRoot}', '{Sequence}', '{Workload}', '{Variant}',
         '{Repetition}', '{IsWarmup}')
-    $stage | ConvertTo-Json | Set-Content -LiteralPath $verifyPath -Encoding utf8
+    $stage | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $verifyPath -Encoding utf8
     $variant = @{ Prepare = @($successPath); Measure = @($successPath); Verify = @($verifyPath) }
     $workloads = @('artifact-cold', 'unchanged', 'declaration-edit', 'generator-change', 'missing-output') |
         ForEach-Object {
@@ -121,6 +126,23 @@ foreach ($binding in $planBindings) {
 Assert-CompleteBindings $plan $happy
 Assert-CompleteBindings $result $happy
 if ($plan.ProductionAdoptionAuthorized) { throw 'The matrix plan granted production adoption authority.' }
+$sampleDirectories = @(Get-ChildItem -LiteralPath $happy.Report -Directory |
+    Where-Object Name -Match '^\d{3}-')
+if ($sampleDirectories.Count -ne 56) { throw 'The full matrix did not retain all expanded sample specifications.' }
+$expandedPreValidationRoots = @(
+    foreach ($sampleDirectory in $sampleDirectories) {
+        $expandedPhase = Get-Content -LiteralPath (Join-Path $sampleDirectory.FullName 'Measure-00.json') -Raw |
+            ConvertFrom-Json
+        $expandedRoot = $expandedPhase.PreMeasurementValidation.Arguments[1]
+        if ($expandedRoot -cne $sampleDirectory.FullName) {
+            throw "Pre-measurement validation retained another sample root: $expandedRoot"
+        }
+        $expandedRoot
+    }
+)
+if (@($expandedPreValidationRoots | Sort-Object -Unique).Count -ne 56) {
+    throw 'Repeated pre-measurement validations did not receive unique sample roots.'
+}
 $warmupPhase = Get-Content -LiteralPath (Join-Path $happy.Report '000-artifact-cold-baseline/Prepare-00.json') -Raw |
     ConvertFrom-Json
 $nextVariantPhase = Get-Content -LiteralPath (Join-Path $happy.Report '001-artifact-cold-candidate/Prepare-00.json') -Raw |
