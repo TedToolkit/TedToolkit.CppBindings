@@ -47,13 +47,14 @@ function Read-ProcessTree {
 function Stop-ObservedDescendants {
     param([int] $RootId, [hashtable] $Known)
 
-    foreach ($row in $Known.Values) {
+    foreach ($entry in $Known.GetEnumerator()) {
+        $row = $entry.Value
         if ($row.ProcessId -eq $RootId) { continue }
         $child = Get-Process -Id $row.ProcessId -ErrorAction SilentlyContinue
         if ($null -eq $child) { continue }
         try {
-            $created = ([DateTimeOffset] $child.StartTime).ToUnixTimeMilliseconds()
-            if ($created -ne ([DateTimeOffset] $row.CreationDate).ToUnixTimeMilliseconds()) { continue }
+            $currentIdentity = "$($child.Id):$(([DateTimeOffset] $child.StartTime).ToUnixTimeMilliseconds())"
+            if ($currentIdentity -cne $entry.Key) { continue }
             if (-not $child.HasExited) {
                 $child.Kill($true)
                 if (-not $child.WaitForExit(5000)) { throw 'An observed descendant did not terminate.' }

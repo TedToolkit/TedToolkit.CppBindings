@@ -8,6 +8,58 @@ $null = New-Item -ItemType Directory -Path $proofRoot
 $deadline = [DateTimeOffset]::UtcNow.AddMinutes(5).ToString('O')
 $pwshPath = (Get-Process -Id $PID).Path
 $argument = 'quoted "value" with spaces, Unicode 测试, and literal $()'
+
+# Exercise cleanup against an archived CIM row whose nullable CreationDate is no longer
+# available. The identity captured as the hashtable key is the durable comparison source.
+$tokens = $null
+$parseErrors = $null
+$stageAst = [Management.Automation.Language.Parser]::ParseFile(
+    $runner, [ref] $tokens, [ref] $parseErrors)
+if ($parseErrors.Count -ne 0) { throw 'The stage runner could not be parsed for cleanup verification.' }
+$cleanupAst = @($stageAst.FindAll({
+    param($node)
+    $node -is [Management.Automation.Language.FunctionDefinitionAst] -and
+        $node.Name -ceq 'Stop-ObservedDescendants'
+}, $true))
+if ($cleanupAst.Count -ne 1) { throw 'The descendant cleanup function is missing or ambiguous.' }
+. ([scriptblock]::Create($cleanupAst[0].Extent.Text))
+$cleanupChild = Start-Process -FilePath $pwshPath -ArgumentList @(
+    '-NoProfile', '-File', $fixture, '-Mode', 'sleep', '-Value', '') -PassThru -WindowStyle Hidden
+try {
+    $cleanupIdentity = "$($cleanupChild.Id):$(([DateTimeOffset] $cleanupChild.StartTime).ToUnixTimeMilliseconds())"
+    $archived = @{
+        $cleanupIdentity = [pscustomobject]@{ ProcessId = $cleanupChild.Id; CreationDate = $null }
+    }
+    Stop-ObservedDescendants -RootId $PID -Known $archived
+    if (-not $cleanupChild.WaitForExit(5000)) {
+        throw 'Cleanup did not terminate the child represented by a nullable archived row.'
+    }
+}
+finally {
+    if (-not $cleanupChild.HasExited) { $cleanupChild.Kill($true) }
+    $cleanupChild.Dispose()
+}
+
+$reusedPidChild = Start-Process -FilePath $pwshPath -ArgumentList @(
+    '-NoProfile', '-File', $fixture, '-Mode', 'sleep', '-Value', '') -PassThru -WindowStyle Hidden
+try {
+    $differentIdentity = "$($reusedPidChild.Id):$((([DateTimeOffset] $reusedPidChild.StartTime).ToUnixTimeMilliseconds()) - 1)"
+    $stale = @{
+        $differentIdentity = [pscustomobject]@{ ProcessId = $reusedPidChild.Id; CreationDate = $null }
+    }
+    Stop-ObservedDescendants -RootId $PID -Known $stale
+    if ($reusedPidChild.HasExited) {
+        throw 'Cleanup terminated a process whose captured identity did not match.'
+    }
+}
+finally {
+    if (-not $reusedPidChild.HasExited) {
+        $reusedPidChild.Kill($true)
+        $null = $reusedPidChild.WaitForExit(5000)
+    }
+    $reusedPidChild.Dispose()
+}
+
 $scenarios = @(
     @{ Name = 'success'; Mode = 'echo'; Limit = 20; Memory = 2GB; Expected = $null },
     @{ Name = 'failure'; Mode = 'failure'; Limit = 20; Memory = 2GB; Expected = '*exited with code 17*' },
