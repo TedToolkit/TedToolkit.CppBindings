@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: standard -->
 <!-- change-kind: experiment -->
-<!-- change-status: in-progress -->
+<!-- change-status: candidate-ready -->
 <!-- delivery-shape: single -->
 
 - Priority: P2
 <!-- approval-source: user-approved-and-continue-in-thread-2026-09-04 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:cb273d291a8de7fe2b9de5da49be1fe1654996c9 -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
