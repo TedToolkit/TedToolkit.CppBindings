@@ -3,8 +3,9 @@
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $repository = (Resolve-Path (Join-Path $PSScriptRoot '..')).Path
-$baselineRepository = (Resolve-Path (Join-Path $repository '../wic-base')).Path
 $proofRoot = Join-Path ([IO.Path]::GetTempPath()) "occt-plan-proof-$([Guid]::NewGuid().ToString('N'))"
+$baselineRepository = Join-Path $proofRoot 'baseline-repository'
+$baselineRevision = 'e94f10a9bb9490d47363cf43d8ce17600b435b8a'
 $builder = Join-Path $PSScriptRoot 'New-OcctBenchmarkPlan.ps1'
 $receiptBuilder = Join-Path $PSScriptRoot 'New-OcctBenchmarkHostReceipt.ps1'
 $hostPublisher = Join-Path $PSScriptRoot 'Publish-OcctBenchmarkHost.ps1'
@@ -61,6 +62,8 @@ function New-HostReceiptFixture {
 
 try {
     $null = [IO.Directory]::CreateDirectory($proofRoot)
+    $null = Invoke-Git $proofRoot @('clone', '--quiet', '--no-checkout', $repository, $baselineRepository)
+    $null = Invoke-Git $baselineRepository @('checkout', '--quiet', '--detach', $baselineRevision)
     $dotnet = (Get-Command dotnet -CommandType Application).Source
     $clang = (Get-Command clang++ -CommandType Application -ErrorAction Stop).Source
     $visualStudioRoot = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'Microsoft Visual Studio'
