@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: standard -->
 <!-- change-kind: experiment -->
-<!-- change-status: in-progress -->
+<!-- change-status: candidate-ready -->
 <!-- delivery-shape: single -->
 
 - Priority: P2
 <!-- approval-source: user-approved-and-continue-in-thread-2026-09-04 -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:dc95d4017a73bc597da2f3462fd16e86493c0353 -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -108,3 +108,18 @@ layout are private choices; neither a specific speedup nor production adoption i
 The bounded experiment has a reproducible decision report with raw evidence, limitations, and an
 explicit disposition for every attempted or deferred strategy. No prototype becomes the production
 default. Enduring methodology and validated conclusions live outside docs/changes before cleanup.
+
+## Result
+
+The final screening plan bound exactly ten executions across the five approved workloads, but no
+complete baseline/candidate pair was accepted before the shared deadline. Two runs were invalidated
+by competing native builds, and the remaining attempts stopped on harness, recovery, or resource
+conditions. Recommendation sampling was therefore not satisfied, the full-sampling thresholds were
+not evaluated, and write-if-changed generation is not recommended for production adoption.
+
+The reproducible harness and its seven verifier scripts pass at
+`bde7b7eae61819710f9bbfa54a4a1aa7939aba9f`. Canonical preparation established identical ordered
+exports, the expected single managed declaration delta, and a passing native semantic gate. Those
+checks validate the experiment inputs and correctness oracle, not candidate performance. The durable
+decision, bindings, evidence hashes, attempt dispositions, deferred strategies, and limitations are
+recorded in `docs/performance/binding-generation.md`.
