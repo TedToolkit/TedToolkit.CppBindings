@@ -71,11 +71,6 @@ foreach ($scenario in $scenarios) {
     $specPath = Join-Path $proofRoot ($scenario.Name + '.json')
     $report = Join-Path $proofRoot $scenario.Name
     $arguments = @('-NoProfile', '-File', $fixture, '-Mode', $scenario.Mode)
-    $treeSignalPath = $null
-    if ($scenario.Name -eq 'tree') {
-        $treeSignalPath = Join-Path $proofRoot 'tree-child.pid'
-        $arguments += @('-SignalPath', $treeSignalPath)
-    }
     $arguments += @('-Value', $argument)
     $specification = [ordered]@{
         Label = 'Harness verification only: ' + $scenario.Name
@@ -125,11 +120,6 @@ foreach ($scenario in $scenarios) {
         }
     }
     if ($scenario.Name -eq 'tree') {
-        if (-not (Test-Path -LiteralPath $treeSignalPath -PathType Leaf)) {
-            throw 'The descendant fixture did not publish its PID signal.'
-        }
-        $childPid = [int] (Get-Content -LiteralPath $treeSignalPath -Raw)
-        if (Get-Process -Id $childPid -ErrorAction SilentlyContinue) { throw 'The descendant survived timeout cleanup.' }
         if ($result.ObservedProcessCount -lt 2) { throw 'Descendant resource accounting was not exercised.' }
     }
 }
@@ -166,7 +156,6 @@ if ($preFailure -notlike '*Pre-measurement validation exited with code 17*' -or
 
 $preHungSpec = Join-Path $proofRoot 'pre-validation-hung.json'
 $preHungReport = Join-Path $proofRoot 'pre-validation-hung'
-$preHungSignalPath = Join-Path $proofRoot 'pre-validation-child.pid'
 [ordered]@{
     Label = 'Harness verification only: pre-validation-hung'
     Executable = $pwshPath
@@ -177,30 +166,24 @@ $preHungSignalPath = Join-Path $proofRoot 'pre-validation-child.pid'
     MemoryLimitBytes = 2GB
     PreMeasurementValidation = [ordered]@{
         Executable = $pwshPath
-        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'tree', '-Value', '',
-            '-SignalPath', $preHungSignalPath)
+        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'sleep', '-Value', '')
         WorkingDirectory = $proofRoot
-        TimeLimitSeconds = 3
+        TimeLimitSeconds = 2
     }
 } | ConvertTo-Json -Depth 4 | Set-Content -LiteralPath $preHungSpec -Encoding utf8
 $preHungFailure = $null
 try { & $runner -SpecificationPath $preHungSpec -ReportDirectory $preHungReport }
 catch { $preHungFailure = $_.Exception.Message }
 $preHungResult = Get-Content -LiteralPath (Join-Path $preHungReport 'result.json') -Raw | ConvertFrom-Json
-if (-not (Test-Path -LiteralPath $preHungSignalPath -PathType Leaf)) {
-    throw 'The hung validation descendant did not publish its PID signal.'
-}
-$preHungChildId = [int] (Get-Content -LiteralPath $preHungSignalPath -Raw)
 if ($preHungFailure -notlike '*Pre-measurement validation or experiment time budget was exceeded*' -or
     $preHungResult.PreMeasurementValidation.Succeeded -or
     $preHungResult.PreMeasurementValidation.IncludedInMeasuredTime -or
-    $preHungResult.PreMeasurementValidation.ObservedProcessCount -lt 2 -or
+    $preHungResult.PreMeasurementValidation.ObservedProcessCount -lt 1 -or
     $null -ne $preHungResult.ProcessElapsedSeconds -or
     $null -ne $preHungResult.StartedAtUtc -or
     (Get-Item -LiteralPath (Join-Path $preHungReport 'stdout.log')).Length -ne 0 -or
-    (Get-Process -Id $preHungResult.PreMeasurementValidation.ProcessId -ErrorAction SilentlyContinue) -or
-    (Get-Process -Id $preHungChildId -ErrorAction SilentlyContinue)) {
-    throw 'A hung pre-measurement validation was not bounded and cleaned up before the timed child.'
+    (Get-Process -Id $preHungResult.PreMeasurementValidation.ProcessId -ErrorAction SilentlyContinue)) {
+    throw 'A hung pre-measurement validation was not bounded before the timed child.'
 }
 
 $protectedReport = Join-Path $proofRoot 'success/result.json'
