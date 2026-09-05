@@ -1,7 +1,8 @@
 param(
     [ValidateSet('echo', 'failure', 'sleep', 'tree', 'delay')]
     [string] $Mode,
-    [string] $Value
+    [string] $Value,
+    [string] $SignalPath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -20,6 +21,9 @@ switch ($Mode) {
         $child = Start-Process -FilePath (Get-Process -Id $PID).Path -ArgumentList @(
             '-NoProfile', '-File', ('"' + $PSCommandPath + '"'), '-Mode', 'sleep'
         ) -WindowStyle Hidden -PassThru
+        if (-not [string]::IsNullOrWhiteSpace($SignalPath)) {
+            [IO.File]::WriteAllText($SignalPath, $child.Id.ToString([Globalization.CultureInfo]::InvariantCulture))
+        }
         [Console]::Out.WriteLine("child:$($child.Id)")
         Start-Sleep -Seconds 30
     }

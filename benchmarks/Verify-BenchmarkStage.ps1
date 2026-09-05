@@ -70,10 +70,17 @@ $scenarios = @(
 foreach ($scenario in $scenarios) {
     $specPath = Join-Path $proofRoot ($scenario.Name + '.json')
     $report = Join-Path $proofRoot $scenario.Name
+    $arguments = @('-NoProfile', '-File', $fixture, '-Mode', $scenario.Mode)
+    $treeSignalPath = $null
+    if ($scenario.Name -eq 'tree') {
+        $treeSignalPath = Join-Path $proofRoot 'tree-child.pid'
+        $arguments += @('-SignalPath', $treeSignalPath)
+    }
+    $arguments += @('-Value', $argument)
     $specification = [ordered]@{
         Label = 'Harness verification only: ' + $scenario.Name
         Executable = $pwshPath
-        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', $scenario.Mode, '-Value', $argument)
+        Arguments = $arguments
         WorkingDirectory = $proofRoot
         DeadlineUtc = $deadline
         TimeLimitSeconds = $scenario.Limit
@@ -118,10 +125,10 @@ foreach ($scenario in $scenarios) {
         }
     }
     if ($scenario.Name -eq 'tree') {
-        $output = Get-Content -LiteralPath (Join-Path $report 'stdout.log') -Raw
-        $childMatch = [regex]::Match($output, 'child:(\d+)')
-        if (-not $childMatch.Success) { throw 'The descendant fixture did not start.' }
-        $childPid = [int] $childMatch.Groups[1].Value
+        if (-not (Test-Path -LiteralPath $treeSignalPath -PathType Leaf)) {
+            throw 'The descendant fixture did not publish its PID signal.'
+        }
+        $childPid = [int] (Get-Content -LiteralPath $treeSignalPath -Raw)
         if (Get-Process -Id $childPid -ErrorAction SilentlyContinue) { throw 'The descendant survived timeout cleanup.' }
         if ($result.ObservedProcessCount -lt 2) { throw 'Descendant resource accounting was not exercised.' }
     }
@@ -159,6 +166,7 @@ if ($preFailure -notlike '*Pre-measurement validation exited with code 17*' -or
 
 $preHungSpec = Join-Path $proofRoot 'pre-validation-hung.json'
 $preHungReport = Join-Path $proofRoot 'pre-validation-hung'
+$preHungSignalPath = Join-Path $proofRoot 'pre-validation-child.pid'
 [ordered]@{
     Label = 'Harness verification only: pre-validation-hung'
     Executable = $pwshPath
@@ -169,7 +177,8 @@ $preHungReport = Join-Path $proofRoot 'pre-validation-hung'
     MemoryLimitBytes = 2GB
     PreMeasurementValidation = [ordered]@{
         Executable = $pwshPath
-        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'tree', '-Value', '')
+        Arguments = @('-NoProfile', '-File', $fixture, '-Mode', 'tree', '-Value', '',
+            '-SignalPath', $preHungSignalPath)
         WorkingDirectory = $proofRoot
         TimeLimitSeconds = 1
     }
@@ -178,10 +187,10 @@ $preHungFailure = $null
 try { & $runner -SpecificationPath $preHungSpec -ReportDirectory $preHungReport }
 catch { $preHungFailure = $_.Exception.Message }
 $preHungResult = Get-Content -LiteralPath (Join-Path $preHungReport 'result.json') -Raw | ConvertFrom-Json
-$preHungOutput = Get-Content -LiteralPath (Join-Path $preHungReport 'pre-validation-stdout.log') -Raw
-$preHungChildMatch = [regex]::Match($preHungOutput, 'child:(\d+)')
-if (-not $preHungChildMatch.Success) { throw 'The hung validation descendant did not start.' }
-$preHungChildId = [int] $preHungChildMatch.Groups[1].Value
+if (-not (Test-Path -LiteralPath $preHungSignalPath -PathType Leaf)) {
+    throw 'The hung validation descendant did not publish its PID signal.'
+}
+$preHungChildId = [int] (Get-Content -LiteralPath $preHungSignalPath -Raw)
 if ($preHungFailure -notlike '*Pre-measurement validation or experiment time budget was exceeded*' -or
     $preHungResult.PreMeasurementValidation.Succeeded -or
     $preHungResult.PreMeasurementValidation.IncludedInMeasuredTime -or
