@@ -1,7 +1,9 @@
 # Binding generation experiment
 
 This directory contains isolated measurement tooling, not production optimizations. The comparative
-experiment is in progress. No performance recommendation or speedup has been established.
+experiment concluded without an accepted baseline/candidate sample pair. No performance
+recommendation or speedup was established; see `docs/performance/binding-generation.md` for the
+decision, evidence bindings, and limitations.
 
 ## Resource preflight
 
@@ -323,10 +325,11 @@ an isolated baseline or candidate project and give it a disposable output direct
 unchanged timestamps, selective replacement, stale and missing output handling, failed-render
 rollback, and file/directory transitions. It is correctness evidence, not a timing sample.
 
-## Remaining experiment work
+## Experiment disposition
 
-The paired execution control and OCCT workload adapter are implemented; prepared full-workload receipts,
-final harness binding, repeated measurements, native boundary results, generation per-file timings,
-and the decision report remain unfinished. Resource reports and synthetic fixtures are not
-timing samples. Do not count the earlier build-verification duration as a benchmark or recommend
-production adoption from it.
+The paired execution control, OCCT workload adapter, frozen inputs, canonical correctness oracle,
+and final decision report are complete. The bounded screening stopped with zero accepted samples,
+so partial timings, resource reports, and synthetic fixtures are not comparative timing evidence.
+Production adoption is not authorized. Any renewed measurement or optimization proposal is a new
+experiment with fresh artifact roots, an isolated machine window, a new shared deadline, and exact
+source and harness bindings.

@@ -252,6 +252,7 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
     $arguments = @{
         SpecificationDirectory = Join-Path $proofRoot 'specification'
         BaselineRepositoryRoot = $baselineRepository; CandidateRepositoryRoot = $repository
+        CandidateBehaviorRevision = ((Invoke-Git $repository @('rev-parse', 'HEAD')) -join '').Trim()
         BaselineArtifactRoot = Join-Path $proofRoot 'artifact-b'; CandidateArtifactRoot = Join-Path $proofRoot 'artifact-c'
         BaselineInputVcpkgRoot = $baselineInput; CandidateInputVcpkgRoot = $candidateInput
         ToolchainVcpkgRoot = $vcpkgToolchain

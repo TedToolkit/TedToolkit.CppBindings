@@ -34,6 +34,8 @@ param(
     [ValidateSet('Debug', 'Release')] [string] $Configuration = 'Release',
     [ValidateRange(1, 64)] [int] $Parallelism = 8,
     [string] $HarnessBinding = 'commit:PENDING-FINAL-HARNESS-COMMIT',
+    [ValidatePattern('^[0-9a-f]{40}$')]
+    [string] $CandidateBehaviorRevision = '9952e5a76358028c22c8ec215a23d7b82413ad4f',
     [hashtable] $FixtureVolumeIdentityOverrides
 )
 
@@ -41,7 +43,6 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $baselineRevision = 'e94f10a9bb9490d47363cf43d8ce17600b435b8a'
-$candidateBehaviorRevision = '9952e5a76358028c22c8ec215a23d7b82413ad4f'
 $triplet = 'x64-windows'
 $planId = [Guid]::NewGuid().ToString('N')
 $utf8 = [Text.UTF8Encoding]::new($false)
@@ -623,7 +624,7 @@ if (Get-GitOutput $baselineRepository @('status', '--porcelain=v1', '--untracked
     throw 'The baseline repository must be clean.'
 }
 $candidateHead = Get-GitOutput $candidateRepository @('rev-parse', 'HEAD')
-$null = Get-GitOutput $candidateRepository @('merge-base', '--is-ancestor', $candidateBehaviorRevision, $candidateHead)
+$null = Get-GitOutput $candidateRepository @('merge-base', '--is-ancestor', $CandidateBehaviorRevision, $candidateHead)
 if (Get-GitOutput $candidateRepository @('status', '--porcelain=v1', '--untracked-files=all', '--ignore-submodules=all')) {
     throw 'The candidate repository must be clean before a plan is frozen.'
 }
@@ -1034,7 +1035,7 @@ $plan = [ordered]@{
     PlanId = $planId
     ProductionAdoptionAuthorized = $false
     BaselineRevision = $baselineRevision
-    CandidateBehaviorRevision = $candidateBehaviorRevision
+    CandidateBehaviorRevision = $CandidateBehaviorRevision
     CandidateHead = $candidateHead
     HarnessBinding = $HarnessBinding
     FixtureOnly = $fixtureOnlyPlan
