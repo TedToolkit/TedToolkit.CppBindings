@@ -80,6 +80,27 @@ artifacts, AC-02 proof purpose and integration shape, executed command, result c
 failure/result/cleanup partition, compiler resource prerequisites, package/documentation state, and
 the verified exception/result ABI contract supplied to CGAL-003.
 
+## Verification result
+
+- Candidate: `489e8de77a216ee16673662723f713bdb6cc05eb`, reviewed independently as Ready.
+- Evidence: `out/verification/cr-489e8de/result.json`; Runtime packaging, an isolated package
+  consumer, the CGAL-linked native fixture, Runtime TUnit, and Generator compatibility TUnit all
+  passed from a clean exact candidate.
+- Runtime proof: 6/6 tests passed with no skips. Fourteen real CGAL, standard-library, and unknown
+  failure scenarios verified exact exception/type mapping, scenario-specific copied message text,
+  native stack behavior, and one diagnostic clear. Malformed UTF-8 and success cleanup paths were
+  verified separately.
+- Result proof: actual `std::optional<std::variant>` and `CGAL::Object` containers each passed empty,
+  Point_2, Segment_2, undeclared-alternative, and invalid-tag partitions with exact create, destroy,
+  and transfer counters. The compiled projection matched the current Generator output; Generator
+  compatibility tests passed 7/7 with no skips.
+- Locked native input: MSVC `19.51.36256.0`, recorded through project-owned CMake metadata. The
+  Runtime package exposes 16 public types, references Shared Runtime only, and its isolated consumer
+  restored the exact package hash recorded in the evidence.
+- Supplied to CGAL-003: the verified Runtime exception taxonomy, diagnostic ownership boundary,
+  operation-specific result ABI, and exact-once native temporary cleanup contract. Runtime and CGAL
+  provider documentation describe the implemented ownership, failure, and result semantics.
+
 ## Risks and implementation notes
 
 The dangerous path is double cleanup or loss of native diagnostics during UTF-8 conversion and
