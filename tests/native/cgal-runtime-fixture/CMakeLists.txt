@@ -3,6 +3,10 @@ project(CgalRuntimeFixture LANGUAGES CXX)
 
 find_package(CGAL CONFIG REQUIRED)
 
+file(
+    WRITE "${CMAKE_BINARY_DIR}/compiler-identity.txt"
+    "${CMAKE_CXX_COMPILER_ID}|${CMAKE_CXX_COMPILER_VERSION}\n")
+
 add_library(cgal_runtime_fixture SHARED CgalRuntimeFixture.cpp)
 target_compile_features(cgal_runtime_fixture PRIVATE cxx_std_20)
 target_compile_definitions(cgal_runtime_fixture PRIVATE CGAL_DEBUG)

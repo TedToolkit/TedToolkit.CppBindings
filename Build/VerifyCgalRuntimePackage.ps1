@@ -132,19 +132,16 @@ if ($endingRevision -cne $candidateRevision -or $endingStatus.Count -ne 0) {
 }
 
 $consumerResult = Get-Content -LiteralPath $consumerResultPath -Raw | ConvertFrom-Json -AsHashtable
-$compilerFile = Get-ChildItem -LiteralPath (Join-Path $repository `
-    'tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/obj/NativeFixture/CMakeFiles') `
-    -Filter 'CMakeCXXCompiler.cmake' -File -Recurse | Select-Object -First 1
-if ($null -eq $compilerFile) {
+$compilerFile = Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/obj/NativeFixture/compiler-identity.txt'
+if (-not (Test-Path -LiteralPath $compilerFile -PathType Leaf)) {
     throw 'The native fixture did not retain its resolved compiler identity.'
 }
-$compilerDefinition = Get-Content -LiteralPath $compilerFile.FullName -Raw
-$compilerVersion = [regex]::Match(
-    $compilerDefinition,
-    'set\(CMAKE_CXX_COMPILER_VERSION "([^"]+)"\)').Groups[1].Value
-if ($compilerVersion -cne '19.51.36256.0') {
-    throw "Expected MSVC 19.51.36256.0, found '$compilerVersion'."
+$compilerIdentity = (Get-Content -LiteralPath $compilerFile -Raw).Trim()
+if ($compilerIdentity -cne 'MSVC|19.51.36256.0') {
+    throw "Expected MSVC 19.51.36256.0, found '$compilerIdentity'."
 }
+$compilerVersion = $compilerIdentity.Split('|', 2)[1]
 [ordered]@{
     Passed = $true
     CandidateRevision = $candidateRevision
