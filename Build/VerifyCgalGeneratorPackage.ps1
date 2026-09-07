@@ -35,7 +35,8 @@ $null = New-Item -ItemType Directory -Path $consumer
 $fixture = Join-Path $repository 'tests/TedToolkit.CppBindings.Cgal.Generator.Tests/Fixtures/PackageConsumer'
 Get-ChildItem -LiteralPath $fixture -File | Copy-Item -Destination $consumer
 $consumerProject = Join-Path $consumer 'PackageConsumer.csproj'
-$packages = Join-Path $report 'packages'
+$packages = Join-Path $repository 'out/package-cache/cgal-generator'
+$null = New-Item -ItemType Directory -Path $packages -Force
 $runLog = Join-Path $report 'consumer-run.log'
 $consumerResultPath = Join-Path $report 'consumer-result.json'
 $generated = Join-Path $report 'generated'
