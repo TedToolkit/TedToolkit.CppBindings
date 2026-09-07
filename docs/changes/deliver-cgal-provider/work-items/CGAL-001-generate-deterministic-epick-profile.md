@@ -100,6 +100,9 @@ inventory, paired-source, and native-project outputs supplied to CGAL-003.
   unsupported inventories, paired generated managed/native sources, exact export table, and CMake
   project metadata. Current provider and Generator READMEs describe the implemented finite-profile
   accounting and borrowed-reference lifetime contract.
+- Integration: fast-forwarded unchanged implementation candidate `397ff49e406ac954dcb9fb55fe0c2b0179ae5ba4`
+  into `codex/deliver-cgal-provider`; the only later item-branch commit recorded this evidence and
+  status, so the independently reviewed code and retained exact-candidate proof are unchanged.
 
 ## Risks and implementation notes
 
