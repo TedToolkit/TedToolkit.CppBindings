@@ -84,6 +84,23 @@ artifacts, AC-01 proof purpose and integration shape, both commands, determinist
 inventory hashes/counts, resolved CGAL/vcpkg inputs, documentation state, and the verified profile,
 inventory, paired-source, and native-project outputs supplied to CGAL-003.
 
+## Verification result
+
+- Candidate: `397ff49e406ac954dcb9fb55fe0c2b0179ae5ba4`, reviewed independently as Ready.
+- Evidence: `out/verification/cg-397ff49/result.json`; package consumer, generated managed build,
+  generated native CMake/MSVC build, CGAL Generator TUnit, Shared Generator TUnit, OCCT Generator
+  TUnit, and provider-boundary checks all passed from a clean exact candidate.
+- Deterministic inventory: 3,773 installed headers; 19,627 compiler-observed source declarations;
+  3,698 finite candidates partitioned into 19 admitted and 3,679 unsupported declarations; 17
+  exact native exports. Repeated managed and native inventories matched their recorded SHA-256
+  hashes.
+- Locked inputs: CGAL 6.2, GMP 6.3.0#5, MPFR 4.2.2#1, `x64-windows`, CMake 4.4.3, and MSVC
+  19.51.36256 with the recorded vcpkg ABI identities.
+- Supplied to CGAL-003: the embedded `epick-windows-v1` manifest, source/candidate/admitted/
+  unsupported inventories, paired generated managed/native sources, exact export table, and CMake
+  project metadata. Current provider and Generator READMEs describe the implemented finite-profile
+  accounting and borrowed-reference lifetime contract.
+
 ## Risks and implementation notes
 
 CGAL header volume and template recursion may make unrestricted discovery impractical. The finite
