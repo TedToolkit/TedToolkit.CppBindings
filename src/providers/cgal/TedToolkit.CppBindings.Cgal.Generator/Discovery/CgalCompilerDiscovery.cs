@@ -122,8 +122,41 @@ internal static class CgalCompilerDiscovery
             signature,
             header,
             cursor.CursorKindSpelling,
-            cursor.Spelling);
+            cursor.Spelling,
+            IsDirectNonTemplate(cursor));
         return true;
+    }
+
+    private static bool IsDirectNonTemplate(Cursor cursor)
+    {
+        if (cursor.CursorKind == CXCursorKind.CXCursor_Namespace || IsOpenTemplateKind(cursor.CursorKind))
+        {
+            return false;
+        }
+
+        var current = cursor.SemanticParentCursor;
+        while (current is not null && current.CursorKind != CXCursorKind.CXCursor_TranslationUnit)
+        {
+            if (IsOpenTemplateKind(current.CursorKind))
+            {
+                return false;
+            }
+
+            current = current.SemanticParentCursor;
+        }
+
+        return true;
+    }
+
+    private static bool IsOpenTemplateKind(CXCursorKind kind)
+    {
+        return kind is CXCursorKind.CXCursor_TemplateTypeParameter
+            or CXCursorKind.CXCursor_NonTypeTemplateParameter
+            or CXCursorKind.CXCursor_TemplateTemplateParameter
+            or CXCursorKind.CXCursor_FunctionTemplate
+            or CXCursorKind.CXCursor_ClassTemplate
+            or CXCursorKind.CXCursor_ClassTemplatePartialSpecialization
+            or CXCursorKind.CXCursor_TypeAliasTemplateDecl;
     }
 
     private static string GetQualifiedName(Cursor cursor)
@@ -167,7 +200,8 @@ internal static class CgalCompilerDiscovery
             or CXCursorKind.CXCursor_NamespaceAlias
             or CXCursorKind.CXCursor_UsingDirective
             or CXCursorKind.CXCursor_UsingDeclaration
-            or CXCursorKind.CXCursor_TypeAliasDecl;
+            or CXCursorKind.CXCursor_TypeAliasDecl
+            or CXCursorKind.CXCursor_TypeAliasTemplateDecl;
     }
 
     private static bool IsPublic(CXCursor cursor)

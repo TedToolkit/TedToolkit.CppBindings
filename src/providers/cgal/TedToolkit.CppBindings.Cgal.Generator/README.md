@@ -32,11 +32,11 @@ Generated inventory files distinguish all installed public headers and compiler-
 declarations from the finite candidate set.
 The Generator recursively closes real `#include <CGAL/...>` dependencies from the maintained roots,
 reports other headers as `not-reachable-from-finite-profile`, and uses Clang to enumerate every
-public declaration originating in that closure. Open templates and other declarations outside the
-explicit closed profile remain visible in `source-declaration-inventory.json`; they are not finite
-candidates. Clang compiles the profile's kernel alias, layouts, closed constructors, operations, and
-return-reference categories before a supported entry can be admitted. Unsupported finite entries
-remain in `unsupported-inventory.json` with a narrow reason.
+public declaration originating in that closure. Direct non-template declarations enter the finite
+candidate set and receive a narrow unsupported reason until a provider projection exists. Open
+templates and their dependent declarations remain visible in `source-declaration-inventory.json`
+but are not candidates. Clang compiles the profile's kernel alias, layouts, closed constructors,
+operations, and return-reference categories before a supported closed entry can be admitted.
 
 Admitted declarations become a nonempty Shared semantic graph, and Shared derives their
 managed/native files and function-table exports from that one model. Per-declaration artifact

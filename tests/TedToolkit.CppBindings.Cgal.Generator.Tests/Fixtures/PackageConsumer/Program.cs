@@ -53,10 +53,12 @@ if (!paired || !managed.ContainsKey("NativeApi.g.cs") || !native.ContainsKey("Na
     || provider.Inventory.Candidates.Count
     != provider.Inventory.Admitted.Count + provider.Inventory.Unsupported.Count
     || provider.Inventory.Admitted.Count != provider.Profile.Declarations.Count
-    || provider.Inventory.Unsupported.Count != 0
+    || provider.Inventory.Unsupported.Count == 0
     || provider.Inventory.SourceDeclarations.Count <= provider.Inventory.Candidates.Count
     || !provider.Inventory.SourceDeclarations.Any(static item =>
         item.NativeSignature.Contains("Point_2::dimension", StringComparison.Ordinal))
+    || !provider.Inventory.Unsupported.Any(static item =>
+        item.NativeSignature.Contains("CGAL::do_overlap", StringComparison.Ordinal))
     || plan.NativeExports.Count != 17)
 {
     return 3;

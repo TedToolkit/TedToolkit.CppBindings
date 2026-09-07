@@ -15,9 +15,11 @@ namespace TedToolkit.CppBindings.Cgal.Generator;
 /// <param name="Header">The declaring public header.</param>
 /// <param name="Kind">The Clang cursor kind.</param>
 /// <param name="Name">The unqualified declaration spelling.</param>
+/// <param name="IsFiniteCandidate">Whether the declaration is direct and has no open-template ancestry.</param>
 internal sealed record CgalCompilerDeclaration(
     string Identity,
     string Signature,
     string Header,
     string Kind,
-    string Name);
+    string Name,
+    bool IsFiniteCandidate);

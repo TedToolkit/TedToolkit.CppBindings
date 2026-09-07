@@ -52,14 +52,14 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(firstProvider.Inventory.Sources.Count(static item => item.Disposition == "reachable-dependency"))
             .IsGreaterThan(0);
         await Assert.That(firstProvider.Inventory.Candidates.Count)
-            .IsEqualTo(firstProvider.Profile.Declarations.Count);
+            .IsGreaterThan(firstProvider.Profile.Declarations.Count);
         await Assert.That(firstProvider.Inventory.SourceDeclarations.Count)
             .IsGreaterThan(firstProvider.Inventory.Candidates.Count);
         await Assert.That(firstProvider.Inventory.Admitted.Count + firstProvider.Inventory.Unsupported.Count)
             .IsEqualTo(firstProvider.Inventory.Candidates.Count);
         await Assert.That(firstProvider.Inventory.Admitted.Count)
             .IsEqualTo(firstProvider.Profile.Declarations.Count);
-        await Assert.That(firstProvider.Inventory.Unsupported).IsEmpty();
+        await Assert.That(firstProvider.Inventory.Unsupported).IsNotEmpty();
         await Assert.That(firstProvider.Inventory.Candidates.Select(static item => item.Id).Distinct().Count())
             .IsEqualTo(firstProvider.Inventory.Candidates.Count);
         await Assert.That(firstProvider.Inventory.SourceDeclarations.Any(static item =>
@@ -70,6 +70,10 @@ internal sealed class CgalGenerationProviderTests
             item.NativeSignature.Contains("Point_2::bbox", StringComparison.Ordinal))).IsTrue();
         await Assert.That(firstProvider.Inventory.SourceDeclarations.Any(static item =>
             item.NativeSignature.Contains("Point_2::transform", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+            item.NativeSignature.Contains("CGAL::do_overlap", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(firstProvider.Inventory.Candidates.Any(static item => item.Kind is
+            "Namespace" or "FunctionTemplate" or "ClassTemplate" or "TemplateTypeParameter")).IsFalse();
         await Assert.That(firstProvider.Inventory.Toolchain.Cgal).IsEqualTo("6.2");
         await Assert.That(firstProvider.Inventory.Toolchain.CgalAbi).IsNotEmpty();
         await Assert.That(firstProvider.Inventory.Toolchain.CMake).IsEqualTo("4.4.3");
@@ -203,7 +207,7 @@ internal sealed class CgalGenerationProviderTests
             var provider = CreateProvider(file, explicitProfile.ProfileId);
             var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
 
-            await Assert.That(provider.Inventory.Candidates.Count).IsEqualTo(profile.Declarations.Count + 1);
+            await Assert.That(provider.Inventory.Candidates.Count).IsGreaterThan(profile.Declarations.Count + 1);
             await Assert.That(provider.Inventory.Unsupported.Select(static item => item.Id)).Contains(unsupported.Id);
             await Assert.That(provider.Inventory.Unsupported.Single(item => item.Id == unsupported.Id).Proof)
                 .IsEqualTo("no-provider-semantic-projection");

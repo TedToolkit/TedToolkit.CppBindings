@@ -61,20 +61,32 @@ internal static partial class CgalProfileDiscovery
         var selectedCandidates = profile.Declarations.OrderBy(static item => item.Id, StringComparer.Ordinal)
             .Select(item => Classify(item, includeRoot, reachable))
             .ToArray();
-        var sourceDeclarations = CgalCompilerDiscovery.Discover(
+        var compilerDeclarations = CgalCompilerDiscovery.Discover(
                 includeRoot,
                 profile.SelectedHeaders,
                 reachable,
-                profile)
+                profile);
+        var sourceDeclarations = compilerDeclarations.Select(static item => new CgalDeclarationDisposition(
+                item.Identity,
+                item.Signature,
+                item.Header,
+                item.Kind,
+                item.IsFiniteCandidate ? "finite-candidate" : "source-only",
+                item.IsFiniteCandidate
+                    ? "compiler-discovered-direct-non-template-declaration"
+                    : "compiler-source-declaration-has-open-template-or-namespace-kind"))
+            .ToArray();
+        var compilerCandidates = compilerDeclarations.Where(static item => item.IsFiniteCandidate)
             .Select(static item => new CgalDeclarationDisposition(
                 item.Identity,
                 item.Signature,
                 item.Header,
                 item.Kind,
-                "source-only",
-                "compiler-source-declaration-outside-explicit-closed-profile"))
+                "unsupported",
+                "compiler-discovered-direct-declaration-has-no-closed-profile-projection"));
+        var candidates = selectedCandidates.Concat(compilerCandidates)
+            .OrderBy(static item => item.Id, StringComparer.Ordinal)
             .ToArray();
-        var candidates = selectedCandidates;
         var admitted = candidates.Where(static item => item.Disposition == "admitted").ToArray();
         var unsupported = candidates.Where(static item => item.Disposition == "unsupported").ToArray();
         var toolchain = ResolveToolchain(options.VcpkgRoot, profile.Triplet);
