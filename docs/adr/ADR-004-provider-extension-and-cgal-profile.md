@@ -175,8 +175,8 @@ unbounded generated package claim.
 
 | Item | Owner | Due date or objective trigger | Status |
 | --- | --- | --- | --- |
-| Extract reusable semantic generation and reorganize source | TedToolkit maintainers | Before CGAL provider delivery | Open |
-| Deliver and verify the default CGAL Windows profile | TedToolkit maintainers | After the shared extraction is complete | Open |
-| Reassess CGAL Runtime responsibilities | TedToolkit maintainers | A proposed contract has no provider-specific runtime semantics | Open |
+| Extract reusable semantic generation and reorganize source | TedToolkit maintainers | Before CGAL provider delivery | Complete |
+| Deliver and verify the default CGAL Windows profile | TedToolkit maintainers | After the shared extraction is complete | Complete |
+| Reassess CGAL Runtime responsibilities | TedToolkit maintainers | A proposed contract has no provider-specific runtime semantics | Complete |
 | Reassess the default profile | TedToolkit maintainers | Consumers require exact constructions, another kernel, or a materially different CGAL package family | Open |
 | Reassess dependency packaging | TedToolkit maintainers | CGAL, GMP, MPFR, or vcpkg changes the supported native dependency model | Open |

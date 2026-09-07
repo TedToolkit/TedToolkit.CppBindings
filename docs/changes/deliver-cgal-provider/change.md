@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: complete -->
 <!-- delivery-shape: multi-item -->
 
 - Priority: P1
 <!-- approval-source: The maintainer approved this exact contract and explicitly authorized continuation with “批准并继续。” in the Codex task on 2026-09-05. -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: a253ccbaadcf6f33b717a05a59c9478ffcc27307 -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
@@ -184,6 +184,23 @@ dependency-aware map for separate approval; it must not duplicate these acceptan
 | AC-04 | Primary | A clean packed-package consumer observes exact results 25, 9, Point_2(1,0), none, and `CgalPreconditionException` for the specified calls | Run the packaged CGAL Windows consumer executable prepared by the package verifier |
 | AC-02 | Conditional | Focused pure Runtime tests cover public exception properties, inheritance, fallback mapping, malformed UTF-8, and exact-once cleanup | Run the CGAL Runtime TUnit project with `dotnet run ... -- --report-trx` |
 | AC-01–AC-04 | Conditional | Existing OCCT focused tests and the complete repository build still pass with both providers enabled | Run the OCCT TUnit/package gates, then `dotnet run --project Build/Build.csproj -c Release` |
+
+## Completion evidence
+
+- CGAL-001, CGAL-002, and CGAL-003 are independently verified in `work-items.md`.
+- AC-01 evidence is `out/verification/cg-397ff49/result.json`; AC-02 evidence is
+  `out/verification/cr-489e8de/result.json`; AC-03 and AC-04 evidence is
+  `out/verification/cw-a253ccb/result.json`.
+- The exact implementation candidate completed the full repository pipeline in 57m04s, including
+  all 6,989 OCCT wrappers, solution build, native integration, managed test gate, and final build
+  assertion. The focused suites passed Shared Generator 9/9, CGAL Generator 7/7, CGAL Runtime 6/6,
+  OCCT Generator 143/143, Shared Runtime 40/40, and Analyzers 17/17.
+- The independent OCCT package consumer passed at `out/verification/wp-a253ccb/result.json` and
+  exercised the just-packed native binary. The final independent implementation review concluded
+  Ready to merge with no blocker or important finding.
+- Current architecture, root/provider/package consumer guides, ADR-004, package manifests, focused
+  tests, and package verifiers retain the enduring contract and proof after this delivery record is
+  retired.
 
 <!-- section: completion-criteria -->
 ## Completion
