@@ -37,6 +37,17 @@ Get-ChildItem -LiteralPath $fixture -File | Copy-Item -Destination $consumer
 $consumerProject = Join-Path $consumer 'PackageConsumer.csproj'
 $packages = Join-Path $repository 'out/package-cache/cgal-generator'
 $null = New-Item -ItemType Directory -Path $packages -Force
+# Candidate packages use a fixed test version. Evict only those two package IDs so NuGet
+# cannot satisfy this verification run with a package produced by an earlier candidate.
+@(
+    'tedtoolkit.cppbindings.generator',
+    'tedtoolkit.cppbindings.cgal.generator'
+) | ForEach-Object {
+    $candidatePackageCache = Join-Path $packages $_
+    if (Test-Path -LiteralPath $candidatePackageCache) {
+        Remove-Item -LiteralPath $candidatePackageCache -Recurse -Force
+    }
+}
 $runLog = Join-Path $report 'consumer-run.log'
 $consumerResultPath = Join-Path $report 'consumer-result.json'
 $generated = Join-Path $report 'generated'
@@ -83,10 +94,17 @@ if (@($assets.libraries.Keys | Where-Object { $_ -match 'Occt' }).Count -ne 0) {
     throw 'The CGAL Generator package consumer acquired an OCCT dependency.'
 }
 
-$package = Join-Path $feed 'TedToolkit.CppBindings.Cgal.Generator.1.0.0.nupkg'
-$expectedHash = [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($package)))
-if ($assets.libraries['TedToolkit.CppBindings.Cgal.Generator/1.0.0'].sha512 -cne $expectedHash) {
-    throw 'Consumer did not restore the just-built CGAL Generator package.'
+@(
+    'TedToolkit.CppBindings.Generator',
+    'TedToolkit.CppBindings.Cgal.Generator'
+) | ForEach-Object {
+    $packageId = $_
+    $package = Join-Path $feed "$packageId.1.0.0.nupkg"
+    $expectedHash = [Convert]::ToBase64String(
+        [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($package)))
+    if ($assets.libraries["$packageId/1.0.0"].sha512 -cne $expectedHash) {
+        throw "Consumer did not restore the just-built $packageId package."
+    }
 }
 
 [ordered]@{
