@@ -81,6 +81,14 @@ std::string FailureStack(const CGAL::Failure_exception& failure)
     return failure.filename() + ":" + std::to_string(failure.line_number());
 }
 
+struct FixtureBadAlloc final : std::bad_alloc
+{
+    const char* what() const noexcept override
+    {
+        return "fixture bad allocation";
+    }
+};
+
 void ThrowSelectedFailure(int scenario)
 {
     switch (scenario)
@@ -90,7 +98,7 @@ void ThrowSelectedFailure(int scenario)
         case 2:
             throw std::out_of_range("fixture out of range");
         case 3:
-            throw std::bad_alloc();
+            throw FixtureBadAlloc();
         case 4:
             throw std::overflow_error("fixture overflow");
         case 5:

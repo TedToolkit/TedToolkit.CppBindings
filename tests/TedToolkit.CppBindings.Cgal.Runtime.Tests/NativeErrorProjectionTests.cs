@@ -22,22 +22,27 @@ internal sealed class NativeErrorProjectionTests
     [Test]
     public async Task Should_map_every_failure_category_and_clear_once_Async()
     {
-        var cases = new (int Scenario, Type ExceptionType, string? NativeType, bool HasNativeStack)[]
+        var cases = new (
+            int Scenario,
+            Type ExceptionType,
+            string? NativeType,
+            string MessageFragment,
+            bool HasNativeStack)[]
         {
-            (1, typeof(CgalArgumentException), "std::invalid_argument", false),
-            (2, typeof(CgalArgumentOutOfRangeException), "std::out_of_range", false),
-            (3, typeof(CgalOutOfMemoryException), "std::bad_alloc", false),
-            (4, typeof(CgalArithmeticException), "std::overflow_error", false),
-            (5, typeof(CgalArithmeticException), "std::underflow_error", false),
-            (6, typeof(CgalStandardException), "std::exception", false),
-            (7, typeof(CgalUnknownException), null, false),
-            (10, typeof(CgalErrorException), "CGAL::Error_exception", true),
-            (11, typeof(CgalPreconditionException), "CGAL::Precondition_exception", true),
-            (12, typeof(CgalPostconditionException), "CGAL::Postcondition_exception", true),
-            (13, typeof(CgalAssertionException), "CGAL::Assertion_exception", true),
-            (14, typeof(CgalTestException), "CGAL::Test_exception", true),
-            (15, typeof(CgalWarningException), "CGAL::Warning_exception", true),
-            (16, typeof(CgalFailureException), "CGAL::Failure_exception", true),
+            (1, typeof(CgalArgumentException), "std::invalid_argument", "fixture invalid argument", false),
+            (2, typeof(CgalArgumentOutOfRangeException), "std::out_of_range", "fixture out of range", false),
+            (3, typeof(CgalOutOfMemoryException), "std::bad_alloc", "fixture bad allocation", false),
+            (4, typeof(CgalArithmeticException), "std::overflow_error", "fixture overflow", false),
+            (5, typeof(CgalArithmeticException), "std::underflow_error", "fixture underflow", false),
+            (6, typeof(CgalStandardException), "std::exception", "fixture standard exception", false),
+            (7, typeof(CgalUnknownException), null, "error kind 255", false),
+            (10, typeof(CgalErrorException), "CGAL::Error_exception", "fixture error", true),
+            (11, typeof(CgalPreconditionException), "CGAL::Precondition_exception", "fixture precondition", true),
+            (12, typeof(CgalPostconditionException), "CGAL::Postcondition_exception", "fixture postcondition", true),
+            (13, typeof(CgalAssertionException), "CGAL::Assertion_exception", "fixture assertion", true),
+            (14, typeof(CgalTestException), "CGAL::Test_exception", "fixture test", true),
+            (15, typeof(CgalWarningException), "CGAL::Warning_exception", "fixture warning", true),
+            (16, typeof(CgalFailureException), "CGAL::Failure_exception", "fixture failure", true),
         };
 
         foreach (var testCase in cases)
@@ -47,7 +52,7 @@ internal sealed class NativeErrorProjectionTests
 
             await Assert.That(exception.GetType()).IsEqualTo(testCase.ExceptionType);
             await Assert.That(exception).IsAssignableTo<CgalException>();
-            await Assert.That(exception.Message).IsNotEmpty();
+            await Assert.That(exception.Message).Contains(testCase.MessageFragment);
             await Assert.That(exception.NativeTypeName).IsEqualTo(testCase.NativeType);
             if (testCase.HasNativeStack)
             {
