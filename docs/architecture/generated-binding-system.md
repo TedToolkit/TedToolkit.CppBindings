@@ -3,7 +3,7 @@
 - Status: Active
 - Owner: TedToolkit maintainers
 - Scope and system boundary: Generation, native interop, managed representation, ownership,
-  diagnostics, and packaging for generated OCCT bindings.
+  diagnostics, and packaging for generated provider bindings.
 - Applicable product intent: None
 - Governing principles: [Repository design principles](../principles/README.md)
 - Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
@@ -17,7 +17,7 @@
 ### Dependency direction
 
 ```text
-configured OCCT headers and target toolchain
+configured provider headers/profile and target toolchain
                   |
                   v
          normalized semantic Model
@@ -32,7 +32,7 @@ generated C/C++ boundary   generated C# binding
      platform binding package (initially Windows win-x64)
 
 generated C# binding --> TedToolkit.CppBindings.Runtime
-generated OCCT binding --> TedToolkit.CppBindings.Occt.Runtime
+generated provider binding --> matching provider Runtime
 consumer compilation --> TedToolkit.CppBindings.Analyzers
 ```
 
@@ -51,10 +51,11 @@ physically present only as an inactive migration recovery artifact until the gen
 passes, after which current source, build, fixtures, output, and documentation remove it.
 
 `TedToolkit.CppBindings.Runtime` contains only handwritten, declaration-agnostic managed
-mechanisms. `TedToolkit.CppBindings.Occt.Runtime` contains the declaration-agnostic OCCT-specific
-runtime surface. Concrete OCCT layouts, imports, exports, function tables, operation bodies,
-closed-generic registrations, and release functions belong to generated wrapper assemblies such as
-`TedToolkit.CppBindings.Occt.Windows`. A wrapper uses the runtime packages' ordinary public API.
+mechanisms. Each provider Runtime contains only declaration-agnostic provider semantics: OCCT owns
+intrusive-handle behavior, while CGAL owns failure and finite polymorphic-result contracts. Concrete
+layouts, imports, exports, function tables, operation bodies, closed-generic registrations, and
+release functions belong to generated wrapper assemblies such as the OCCT and CGAL Windows
+packages. A wrapper uses the runtime packages' ordinary public API.
 The runtime packages grant no wrapper friend access, caller identity privilege,
 `InternalsVisibleTo`, or Windows-specific capability.
 

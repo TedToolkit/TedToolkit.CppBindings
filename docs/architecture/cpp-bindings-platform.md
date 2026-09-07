@@ -20,17 +20,13 @@
 namespace and provider semantics occupy a provider segment:
 
 ```text
-TedToolkit.CppBindings.Generator
-TedToolkit.CppBindings.Runtime
-TedToolkit.CppBindings.Analyzers
-              ^
-              |
-TedToolkit.CppBindings.Occt.Generator
-TedToolkit.CppBindings.Occt.Runtime
-TedToolkit.CppBindings.Occt.SourceGenerators (internal build component)
-              ^
-              |
-TedToolkit.CppBindings.Occt.Windows
+shared: TedToolkit.CppBindings.Generator + Runtime
+├── OCCT: Generator + Runtime + SourceGenerators (internal)
+│   └── TedToolkit.CppBindings.Occt.Windows
+└── CGAL: Generator + Runtime + Generator.Tool (internal)
+    └── TedToolkit.CppBindings.Cgal.Windows
+
+consumer tool: TedToolkit.CppBindings.Analyzers
 ```
 
 Source mirrors that dependency boundary: shared Generator and Runtime projects live below
@@ -52,16 +48,15 @@ there is no public `Borrowed<T>` wrapper. Consumer analyzers provide suppressibl
 guidance and are referenced directly as a standalone package. Provider source generators are build
 tools and do not share an assembly or package responsibility with consumer diagnostics.
 
-Namespaces follow responsibility: generic public APIs use `TedToolkit.CppBindings`; OCCT public
-APIs use `TedToolkit.CppBindings.Occt`. `.Windows` identifies a concrete package and assembly, not a
-generated API namespace. The current repository delivers the Shared and OCCT projects above. The
-`src/providers/cgal` directory reserves the provider identity only; no CGAL package or capability is
-claimed by the current state.
+Namespaces follow responsibility: generic public APIs use `TedToolkit.CppBindings`; provider APIs
+use `TedToolkit.CppBindings.Occt` or `TedToolkit.CppBindings.Cgal`. `.Windows` identifies a concrete
+package and assembly, not a generated API namespace. The internal CGAL Generator Tool only hosts
+repository builds and is not a package or consumer dependency.
 
-## Accepted CGAL target
+## Current CGAL target
 
-The next provider delivery adds real `TedToolkit.CppBindings.Cgal.Generator`, `.Runtime`, and
-`.Windows` packages below `src/providers/cgal`, with public APIs under
+The CGAL provider delivers real `TedToolkit.CppBindings.Cgal.Generator`, `.Runtime`, and `.Windows`
+packages below `src/providers/cgal`, with public APIs under
 `TedToolkit.CppBindings.Cgal`. Empty symmetric packages remain forbidden.
 
 The accepted default CGAL Windows artifact is profile-complete rather than universally
@@ -74,6 +69,10 @@ knowledge to Shared.
 This record governs product identity, package allocation, and generic/provider dependency direction.
 The current generated-binding and analyzer-boundary records govern exact layout, generation, native
 loading, ownership behavior, diagnostics, and failure boundaries under the same platform identity.
+
+The ready-to-use CGAL package is self-contained for `win-x64`: it carries the exact generated
+managed/native pair, recursively resolved app-local imports, the locked GMP/MPFR runtime files, and
+CGAL/GMP/MPFR notices. Its isolated consumer does not acquire Generator, Clang, or OCCT packages.
 
 ## Constraints for change design
 

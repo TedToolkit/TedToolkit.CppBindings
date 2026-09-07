@@ -73,6 +73,7 @@ src/
 │   │   └── TedToolkit.CppBindings.Occt.Windows
 │   └── cgal/
 │       ├── TedToolkit.CppBindings.Cgal.Generator
+│       ├── TedToolkit.CppBindings.Cgal.Generator.Tool (internal host)
 │       ├── TedToolkit.CppBindings.Cgal.Runtime
 │       └── TedToolkit.CppBindings.Cgal.Windows
 └── tools/
@@ -179,4 +180,3 @@ unbounded generated package claim.
 | Reassess CGAL Runtime responsibilities | TedToolkit maintainers | A proposed contract has no provider-specific runtime semantics | Open |
 | Reassess the default profile | TedToolkit maintainers | Consumers require exact constructions, another kernel, or a materially different CGAL package family | Open |
 | Reassess dependency packaging | TedToolkit maintainers | CGAL, GMP, MPFR, or vcpkg changes the supported native dependency model | Open |
-

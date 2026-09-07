@@ -1,13 +1,14 @@
 # TedToolkit.CppBindings
 
 TedToolkit.CppBindings is a .NET platform for generating C++ bindings. This repository provides
-the Open CASCADE Technology (OCCT) provider: it reads OCCT headers installed by vcpkg, builds a
-normalized semantic model, and emits a matched C++ ABI boundary and C# API.
+Open CASCADE Technology (OCCT) and Computational Geometry Algorithms Library (CGAL) providers.
+Each builds one normalized semantic model and emits a matched C++ ABI boundary and C# API through
+the shared generation platform.
 
 > [!WARNING]
 > The project is under active development. The complete Windows binding package can be built and
-> verified locally, but it is not yet published to a remote package feed. The only currently proved
-> ready-to-use artifact targets `win-x64`, OCCT 8.0.1, and `net8.0`.
+> verified locally, but they are not yet published to a remote package feed. Current ready-to-use
+> artifacts target `win-x64` and `net8.0`: OCCT 8.0.1 and the finite CGAL 6.2 EPICK profile.
 
 ## What this repository provides
 
@@ -18,12 +19,16 @@ normalized semantic model, and emits a matched C++ ABI boundary and C# API.
   reference returns, and native exceptions.
 - A ready-to-use Windows package that generates every representable declaration supported by the
   delivered OCCT DLLs.
+- A deterministic CGAL Generator, provider-specific Runtime, and self-contained Windows package
+  for the finite versioned `epick-windows-v1` profile.
 
 ## Start here
 
 | Goal | Documentation |
 | --- | --- |
 | Understand the generated OCCT API and supported package | [OCCT Windows bindings](src/providers/occt/TedToolkit.CppBindings.Occt.Windows/README.md) |
+| Use the finite CGAL EPICK package | [CGAL Windows bindings](src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/README.md) |
+| Generate a finite CGAL profile | [CGAL Generator](src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/README.md) |
 | Generate OCCT bindings | [OCCT Generator](src/providers/occt/TedToolkit.CppBindings.Occt.Generator/README.md) |
 | Use provider-neutral generation stages | [Generator](src/shared/TedToolkit.CppBindings.Generator/README.md) |
 | Understand ownership and generated-code contracts | [Runtime](src/shared/TedToolkit.CppBindings.Runtime/README.md) |
@@ -38,7 +43,7 @@ The generation path is model-first. Parsing and normalization finish before eith
 the C# and C++ outputs therefore describe one semantic model and one exact-match artifact set.
 
 ```text
-OCCT headers + generation options
+native headers + provider profile/options
                  |
                  v
        ClangSharp / libclang
@@ -71,7 +76,8 @@ layout, dispatch, lifetime, and packaging contracts.
   pointer-sized, non-owning view used for fields, parameters, and borrowed references.
 - C++ inheritance is projected through C# interfaces, while instance behavior and native lifetime
   remain in extension methods and separate owner types.
-- Supported C++ exceptions are captured at the native boundary and projected as .NET exceptions.
+- Supported C++ exceptions are captured at the native boundary and projected through the matching
+  provider Runtime as .NET exceptions.
 
 These guarantees are governed by the [repository principles](docs/principles/README.md), not by
 convenience policy in generated bindings.
@@ -80,17 +86,18 @@ convenience policy in generated bindings.
 
 | Concern | Current support |
 | --- | --- |
-| Ready-to-use package and assembly | `TedToolkit.CppBindings.Occt.Windows` |
-| Managed API namespace | `TedToolkit.CppBindings.Occt` |
+| Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows` |
+| Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal` |
 | Runtime identifier | `win-x64` |
-| OCCT version | 8.0.1 |
+| Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v1` |
 | Binding target framework | `net8.0` |
 | Generator and development host | .NET 10 |
 | Native toolchain | Visual C++, C++17, CMake 3.28 or later |
 
-The repository does not currently contain a `vcpkg.json` manifest. Generation therefore uses the
-OCCT installation under `VCPKG_ROOT`, and a new platform, architecture, compiler ABI, or header
-scope requires fresh compiler and native-behavior proof.
+The repository root does not contain a `vcpkg.json` manifest. OCCT generation uses the installation
+under `VCPKG_ROOT`; the CGAL Generator package embeds its locked profile manifest and registry
+configuration. A new platform, architecture, compiler ABI, or header scope requires fresh compiler
+and native-behavior proof.
 
 ## Build and generate locally
 
@@ -101,6 +108,7 @@ scope requires fresh compiler and native-behavior proof.
 - CMake 3.28 or later
 - Visual Studio with MSVC, CMake tools, and LLVM (`clang-cl`) components
 - vcpkg with OCCT 8.0.1 installed for `x64-windows`
+- vcpkg with CGAL 6.2, GMP 6.3.0#5, and MPFR 4.2.2#1 installed for `x64-windows`
 - `VCPKG_ROOT` set to the vcpkg installation directory
 
 Confirm the OCCT installation:
@@ -127,6 +135,15 @@ build files, and build outputs under `output/generated/cpp` and related generate
 Declarations that cannot be instantiated or are absent from the delivered OCCT DLLs are excluded
 only after compiler or linker proof.
 
+Generate, compile, pack, and consume the locked CGAL profile with:
+
+```powershell
+pwsh -NoProfile -File Build/VerifyCgalWindowsPackage.ps1
+```
+
+CGAL outputs remain isolated under `output/providers/cgal`; its native build is serial to keep disk
+and compiler pressure bounded.
+
 Use a short Windows checkout path. Deep worktrees combined with generated template names can exceed
 MSVC object-path limits.
 
@@ -142,6 +159,10 @@ MSVC object-path limits.
 | `TedToolkit.CppBindings.Occt.SourceGenerators` | Build-time generation of the selectable OCCT header inventory |
 | `TedToolkit.CppBindings.Occt.Windows` | Ready-to-use Windows binding artifact for the proved profile |
 | `TedToolkit.CppBindings.Occt.Console` | Development host for generating the public OCCT surface |
+| `TedToolkit.CppBindings.Cgal.Generator` | Locked finite-profile CGAL discovery, admission, and paired generation |
+| `TedToolkit.CppBindings.Cgal.Runtime` | CGAL exception, diagnostic, and finite polymorphic-result contracts |
+| `TedToolkit.CppBindings.Cgal.Windows` | Self-contained `win-x64` artifact for the admitted EPICK profile |
+| `TedToolkit.CppBindings.Cgal.Generator.Tool` | Repository-local, non-package generation host |
 | `Build` | Repository build, test, native fixture, and integration gates |
 
 ## Test and verification
@@ -152,6 +173,8 @@ their executable entry points:
 ```powershell
 dotnet run --project tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBindings.Runtime.Tests.csproj -c Release --no-build -- --report-trx
 dotnet run --project tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj -c Release --no-build -- --report-trx
+dotnet run --project tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj -c Release --no-build -- --report-trx
+dotnet run --project tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/TedToolkit.CppBindings.Cgal.Runtime.Tests.csproj -c Release --no-build -- --report-trx
 ```
 
 Run the complete repository pipeline, including native handle fixtures and managed integration:
@@ -182,4 +205,5 @@ reported as skipped when the required installation is unavailable.
 ## License
 
 This project is licensed under LGPL-3.0. See [COPYING](COPYING) and
-[COPYING.LESSER](COPYING.LESSER). OCCT and other dependencies retain their respective licenses.
+[COPYING.LESSER](COPYING.LESSER). OCCT, CGAL, GMP, MPFR, and other dependencies retain their
+respective licenses.
