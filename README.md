@@ -23,11 +23,11 @@ normalized semantic model, and emits a matched C++ ABI boundary and C# API.
 
 | Goal | Documentation |
 | --- | --- |
-| Understand the generated OCCT API and supported package | [OCCT Windows bindings](src/core/TedToolkit.CppBindings.Occt.Windows/README.md) |
-| Generate OCCT bindings | [OCCT Generator](src/core/TedToolkit.CppBindings.Occt.Generator/README.md) |
-| Use provider-neutral generation stages | [Generator](src/core/TedToolkit.CppBindings.Generator/README.md) |
-| Understand ownership and generated-code contracts | [Runtime](src/core/TedToolkit.CppBindings.Runtime/README.md) |
-| Understand OCCT intrusive ownership and error projection | [OCCT Runtime](src/core/TedToolkit.CppBindings.Occt.Runtime/README.md) |
+| Understand the generated OCCT API and supported package | [OCCT Windows bindings](src/providers/occt/TedToolkit.CppBindings.Occt.Windows/README.md) |
+| Generate OCCT bindings | [OCCT Generator](src/providers/occt/TedToolkit.CppBindings.Occt.Generator/README.md) |
+| Use provider-neutral generation stages | [Generator](src/shared/TedToolkit.CppBindings.Generator/README.md) |
+| Understand ownership and generated-code contracts | [Runtime](src/shared/TedToolkit.CppBindings.Runtime/README.md) |
+| Understand OCCT intrusive ownership and error projection | [OCCT Runtime](src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/README.md) |
 | Configure consumer diagnostics | [Analyzers](src/tools/TedToolkit.CppBindings.Analyzers/README.md) |
 | Review the system design | [Generated binding architecture](docs/architecture/generated-binding-system.md) |
 | Run the generation benchmark workflow | [Benchmarks](benchmarks/README.md) |
@@ -138,7 +138,7 @@ MSVC object-path limits.
 | `TedToolkit.CppBindings.Generator` | Provider-neutral generation orchestration and source publication |
 | `TedToolkit.CppBindings.Analyzers` | Consumer diagnostics for generated-only and borrowed-reference contracts |
 | `TedToolkit.CppBindings.Occt.Runtime` | OCCT intrusive ownership and native error projection |
-| `TedToolkit.CppBindings.Occt.Generator` | OCCT parsing, semantic modeling, and managed/native emission |
+| `TedToolkit.CppBindings.Occt.Generator` | OCCT discovery, classification, finite provider policy, build metadata, and pipeline integration |
 | `TedToolkit.CppBindings.Occt.SourceGenerators` | Build-time generation of the selectable OCCT header inventory |
 | `TedToolkit.CppBindings.Occt.Windows` | Ready-to-use Windows binding artifact for the proved profile |
 | `TedToolkit.CppBindings.Occt.Console` | Development host for generating the public OCCT surface |

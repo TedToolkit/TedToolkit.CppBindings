@@ -5,9 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Generators;
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
-using TedToolkit.CppBindings.Occt.Generator.Models.Types;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -56,7 +55,7 @@ internal sealed class NativeApiGeneratorTests
             Bases = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             MethodModels =
             [
                 new()
@@ -84,7 +83,7 @@ internal sealed class NativeApiGeneratorTests
         };
         NativeExportNameBuilder.Assign(record);
 
-        var exports = NativeExportInventory.GetExports([record,]);
+        var exports = NativeExportInventory.GetExports([record,], ["NativeError_Clear",]);
 
         await Assert.That(string.Join(",", exports)).IsEqualTo("NativeError_Clear,Thing_Destroy");
     }
@@ -97,7 +96,7 @@ internal sealed class NativeApiGeneratorTests
             Bases = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             MethodModels =
             [
                 new()

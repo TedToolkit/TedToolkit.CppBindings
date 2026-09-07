@@ -11,8 +11,8 @@ using System.Runtime.Loader;
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Generators;
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Generators.CSharpGeneratorTests;
 
@@ -39,14 +39,20 @@ internal sealed class LayoutTests
                 CreateField("Last", "long", 16, 8),
                 CreateField("Suffix", "int", 24, 4),
             ],
-            MethodModels = [], IsAbstract = false, IsStandardTransient = false,
-            Size = 28, Alignment = 4, SourceHeader = "Storage.hxx",
+            MethodModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = false,
+            Size = 28,
+            Alignment = 4,
+            SourceHeader = "Storage.hxx",
             Type = new() { CppTypeName = "Storage", CSharpPInvokeType = new("Storage"), CSharpPublicType = new("Storage"), },
         };
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            CSharpNamespace = "LayoutProbe", DeclOptions = [],
-            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
         var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
         const string probe = """
@@ -98,7 +104,7 @@ internal sealed class LayoutTests
             FieldModels = [CreateField("First", "int", 0, 4),],
             MethodModels = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             Size = alignment,
             Alignment = alignment,
             SourceHeader = "Storage.hxx",
@@ -149,7 +155,7 @@ internal sealed class LayoutTests
                 : [CreateField("First", "byte", fieldOffset, 1), CreateField("Last", "int", fieldOffset + 8, 4),],
             MethodModels = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             Size = size,
             Alignment = alignment,
             SourceHeader = "Storage.hxx",

@@ -5,7 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Services.RecordModelManagerTests;

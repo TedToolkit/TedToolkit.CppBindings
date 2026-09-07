@@ -7,16 +7,15 @@
 
 using Microsoft.Extensions.Options;
 
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Generators;
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
-using TedToolkit.CppBindings.Occt.Generator.Models.Types;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Generators.CSharpGeneratorTests;
 
 /// <summary>
-/// Verifies <see cref="CSharpGenerator"/> output.
+/// Verifies <see cref="TedToolkit.CppBindings.Occt.Generator.Generators.CSharpGenerator"/> output.
 /// </summary>
 internal sealed class GenerateAsyncTest
 {
@@ -34,9 +33,15 @@ internal sealed class GenerateAsyncTest
         {
             return new()
             {
-                DescriptionItems = [], FieldModels = [], MethodModels = [],
-                IsAbstract = false, IsStandardTransient = true, ObjectKind = NativeObjectKind.Handle,
-                Size = 8, Alignment = 8, SourceHeader = "test.hxx",
+                DescriptionItems = [],
+                FieldModels = [],
+                MethodModels = [],
+                IsAbstract = false,
+                UsesIntrusiveReferenceCounting = true,
+                ObjectKind = NativeObjectKind.IntrusiveHandle,
+                Size = 8,
+                Alignment = 8,
+                SourceHeader = "test.hxx",
                 Type = new() { CppTypeName = name, CSharpPInvokeType = new(name), CSharpPublicType = new(name), },
             };
         }
@@ -89,7 +94,7 @@ internal sealed class GenerateAsyncTest
             Bases = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = true,
+            UsesIntrusiveReferenceCounting = true,
             MethodModels =
             [
                 new MethodModel()
@@ -105,7 +110,7 @@ internal sealed class GenerateAsyncTest
                     Type = MethodModelType.NORMAL,
                 },
             ],
-            ObjectKind = NativeObjectKind.Handle,
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
             Size = 8,
             SourceHeader = "Geom_Curve.hxx",
             Type = new()
@@ -150,7 +155,7 @@ internal sealed class GenerateAsyncTest
             DescriptionItems = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             MethodModels =
             [
                 new MethodModel()
@@ -190,7 +195,7 @@ internal sealed class GenerateAsyncTest
             DescriptionItems = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             MethodModels = [],
             ObjectKind = NativeObjectKind.Value,
             Size = 4,
@@ -233,10 +238,10 @@ internal sealed class GenerateAsyncTest
             CppValueTypeName = "opencascade::handle<Standard_Type>",
             CSharpPInvokeType = new("global::TedToolkit.CppBindings.Occt.handle<Standard_Type>"),
             CSharpPublicType = new("global::TedToolkit.CppBindings.Occt.handle<Standard_Type>"),
-            IsOcctHandle = true,
+            IsIntrusiveHandle = true,
             IsRecord = true,
-            OcctHandleElementCppType = "Standard_Type",
-            OcctHandleElementType = "Standard_Type",
+            IntrusiveHandleElementCppType = "Standard_Type",
+            IntrusiveHandleElementType = "Standard_Type",
         };
         var record = new RecordModel()
         {
@@ -244,7 +249,7 @@ internal sealed class GenerateAsyncTest
             Bases = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = true,
+            UsesIntrusiveReferenceCounting = true,
             MethodModels =
             [
                 new MethodModel()
@@ -260,7 +265,7 @@ internal sealed class GenerateAsyncTest
                     Type = MethodModelType.NORMAL,
                 },
             ],
-            ObjectKind = NativeObjectKind.Handle,
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
             Size = 8,
             SourceHeader = "Standard_Transient.hxx",
             Type = new()
@@ -298,13 +303,13 @@ internal sealed class GenerateAsyncTest
             Bases = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = true,
+            UsesIntrusiveReferenceCounting = true,
             MethodModels =
             [
                 CreateReferenceMethod("Pole", constReference, noExceptions: false),
                 CreateReferenceMethod("ChangePole", mutableReference, noExceptions: true),
             ],
-            ObjectKind = NativeObjectKind.Handle,
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
             Size = 8,
             SourceHeader = "Curve.hxx",
             Type = new()
@@ -351,7 +356,7 @@ internal sealed class GenerateAsyncTest
             DescriptionItems = [new DescriptionSummary(new DescriptionText("Point wrapper.")),],
             Bases = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             SourceHeader = "gp_Pnt2d.hxx",
             Size = 16,
             Type = new()
@@ -441,7 +446,7 @@ internal sealed class GenerateAsyncTest
             CSharpPublicType = new("Matrix"),
             IsRecord = true,
             Transport = new(
-                ValueIsConst: true,
+                valueIsConst: true,
                 [new(TypeIndirectionKind.LValueReference, IsConstQualified: false),]),
         };
         ParameterModel Parameter(string name)
@@ -459,7 +464,7 @@ internal sealed class GenerateAsyncTest
             DescriptionItems = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             MethodModels =
             [
                 new MethodModel()
@@ -568,7 +573,7 @@ internal sealed class GenerateAsyncTest
                 },
             ],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             MethodModels =
             [
                 new()
@@ -620,7 +625,7 @@ internal sealed class GenerateAsyncTest
     /// <returns>A task representing the assertions.</returns>
     [Test]
     [Arguments(NativeObjectKind.Owned, "global::TedToolkit.CppBindings.Owned")]
-    [Arguments(NativeObjectKind.Handle, "global::TedToolkit.CppBindings.Occt.Handle")]
+    [Arguments(NativeObjectKind.IntrusiveHandle, "global::TedToolkit.CppBindings.Occt.Handle")]
     public async Task Should_separate_runtime_parameter_identity_from_generated_namespace_Async(
         NativeObjectKind kind,
         string owner)
@@ -639,7 +644,7 @@ internal sealed class GenerateAsyncTest
             Bases = [],
             FieldModels = [],
             IsAbstract = false,
-            IsStandardTransient = kind is NativeObjectKind.Handle,
+            UsesIntrusiveReferenceCounting = kind is NativeObjectKind.IntrusiveHandle,
             ObjectKind = kind,
             Size = 8,
             SourceHeader = "Resource.hxx",
@@ -685,7 +690,7 @@ internal sealed class GenerateAsyncTest
 
     private static Dictionary<string, int> CreateFunctionIndices(params RecordModel[] records)
     {
-        return NativeExportInventory.GetExports(records)
+        return NativeExportInventory.GetExports(records, ["NativeError_Clear",])
             .Select(static (export, index) => (export, index))
             .ToDictionary(static value => value.export, static value => value.index, StringComparer.Ordinal);
     }

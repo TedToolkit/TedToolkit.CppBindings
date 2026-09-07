@@ -13,8 +13,8 @@ $null = New-Item -ItemType Directory -Path $report
 $feed = Join-Path $report 'feed'
 $fixture = Join-Path $repository 'tests/TedToolkit.CppBindings.Analyzers.Tests/Fixtures/PackageConsumer'
 $projects = @{
-    'TedToolkit.CppBindings.Runtime' = 'src/core/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj'
-    'TedToolkit.CppBindings.Occt.Runtime' = 'src/core/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj'
+    'TedToolkit.CppBindings.Runtime' = 'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj'
+    'TedToolkit.CppBindings.Occt.Runtime' = 'src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj'
     'TedToolkit.CppBindings.Analyzers' = 'src/tools/TedToolkit.CppBindings.Analyzers/TedToolkit.CppBindings.Analyzers.csproj'
 }
 foreach ($name in $projects.Keys | Sort-Object) {

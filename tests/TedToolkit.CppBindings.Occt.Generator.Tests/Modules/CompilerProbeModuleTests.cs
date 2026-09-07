@@ -5,8 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
-using TedToolkit.CppBindings.Occt.Generator.Models.Types;
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Modules;
@@ -36,7 +35,7 @@ internal sealed class CompilerProbeModuleTests
         await Assert.That(value.MethodModels).IsEmpty();
         await Assert.That(owned.ObjectKind).IsEqualTo(NativeObjectKind.Owned);
         await Assert.That(owned.MethodModels.Single().NativeExportName).IsEqualTo("Owned_Destroy");
-        await Assert.That(handle.ObjectKind).IsEqualTo(NativeObjectKind.Handle);
+        await Assert.That(handle.ObjectKind).IsEqualTo(NativeObjectKind.IntrusiveHandle);
         await Assert.That(handle.MethodModels.Select(static method => method.NativeExportName))
             .IsEquivalentTo(["Handle_Release", "Handle_Destroy",]);
     }
@@ -104,7 +103,7 @@ internal sealed class CompilerProbeModuleTests
             DescriptionItems = [],
             Bases = [],
             IsAbstract = false,
-            IsStandardTransient = isTransient,
+            UsesIntrusiveReferenceCounting = isTransient,
             SourceHeader = name + ".hxx",
             Type = new()
             {

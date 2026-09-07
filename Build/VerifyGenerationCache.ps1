@@ -72,7 +72,7 @@ function Invoke-Coordinator {
 
 try {
     $env:COMSPEC = 'Invoke-TestCompilerEnvironment'
-    $sourceRoot = Join-Path $testRoot 'src\core\TedToolkit.CppBindings.Generator'
+    $sourceRoot = Join-Path $testRoot 'src\shared\TedToolkit.CppBindings.Generator'
     New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
     $source = Join-Path $sourceRoot 'Input.cs'
     Set-Content -LiteralPath $source -Value 'first input'

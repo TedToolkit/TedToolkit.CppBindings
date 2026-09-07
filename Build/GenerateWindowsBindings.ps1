@@ -36,10 +36,10 @@ try {
     $manifestPath = Join-Path $resolvedGeneratedRoot "native-build\$Configuration\managed-files.txt"
     $nativeLibraryPath = Join-Path $resolvedGeneratedRoot "native-build\$Configuration\ted_toolkit_occt.dll"
     $generatorInputRoots = @(
-        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.CppBindings.Generator'),
-        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.CppBindings.Occt.Generator'),
+        (Join-Path $resolvedRepositoryRoot 'src\shared\TedToolkit.CppBindings.Generator'),
+        (Join-Path $resolvedRepositoryRoot 'src\providers\occt\TedToolkit.CppBindings.Occt.Generator'),
         (Join-Path $resolvedRepositoryRoot 'tests\TedToolkit.CppBindings.Occt.Console'),
-        (Join-Path $resolvedRepositoryRoot 'src\tools\TedToolkit.CppBindings.Occt.SourceGenerators'),
+        (Join-Path $resolvedRepositoryRoot 'src\providers\occt\TedToolkit.CppBindings.Occt.SourceGenerators'),
         (Join-Path $resolvedRepositoryRoot 'externals\TedToolkit\TedToolkit.RoslynHelper'),
         (Join-Path $resolvedRepositoryRoot 'externals\TedToolkit\props')
     )
@@ -52,7 +52,7 @@ try {
         (Join-Path $resolvedRepositoryRoot 'Directory.Build.props'),
         (Join-Path $resolvedRepositoryRoot 'Directory.Build.targets'),
         (Join-Path $resolvedRepositoryRoot 'Directory.Packages.props'),
-        (Join-Path $resolvedRepositoryRoot 'src\core\TedToolkit.CppBindings.Occt.Windows\TedToolkit.CppBindings.Occt.Windows.csproj'),
+        (Join-Path $resolvedRepositoryRoot 'src\providers\occt\TedToolkit.CppBindings.Occt.Windows\TedToolkit.CppBindings.Occt.Windows.csproj'),
         (Join-Path $VcpkgRoot 'installed\vcpkg\status')
     ) | Where-Object { Test-Path -LiteralPath $_ } | Get-Item
     $inputHashes = @($inputFiles | Sort-Object -Property FullName -Unique | ForEach-Object {

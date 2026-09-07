@@ -13,8 +13,8 @@ using ClangSharp.Interop;
 
 using Microsoft.Extensions.Options;
 
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Generators;
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
 using TedToolkit.CppBindings.Occt.Generator.Services.Rules;
@@ -63,8 +63,10 @@ internal sealed class AddTest
         var container = records.Single(static record => record.Type.CppTypeName == "Container");
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            CSharpNamespace = "LayoutProbe", DeclOptions = [],
-            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
         var sources = new List<string>();
         foreach (var record in records)
@@ -170,8 +172,10 @@ internal sealed class AddTest
         var record = manager.RecordModels.Single();
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            CSharpNamespace = "LayoutProbe", DeclOptions = [],
-            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
         var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
         var write = constantPointer ? "" : "int target = 79; value.Pointer = &target; if (*value.Pointer != 79) return false;";
@@ -231,8 +235,10 @@ internal sealed class AddTest
         var storage = records.Single(static record => record.Type.CppTypeName == "Storage");
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            CSharpNamespace = "LayoutProbe", DeclOptions = [],
-            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
         var sources = new List<string>();
         foreach (var record in records)
@@ -305,8 +311,10 @@ internal sealed class AddTest
         var records = manager.RecordModels.ToArray();
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            CSharpNamespace = "LayoutProbe", DeclOptions = [],
-            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
         var sources = new List<string>();
         foreach (var record in records)
@@ -449,7 +457,7 @@ internal sealed class AddTest
         var api = records.Single(static record => record.Type.CppTypeName == "Api");
         await Assert.That(api.FieldModels.Select(static field => field.Name)).IsEquivalentTo(["Value", "Nested",]);
         await Assert.That(api.MethodModels.Select(static method => method.MethodName)).IsEquivalentTo(["Keep",]);
-        var exports = NativeExportInventory.GetExports(records);
+        var exports = NativeExportInventory.GetExports(records, ["NativeError_Clear",]);
         await Assert.That(exports).Contains("Api_Keep");
         await Assert.That(exports).DoesNotContain("Api_Borrow");
         await Assert.That(exports).DoesNotContain("Api_Copy");
@@ -495,8 +503,10 @@ internal sealed class AddTest
             .IsEquivalentTo(["Box_Aligned", "Box<int>",]);
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            CSharpNamespace = "LayoutProbe", DeclOptions = [],
-            CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
         var sources = new List<string>();
         foreach (var record in records)
@@ -2041,9 +2051,9 @@ internal sealed class AddTest
         var transientModel = manager.Add(transientRecord);
         var nestedTransientModel = manager.Add(nestedTransientRecord);
 
-        await Assert.That(heapOnlyModel.IsStandardTransient).IsFalse();
-        await Assert.That(transientModel.IsStandardTransient).IsTrue();
-        await Assert.That(nestedTransientModel.IsStandardTransient).IsTrue();
+        await Assert.That(heapOnlyModel.UsesIntrusiveReferenceCounting).IsFalse();
+        await Assert.That(transientModel.UsesIntrusiveReferenceCounting).IsTrue();
+        await Assert.That(nestedTransientModel.UsesIntrusiveReferenceCounting).IsTrue();
     }
 
     /// <summary>
@@ -2063,9 +2073,12 @@ internal sealed class AddTest
         var records = manager.RecordModels.ToArray();
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            DeclOptions = [], CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
-        var slots = NativeExportInventory.GetExports(records).Select(static (name, index) => (name, index))
+        var slots = NativeExportInventory.GetExports(records, ["NativeError_Clear",])
+            .Select(static (name, index) => (name, index))
             .ToDictionary(static entry => entry.name, static entry => entry.index, StringComparer.Ordinal);
         var boxes = records.Where(static record => record.Type.CppTypeName.StartsWith("Box<", StringComparison.Ordinal)).ToArray();
         await Assert.That(boxes.Length).IsEqualTo(2);
@@ -2160,9 +2173,12 @@ internal sealed class AddTest
         await Assert.That(boxes.Length).IsEqualTo(2);
         var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
-            DeclOptions = [], CSharpFolder = new(Path.GetTempPath()), CppFolder = new(Path.GetTempPath()),
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
         });
-        var slots = NativeExportInventory.GetExports(records).Select(static (name, index) => (name, index))
+        var slots = NativeExportInventory.GetExports(records, ["NativeError_Clear",])
+            .Select(static (name, index) => (name, index))
             .ToDictionary(static entry => entry.name, static entry => entry.index, StringComparer.Ordinal);
         foreach (var record in boxes)
         {

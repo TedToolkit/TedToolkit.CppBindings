@@ -11,11 +11,11 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <Analyzer Include="..\..\src\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\TedToolkit.CppBindings.Occt.SourceGenerators.dll"/>
-    <Analyzer Include="..\..\src\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\TedToolkit.RoslynHelper.dll"/>
-    <Analyzer Include="..\..\src\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\ZString.dll"/>
-    <Analyzer Include="..\..\src\tools\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\System.Memory.dll"/>
-    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Generator\TedToolkit.CppBindings.Occt.Generator.csproj" />
+    <Analyzer Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\TedToolkit.CppBindings.Occt.SourceGenerators.dll"/>
+    <Analyzer Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\TedToolkit.RoslynHelper.dll"/>
+    <Analyzer Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\ZString.dll"/>
+    <Analyzer Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.SourceGenerators\bin\$(Configuration)\netstandard2.0\System.Memory.dll"/>
+    <ProjectReference Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.Generator\TedToolkit.CppBindings.Occt.Generator.csproj" />
   </ItemGroup>
 
   <ItemGroup>

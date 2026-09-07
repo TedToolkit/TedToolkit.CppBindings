@@ -12,7 +12,7 @@
   <ItemGroup>
     <Compile Include="Program.cs" />
     <Compile Include="$(GeneratedSourceDirectory)\*.cs" Link="Generated\%(Filename)%(Extension)" />
-    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
   </ItemGroup>
   <ItemGroup Condition="'$(LayoutOnly)' != 'true'">
     <None Include="..\..\output\generated\native-build\Release\ted_toolkit_occt.dll"

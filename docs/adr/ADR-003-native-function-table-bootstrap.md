@@ -38,8 +38,8 @@ or a versioned ABI.
 | Hard constraint | Both sides derive identical deterministic slot order from one completed model | [GEN-01](../principles/README.md) | Must |
 | Hard constraint | Cleanup remains usable during finalization and uses the originating module | [GEN-03](../principles/README.md) | Must |
 | Hard constraint | Runtime remains declaration-agnostic and does not own generated slots or module identity | [GEN-04](../principles/README.md) | Must |
-| Decision driver | Supported managed targets provide `NativeLibrary`; the old `netstandard2.0` loader constraint no longer applies | [Platform projects](../../src/core/) | High |
-| Decision driver | Avoid a second per-export name inventory and publication step when the generated native table is already the compiled inventory | [Native table generator](../../src/core/TedToolkit.CppBindings.Generator/Generators/NativeFunctionTableGenerator.cs) | High |
+| Decision driver | Supported managed targets provide `NativeLibrary`; the old `netstandard2.0` loader constraint no longer applies | [Shared Generator](../../src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj) and [OCCT Windows](../../src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj) | High |
+| Decision driver | Avoid a second per-export name inventory and publication step when the generated native table is already the compiled inventory | [Native table generator](../../src/shared/TedToolkit.CppBindings.Generator/Generators/NativeFunctionTableGenerator.cs) | High |
 | Decision driver | Do not claim a performance advantage that existing measurements do not establish | [ADR-001 benchmark evidence](ADR-001-native-release-binding/evidence/benchmark/function-table-report.md) | High |
 
 ## Options and evidence
@@ -83,8 +83,8 @@ decision.
 
 ## Evidence and links
 
-- [Generated managed loader](../../src/core/TedToolkit.CppBindings.Generator/Generators/NativeApiGenerator.cs)
-- [Generated native table](../../src/core/TedToolkit.CppBindings.Generator/Generators/NativeFunctionTableGenerator.cs)
+- [Generated managed loader](../../src/shared/TedToolkit.CppBindings.Generator/Generators/NativeApiGenerator.cs)
+- [Generated native table](../../src/shared/TedToolkit.CppBindings.Generator/Generators/NativeFunctionTableGenerator.cs)
 - [Neutral package-consumer verification](../../Build/VerifyGeneratorPackage.ps1)
 - [ADR-001 retained benchmark and compatibility evidence](ADR-001-native-release-binding/evidence/README.md)
 

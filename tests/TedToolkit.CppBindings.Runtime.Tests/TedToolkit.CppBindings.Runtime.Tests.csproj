@@ -12,8 +12,8 @@
   </PropertyGroup>
 
   <ItemGroup>
-    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
-    <ProjectReference Include="..\..\src\core\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
+    <ProjectReference Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
     <ProjectReference Include="..\TedToolkit.CppBindings.Runtime.FirstWrapper\TedToolkit.CppBindings.Runtime.FirstWrapper.csproj" />
     <ProjectReference Include="..\TedToolkit.CppBindings.Runtime.SecondWrapper\TedToolkit.CppBindings.Runtime.SecondWrapper.csproj" />
   </ItemGroup>

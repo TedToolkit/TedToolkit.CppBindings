@@ -5,9 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Generators;
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
-using TedToolkit.CppBindings.Occt.Generator.Models.Types;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -42,7 +41,7 @@ internal sealed class GenerateAsyncTests
             DescriptionItems = [],
             Bases = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             ObjectKind = NativeObjectKind.Value,
             SourceHeader = "gp_Pnt2d.hxx",
             Type = new()
@@ -100,17 +99,17 @@ internal sealed class GenerateAsyncTests
             CppTypeName = "opencascade::handle<Geom_Surface>",
             CSharpPInvokeType = new("Geom_Surface*"),
             CSharpPublicType = new("Handle<Geom_Surface>"),
-            IsOcctHandle = true,
+            IsIntrusiveHandle = true,
             IsRecord = true,
-            OcctHandleElementCppType = "Geom_Surface",
-            OcctHandleElementType = "Geom_Surface",
+            IntrusiveHandleElementCppType = "Geom_Surface",
+            IntrusiveHandleElementType = "Geom_Surface",
         };
         var record = new RecordModel()
         {
             DescriptionItems = [],
             Bases = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             ObjectKind = NativeObjectKind.Value,
             SourceHeader = "SurfaceOwner.hxx",
             Type = new()
@@ -170,7 +169,7 @@ internal sealed class GenerateAsyncTests
             DescriptionItems = [],
             Bases = [],
             IsAbstract = false,
-            IsStandardTransient = false,
+            UsesIntrusiveReferenceCounting = false,
             ObjectKind = NativeObjectKind.Owned,
             SourceHeader = "IntPolyh_Array.hxx",
             Type = new()

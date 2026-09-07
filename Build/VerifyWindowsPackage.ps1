@@ -12,10 +12,10 @@ if (Test-Path -LiteralPath $report) { throw 'Use a fresh evidence directory.' }
 $null = New-Item -ItemType Directory -Path $report
 $feed = Join-Path $report 'feed'
 $projects = [ordered]@{
-    'TedToolkit.CppBindings.Runtime' = 'src/core/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj'
-    'TedToolkit.CppBindings.Occt.Runtime' = 'src/core/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj'
+    'TedToolkit.CppBindings.Runtime' = 'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj'
+    'TedToolkit.CppBindings.Occt.Runtime' = 'src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj'
     'TedToolkit.CppBindings.Analyzers' = 'src/tools/TedToolkit.CppBindings.Analyzers/TedToolkit.CppBindings.Analyzers.csproj'
-    'TedToolkit.CppBindings.Occt.Windows' = 'src/core/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj'
+    'TedToolkit.CppBindings.Occt.Windows' = 'src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj'
 }
 foreach ($name in $projects.Keys) {
     $log = Join-Path $report ($name + '-pack.log')

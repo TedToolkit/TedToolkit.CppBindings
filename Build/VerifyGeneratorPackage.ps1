@@ -11,7 +11,7 @@ $report = [IO.Path]::GetFullPath($ReportDirectory)
 if (Test-Path -LiteralPath $report) { throw 'Use a new report directory; evidence is never overwritten.' }
 $null = New-Item -ItemType Directory -Path $report
 $feed = Join-Path $report 'feed'
-$project = Join-Path $repository 'src/core/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj'
+$project = Join-Path $repository 'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj'
 $packLog = Join-Path $report 'pack.log'
 & dotnet pack $project -c Release -o $feed --disable-build-servers --maxcpucount:1 -p:GeneratePackageOnBuild=false -p:NuGetAudit=false *> $packLog
 if ($LASTEXITCODE -ne 0) { throw "Core packaging failed; see $packLog" }

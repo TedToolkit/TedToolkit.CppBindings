@@ -14,7 +14,7 @@ using Microsoft.Extensions.Logging;
 using ModularPipelines.Context;
 using ModularPipelines.Logging;
 
-using TedToolkit.CppBindings.Occt.Generator.Models.Declarations;
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
 

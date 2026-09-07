@@ -10,7 +10,7 @@ using System.Reflection;
 using ClangSharp;
 using ClangSharp.Interop;
 
-using TedToolkit.CppBindings.Occt.Generator.Models.Types;
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 using TedToolkit.CppBindings.Occt.Generator.Services.Rules;
 using TedToolkit.RoslynHelper.Generators;
@@ -54,9 +54,9 @@ internal sealed class HandleTypeRuleTest
             .IsEqualTo("global::TedToolkit.CppBindings.Occt.handle<Standard_Transient>");
         await Assert.That(Render(resolved.Type.CSharpPublicType))
             .IsEqualTo("global::TedToolkit.CppBindings.Occt.handle<Standard_Transient>");
-        await Assert.That(resolved.Type.IsOcctHandle).IsTrue();
-        await Assert.That(resolved.Type.OcctHandleElementType).IsEqualTo("Standard_Transient");
-        await Assert.That(resolved.Type.OcctHandleElementCppType).IsEqualTo("Standard_Transient");
+        await Assert.That(resolved.Type.IsIntrusiveHandle).IsTrue();
+        await Assert.That(resolved.Type.IntrusiveHandleElementType).IsEqualTo("Standard_Transient");
+        await Assert.That(resolved.Type.IntrusiveHandleElementCppType).IsEqualTo("Standard_Transient");
         await Assert.That(resolved.Type.Transport.ValueIsConst).IsTrue();
         await Assert.That(resolved.Type.Transport.Indirections.Single().Kind)
             .IsEqualTo(TypeIndirectionKind.LValueReference);

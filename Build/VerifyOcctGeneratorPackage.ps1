@@ -11,10 +11,14 @@ $report = [IO.Path]::GetFullPath($ReportDirectory)
 if (Test-Path -LiteralPath $report) { throw 'Use a fresh evidence directory.' }
 $null = New-Item -ItemType Directory -Path $report
 $feed = Join-Path $report 'feed'
-$names = @('TedToolkit.CppBindings.Generator', 'TedToolkit.CppBindings.Occt.Generator')
+$projects = [ordered]@{
+    'TedToolkit.CppBindings.Generator' = 'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj'
+    'TedToolkit.CppBindings.Occt.Generator' = 'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj'
+}
+$names = @($projects.Keys)
 foreach ($name in $names) {
     $log = Join-Path $report ($name + '-pack.log')
-    & dotnet pack (Join-Path $repository "src/core/$name/$name.csproj") -c Release -o $feed --disable-build-servers --maxcpucount:1 -p:GeneratePackageOnBuild=false -p:NuGetAudit=false *> $log
+    & dotnet pack (Join-Path $repository $projects[$name]) -c Release -o $feed --disable-build-servers --maxcpucount:1 -p:GeneratePackageOnBuild=false -p:NuGetAudit=false *> $log
     if ($LASTEXITCODE -ne 0) { throw "Packaging failed; see $log" }
 }
 $package = Join-Path $feed 'TedToolkit.CppBindings.Occt.Generator.1.0.0.nupkg'
