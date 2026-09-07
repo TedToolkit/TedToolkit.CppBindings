@@ -57,14 +57,28 @@ if (Test-Path -LiteralPath $report) {
 
 $null = New-Item -ItemType Directory -Path $report
 $vcpkg = if ($env:VCPKG_ROOT) { [IO.Path]::GetFullPath($env:VCPKG_ROOT) } else { 'C:\vcpkg' }
-$generated = Join-Path $repository 'output/providers/cgal'
+$generated = Join-Path $report 'generated'
 $windowsProject = Join-Path $repository `
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj'
 $buildLog = Join-Path $report 'windows-build.log'
 & dotnet build $windowsProject -c Release --disable-build-servers --maxcpucount:1 `
-    -p:GeneratePackageOnBuild=false -p:NuGetAudit=false "-p:VcpkgRoot=$vcpkg" *> $buildLog
+    -p:GeneratePackageOnBuild=false -p:NuGetAudit=false "-p:VcpkgRoot=$vcpkg" `
+    "-p:GeneratedRoot=$generated" *> $buildLog
 if ($LASTEXITCODE -ne 0) {
     throw "CGAL Windows build failed; see $buildLog"
+}
+
+$cacheProbe = Join-Path $generated 'csharp/NativeApi.g.cs'
+$cacheProbeHash = (Get-FileHash -LiteralPath $cacheProbe -Algorithm SHA256).Hash
+Add-Content -LiteralPath $cacheProbe -Value '// cache-integrity-probe'
+$cacheRecoveryLog = Join-Path $report 'cache-recovery-build.log'
+& dotnet build $windowsProject -c Release --no-restore --disable-build-servers --maxcpucount:1 `
+    -p:GeneratePackageOnBuild=false -p:NuGetAudit=false "-p:VcpkgRoot=$vcpkg" `
+    "-p:GeneratedRoot=$generated" *> $cacheRecoveryLog
+if ($LASTEXITCODE -ne 0 `
+    -or (Get-Content -LiteralPath $cacheRecoveryLog -Raw) -match 'CGAL Windows bindings are up to date' `
+    -or (Get-FileHash -LiteralPath $cacheProbe -Algorithm SHA256).Hash -cne $cacheProbeHash) {
+    throw "The CGAL generation cache did not reject and recover a modified generated source; see $cacheRecoveryLog"
 }
 
 $feed = Join-Path $report 'feed'
@@ -89,7 +103,8 @@ foreach ($name in $projects.Keys) {
         '--maxcpucount:1',
         '-p:GeneratePackageOnBuild=false',
         '-p:NuGetAudit=false',
-        "-p:VcpkgRoot=$vcpkg")
+        "-p:VcpkgRoot=$vcpkg",
+        "-p:GeneratedRoot=$generated")
     if ($name -ceq 'TedToolkit.CppBindings.Cgal.Windows') {
         $arguments += '--no-build'
     }
@@ -102,6 +117,10 @@ foreach ($name in $projects.Keys) {
 
 $package = Join-Path $feed 'TedToolkit.CppBindings.Cgal.Windows.1.0.0.nupkg'
 $dependencyManifest = Get-Content -LiteralPath (Join-Path $generated 'native-dependencies.json') `
+    -Raw | ConvertFrom-Json
+$outputManifestPath = Join-Path $generated 'output-manifest.json'
+$outputManifestHash = (Get-FileHash -LiteralPath $outputManifestPath -Algorithm SHA256).Hash
+$buildToolchain = Get-Content -LiteralPath (Join-Path $generated 'build-toolchain.json') `
     -Raw | ConvertFrom-Json
 $generationResult = Get-Content -LiteralPath (Join-Path $generated 'generation-result.json') `
     -Raw | ConvertFrom-Json
@@ -122,12 +141,30 @@ $nativeIds = @($nativeInventory.DeclarationId | Sort-Object)
 if (($managedIds -join "`n") -cne ($nativeIds -join "`n")) {
     throw 'Managed and native declaration inventories do not identify the same admitted surface.'
 }
+if ($buildToolchain.CompilerId -cne 'MSVC' `
+    -or $buildToolchain.CompilerVersion -cne "$($generationResult.Toolchain.Msvc).0" `
+    -or $buildToolchain.CMake -cne $generationResult.Toolchain.CMake) {
+    throw 'The native build toolchain does not match the locked profile identity.'
+}
 
 $functionTable = Get-Content -LiteralPath (Join-Path $generated 'cpp/NativeFunctionTable.cpp') -Raw
-$nativeSymbols = @([regex]::Matches($functionTable, 'extern "C" void ([A-Za-z0-9_]+)\(\);') |
+$tableBody = [regex]::Match(
+    $functionTable,
+    'static const std::uintptr_t Functions\[\]\s*=\s*\{(?<Body>.*?)\};',
+    [Text.RegularExpressions.RegexOptions]::Singleline).Groups['Body'].Value
+$nativeSymbols = @([regex]::Matches(
+    $tableBody,
+    'reinterpret_cast<std::uintptr_t>\(&([A-Za-z0-9_]+)\)') |
     ForEach-Object { $_.Groups[1].Value })
 if ($nativeSymbols.Count -ne 17 -or @($nativeSymbols | Sort-Object -Unique).Count -ne 17) {
-    throw 'The generated native function table does not contain exactly 17 unique exports.'
+    throw 'The generated native function table does not contain exactly 17 unique initializer slots.'
+}
+$managedIndices = @(Get-ChildItem -LiteralPath (Join-Path $generated 'csharp') -Filter '*.cs' -File |
+    ForEach-Object { [regex]::Matches((Get-Content -LiteralPath $_.FullName -Raw), 'GetFunction\((\d+)\)') } |
+    ForEach-Object { [int]$_.Groups[1].Value } |
+    Sort-Object -Unique)
+if (($managedIndices -join ',') -cne ((0..16) -join ',')) {
+    throw 'The generated managed calls do not cover the exact native function-table slot range 0..16.'
 }
 
 $extractRoot = Join-Path $report 'package-content'
@@ -216,8 +253,12 @@ if ($LASTEXITCODE -ne 0) {
     throw 'dumpbin could not inspect the packed CGAL native exports.'
 }
 $exportText = $exports -join "`n"
-if ($exportText -notmatch '(?m)\bNativeApi_GetFunctionTable\b') {
-    throw "The packed CGAL native library is missing its function-table bootstrap export."
+$publicExports = @([regex]::Matches(
+    $exportText,
+    '(?m)^\s+\d+\s+[0-9A-F]+\s+[0-9A-F]+\s+(\S+)\s*$') |
+    ForEach-Object { $_.Groups[1].Value })
+if ($publicExports.Count -ne 1 -or $publicExports[0] -cne 'NativeApi_GetFunctionTable') {
+    throw 'The packed CGAL native library must export only NativeApi_GetFunctionTable.'
 }
 
 $consumer = Join-Path $report 'consumer'
@@ -288,10 +329,15 @@ if ($endingRevision -cne $candidateRevision -or $endingStatus.Count -ne 0) {
     ManagedArtifactCount = $managedInventory.Count
     NativeArtifactCount = $nativeInventory.Count
     NativeExportCount = $nativeSymbols.Count
+    PublicExportCount = $publicExports.Count
     NativeDependencies = $expectedDependencies
     NativeDependencyCount = $expectedDependencies.Count
     NoticeCount = 3
     Toolchain = $generationResult.Toolchain
+    BuildToolchain = $buildToolchain
+    OutputManifestHash = $outputManifestHash
+    CacheCorruptionRecovery = $true
+    PackageDependencies = @($projects.Keys)
     ManagedAssemblyHash = $managedHash
     NativeLibraryHash = $nativeHash
     WindowsPackageHash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash
