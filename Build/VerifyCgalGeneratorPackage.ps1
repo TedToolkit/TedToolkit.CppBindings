@@ -71,8 +71,12 @@ if ($LASTEXITCODE -ne 0) {
 if ($LASTEXITCODE -ne 0) {
     throw "Generated CGAL native build failed; see $nativeBuildLog"
 }
-$nativeLibrary = Get-ChildItem -LiteralPath $nativeBuild -Recurse -File `
-    -Filter 'ted_toolkit_cpp_bindings_cgal.dll' | Select-Object -Single
+$nativeLibraries = @(Get-ChildItem -LiteralPath $nativeBuild -Recurse -File `
+    -Filter 'ted_toolkit_cpp_bindings_cgal.dll')
+if ($nativeLibraries.Count -ne 1) {
+    throw "Expected exactly one generated CGAL native library, found $($nativeLibraries.Count)."
+}
+$nativeLibrary = $nativeLibraries[0]
 
 $assets = Get-Content -LiteralPath (Join-Path $consumer 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
 if (@($assets.libraries.Keys | Where-Object { $_ -match 'Occt' }).Count -ne 0) {
