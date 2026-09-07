@@ -218,7 +218,10 @@ try {
         (Join-Path $repository 'src\providers\cgal\TedToolkit.CppBindings.Cgal.Windows\TedToolkit.CppBindings.Cgal.Windows.csproj'),
         (Join-Path $vcpkg 'installed\vcpkg\status'),
         (Join-Path $vcpkg 'installed\x64-windows\bin\gmp-10.dll'),
-        (Join-Path $vcpkg 'installed\x64-windows\bin\mpfr-6.dll')
+        (Join-Path $vcpkg 'installed\x64-windows\bin\mpfr-6.dll'),
+        (Join-Path $vcpkg 'installed\x64-windows\share\cgal\copyright'),
+        (Join-Path $vcpkg 'installed\x64-windows\share\gmp\copyright'),
+        (Join-Path $vcpkg 'installed\x64-windows\share\mpfr\copyright')
     ) | Where-Object { Test-Path -LiteralPath $_ } | Get-Item
     $inputHashes = @($inputFiles | Sort-Object -Property FullName -Unique | ForEach-Object {
         "$($_.FullName)|$((Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash)"
@@ -249,11 +252,17 @@ try {
             }).Count -eq 0
     }
 
+    $noticesComplete = @('CGAL.txt', 'GMP.txt', 'MPFR.txt').Where({
+        $path = Join-Path $generated "third-party-notices\$_"
+        -not (Test-Path -LiteralPath $path -PathType Leaf) -or (Get-Item -LiteralPath $path).Length -eq 0
+    }).Count -eq 0
+
     if ((Test-Path -LiteralPath $stamp -PathType Leaf) `
         -and (Test-Path -LiteralPath $nativeLibrary -PathType Leaf) `
         -and (Get-Item -LiteralPath $nativeLibrary).Length -gt 0 `
         -and $managedComplete `
         -and $dependenciesComplete `
+        -and $noticesComplete `
         -and (Get-Content -LiteralPath $stamp -Raw) -ceq $fingerprint) {
         Write-Output 'CGAL Windows bindings are up to date.'
         exit 0
@@ -292,6 +301,20 @@ try {
         -Destination (Join-Path $generated 'native-dependencies') `
         -VcpkgBin (Join-Path $vcpkg 'installed\x64-windows\bin') `
         -Toolchain $toolchain
+
+    $notices = Join-Path $generated 'third-party-notices'
+    if (Test-Path -LiteralPath $notices) {
+        Remove-Item -LiteralPath $notices -Recurse -Force
+    }
+
+    $null = New-Item -ItemType Directory -Path $notices
+    ([ordered]@{
+        'CGAL.txt' = Join-Path $vcpkg 'installed\x64-windows\share\cgal\copyright'
+        'GMP.txt' = Join-Path $vcpkg 'installed\x64-windows\share\gmp\copyright'
+        'MPFR.txt' = Join-Path $vcpkg 'installed\x64-windows\share\mpfr\copyright'
+    }).GetEnumerator() | ForEach-Object {
+        Copy-Item -LiteralPath $_.Value -Destination (Join-Path $notices $_.Key)
+    }
 
     $managedFiles = @(Get-ChildItem -LiteralPath (Join-Path $generated 'csharp') -Filter '*.cs' -File)
     if ($managedFiles.Count -eq 0 -or @($managedFiles | Where-Object { $_.Length -eq 0 }).Count -ne 0) {

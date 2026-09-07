@@ -28,12 +28,8 @@
           Pack="true" PackagePath="runtimes\win-x64\native" />
     <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
           Pack="true" PackagePath="runtimes\win-x64\native" />
-    <None Include="$(VcpkgRoot)\installed\x64-windows\share\cgal\copyright"
-          Pack="true" PackagePath="third-party-notices\CGAL.txt" />
-    <None Include="$(VcpkgRoot)\installed\x64-windows\share\gmp\copyright"
-          Pack="true" PackagePath="third-party-notices\GMP.txt" />
-    <None Include="$(VcpkgRoot)\installed\x64-windows\share\mpfr\copyright"
-          Pack="true" PackagePath="third-party-notices\MPFR.txt" />
+    <None Include="$(GeneratedRoot)\third-party-notices\*.txt"
+          Pack="true" PackagePath="third-party-notices" />
   </ItemGroup>
 
   <Target Name="GenerateCgalWindowsBindings" BeforeTargets="CoreCompile">
