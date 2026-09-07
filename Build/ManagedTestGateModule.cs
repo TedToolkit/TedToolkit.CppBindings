@@ -46,6 +46,8 @@ public sealed class ManagedTestGateModule(
         var projects = new[]
         {
             "tests/TedToolkit.CppBindings.Generator.Tests/TedToolkit.CppBindings.Generator.Tests.csproj",
+            "tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj",
+            "tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/TedToolkit.CppBindings.Cgal.Runtime.Tests.csproj",
             "tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj",
             "tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBindings.Runtime.Tests.csproj",
             "tests/TedToolkit.CppBindings.Analyzers.Tests/TedToolkit.CppBindings.Analyzers.Tests.csproj",
