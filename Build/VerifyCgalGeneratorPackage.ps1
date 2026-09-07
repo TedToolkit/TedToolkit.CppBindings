@@ -122,6 +122,15 @@ if ($LASTEXITCODE -ne 0) {
     throw "CGAL Generator TUnit proof failed; see $cgalTestsLog"
 }
 
+$sharedTestsLog = Join-Path $report 'shared-generator-tests.log'
+$sharedTestResults = Join-Path $report 'shared-generator-test-results'
+& dotnet run --project (Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Generator.Tests/TedToolkit.CppBindings.Generator.Tests.csproj') `
+    -c Release --disable-build-servers -- --report-trx --results-directory $sharedTestResults *> $sharedTestsLog
+if ($LASTEXITCODE -ne 0) {
+    throw "Shared Generator regression failed; see $sharedTestsLog"
+}
+
 $occtTestsLog = Join-Path $report 'occt-generator-tests.log'
 $occtTestResults = Join-Path $report 'occt-generator-test-results'
 & dotnet run --project (Join-Path $repository `
@@ -162,6 +171,7 @@ if ($endingRevision -cne $candidateRevision -or $endingStatus.Count -ne 0) {
     Passed = $true
     CandidateRevision = $candidateRevision
     Profile = $consumerResult.ProfileId
+    SourceDeclarationCount = $consumerResult.SourceDeclarationCount
     DeclarationCount = $consumerResult.DeclarationCount
     HeaderCount = $consumerResult.HeaderCount
     ExportCount = $consumerResult.ExportCount
@@ -175,6 +185,7 @@ if ($endingRevision -cne $candidateRevision -or $endingStatus.Count -ne 0) {
     ConsumerExitCode = 0
     ManagedCompileExitCode = 0
     CgalGeneratorTestsExitCode = 0
+    SharedGeneratorTestsExitCode = 0
     OcctGeneratorTestsExitCode = 0
     ProviderBoundaries = (Get-Content -LiteralPath $boundaryResult -Raw | ConvertFrom-Json -AsHashtable)
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $report 'result.json') -Encoding utf8

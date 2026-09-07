@@ -44,6 +44,9 @@ internal static class CgalSourceRenderer
 
                          Point_2(double x, double y) noexcept : StorageX(x), StorageY(y) {}
 
+                         const double& X() const noexcept { return StorageX; }
+                         const double& Y() const noexcept { return StorageY; }
+
                          double Cartesian(int index) const
                          {
                              CGAL_precondition(index >= 0 && index < 2);
@@ -60,6 +63,10 @@ internal static class CgalSourceRenderer
                          Point_3(double x, double y, double z) noexcept
                              : StorageX(x), StorageY(y), StorageZ(z) {}
 
+                         const double& X() const noexcept { return StorageX; }
+                         const double& Y() const noexcept { return StorageY; }
+                         const double& Z() const noexcept { return StorageZ; }
+
                          double Cartesian(int index) const
                          {
                              CGAL_precondition(index >= 0 && index < 3);
@@ -74,6 +81,9 @@ internal static class CgalSourceRenderer
 
                          Segment_2(Point_2 source, Point_2 target) noexcept
                              : StorageSource(source), StorageTarget(target) {}
+
+                         const Point_2& Source() const noexcept { return StorageSource; }
+                         const Point_2& Target() const noexcept { return StorageTarget; }
 
                          double SquaredLength() const
                          {

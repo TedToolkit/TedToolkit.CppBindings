@@ -27,15 +27,19 @@ internal static class CgalCompilerDiscovery
     /// <param name="includeRoot">The vcpkg include root.</param>
     /// <param name="selectedHeaders">The finite profile roots.</param>
     /// <param name="reachableHeaders">The recursively closed CGAL header set.</param>
+    /// <param name="profile">The closed profile whose projections must compile.</param>
     /// <returns>The deterministic compiler declaration inventory.</returns>
     internal static IReadOnlyList<CgalCompilerDeclaration> Discover(
         string includeRoot,
         IReadOnlyList<string> selectedHeaders,
-        IReadOnlySet<string> reachableHeaders)
+        IReadOnlySet<string> reachableHeaders,
+        CgalProfileManifest profile)
     {
         var relay = string.Join(
             Environment.NewLine,
-            selectedHeaders.Order(StringComparer.Ordinal).Select(static header => $"#include <{header}>"));
+            selectedHeaders.Order(StringComparer.Ordinal).Select(static header => $"#include <{header}>"))
+            + Environment.NewLine
+            + CgalSemanticCatalog.RenderCompilerProbe(profile);
         using var unsaved = CXUnsavedFile.Create(RelayFileName, relay);
         using var index = CXIndex.Create();
         var arguments = new string[]

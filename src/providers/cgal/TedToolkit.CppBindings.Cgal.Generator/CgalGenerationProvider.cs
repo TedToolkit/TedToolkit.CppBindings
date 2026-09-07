@@ -61,6 +61,7 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
                     InstalledPublicHeaders = Inventory.Sources.Select(static item => item.Header),
                 }),
             JsonSource("source-inventory.json", Inventory.Sources),
+            JsonSource("source-declaration-inventory.json", Inventory.SourceDeclarations),
             JsonSource("candidate-inventory.json", Inventory.Candidates),
             JsonSource("admitted-inventory.json", Inventory.Admitted),
             JsonSource("unsupported-inventory.json", Inventory.Unsupported),

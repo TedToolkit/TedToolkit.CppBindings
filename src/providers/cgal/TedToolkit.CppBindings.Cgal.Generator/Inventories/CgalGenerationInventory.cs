@@ -18,6 +18,11 @@ public sealed record CgalGenerationInventory
     public required IReadOnlyList<CgalSourceDisposition> Sources { get; init; }
 
     /// <summary>
+    /// Gets every public declaration Clang observed in the selected header closure.
+    /// </summary>
+    public required IReadOnlyList<CgalDeclarationDisposition> SourceDeclarations { get; init; }
+
+    /// <summary>
     /// Gets the finite candidate declarations.
     /// </summary>
     public required IReadOnlyList<CgalDeclarationDisposition> Candidates { get; init; }

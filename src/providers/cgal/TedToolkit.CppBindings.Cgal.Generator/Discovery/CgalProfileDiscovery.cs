@@ -45,11 +45,6 @@ internal static partial class CgalProfileDiscovery
         }
 
         var reachable = CloseHeaderIncludes(includeRoot, profile.SelectedHeaders);
-        var sourceText = string.Join(
-            "\n",
-            reachable.Order(StringComparer.Ordinal).Select(path => File.ReadAllText(Path.Combine(
-                includeRoot,
-                path.Replace('/', Path.DirectorySeparatorChar)))));
         var declarationCatalog = profile.Declarations.ToDictionary(static item => item.Id, StringComparer.Ordinal);
         foreach (var declaration in profile.Declarations)
         {
@@ -64,23 +59,22 @@ internal static partial class CgalProfileDiscovery
         }
 
         var selectedCandidates = profile.Declarations.OrderBy(static item => item.Id, StringComparer.Ordinal)
-            .Select(item => Classify(item, reachable, sourceText))
+            .Select(item => Classify(item, includeRoot, reachable))
             .ToArray();
-        var compilerCandidates = CgalCompilerDiscovery.Discover(
+        var sourceDeclarations = CgalCompilerDiscovery.Discover(
                 includeRoot,
                 profile.SelectedHeaders,
-                reachable)
+                reachable,
+                profile)
             .Select(static item => new CgalDeclarationDisposition(
                 item.Identity,
                 item.Signature,
                 item.Header,
                 item.Kind,
-                "unsupported",
-                "compiler-discovered-declaration-has-no-closed-profile-projection"))
+                "source-only",
+                "compiler-source-declaration-outside-explicit-closed-profile"))
             .ToArray();
-        var candidates = selectedCandidates.Concat(compilerCandidates)
-            .OrderBy(static item => item.Id, StringComparer.Ordinal)
-            .ToArray();
+        var candidates = selectedCandidates;
         var admitted = candidates.Where(static item => item.Disposition == "admitted").ToArray();
         var unsupported = candidates.Where(static item => item.Disposition == "unsupported").ToArray();
         var toolchain = ResolveToolchain(options.VcpkgRoot, profile.Triplet);
@@ -96,6 +90,7 @@ internal static partial class CgalProfileDiscovery
                 header,
                 GetSourceDisposition(header, roots, reachable)))
                 .ToArray()),
+            SourceDeclarations = Array.AsReadOnly(sourceDeclarations),
             Candidates = Array.AsReadOnly(candidates),
             Admitted = Array.AsReadOnly(admitted),
             Unsupported = Array.AsReadOnly(unsupported),
@@ -185,22 +180,28 @@ internal static partial class CgalProfileDiscovery
 
     private static CgalDeclarationDisposition Classify(
         CgalProfileDeclaration declaration,
-        HashSet<string> reachableHeaders,
-        string reachableSource)
+        string includeRoot,
+        HashSet<string> reachableHeaders)
     {
         if (!reachableHeaders.Contains(declaration.Header))
         {
             return Result(declaration, "unsupported", "declaring-header-not-reachable");
         }
 
-        if (!reachableSource.Contains(declaration.Evidence, StringComparison.Ordinal))
+        if (CgalSemanticCatalog.IsSupported(declaration.Id))
+        {
+            return Result(declaration, "admitted", "compiler-closed-signature-and-provider-semantic-projection-proved");
+        }
+
+        var declaringSource = File.ReadAllText(Path.Combine(includeRoot, declaration.Header.Replace(
+            '/',
+            Path.DirectorySeparatorChar)));
+        if (!declaringSource.Contains(declaration.Evidence, StringComparison.Ordinal))
         {
             return Result(declaration, "unsupported", $"source-evidence-not-found:{declaration.Evidence}");
         }
 
-        return CgalSemanticCatalog.IsSupported(declaration.Id)
-            ? Result(declaration, "admitted", "source-evidence-and-provider-semantic-projection-proved")
-            : Result(declaration, "unsupported", "no-provider-semantic-projection");
+        return Result(declaration, "unsupported", "no-provider-semantic-projection");
     }
 
     private static CgalDeclarationDisposition Result(

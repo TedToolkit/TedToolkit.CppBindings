@@ -52,21 +52,23 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(firstProvider.Inventory.Sources.Count(static item => item.Disposition == "reachable-dependency"))
             .IsGreaterThan(0);
         await Assert.That(firstProvider.Inventory.Candidates.Count)
-            .IsGreaterThan(firstProvider.Profile.Declarations.Count);
+            .IsEqualTo(firstProvider.Profile.Declarations.Count);
+        await Assert.That(firstProvider.Inventory.SourceDeclarations.Count)
+            .IsGreaterThan(firstProvider.Inventory.Candidates.Count);
         await Assert.That(firstProvider.Inventory.Admitted.Count + firstProvider.Inventory.Unsupported.Count)
             .IsEqualTo(firstProvider.Inventory.Candidates.Count);
         await Assert.That(firstProvider.Inventory.Admitted.Count)
             .IsEqualTo(firstProvider.Profile.Declarations.Count);
-        await Assert.That(firstProvider.Inventory.Unsupported).IsNotEmpty();
+        await Assert.That(firstProvider.Inventory.Unsupported).IsEmpty();
         await Assert.That(firstProvider.Inventory.Candidates.Select(static item => item.Id).Distinct().Count())
             .IsEqualTo(firstProvider.Inventory.Candidates.Count);
-        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+        await Assert.That(firstProvider.Inventory.SourceDeclarations.Any(static item =>
             item.NativeSignature.Contains("Point_2::dimension", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+        await Assert.That(firstProvider.Inventory.SourceDeclarations.Any(static item =>
             item.NativeSignature.Contains("Point_2::homogeneous", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+        await Assert.That(firstProvider.Inventory.SourceDeclarations.Any(static item =>
             item.NativeSignature.Contains("Point_2::bbox", StringComparison.Ordinal))).IsTrue();
-        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+        await Assert.That(firstProvider.Inventory.SourceDeclarations.Any(static item =>
             item.NativeSignature.Contains("Point_2::transform", StringComparison.Ordinal))).IsTrue();
         await Assert.That(firstProvider.Inventory.Toolchain.Cgal).IsEqualTo("6.2");
         await Assert.That(firstProvider.Inventory.Toolchain.CgalAbi).IsNotEmpty();
@@ -104,9 +106,17 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(managed["Point_2.g.cs"]).Contains("NativeApi.GetFunction");
         await Assert.That(native["TedToolkit_CppBindings_Cgal_Point_2.cpp"])
             .Contains("extern \"C\" double Cgal_Point2_Cartesian");
+        await Assert.That(managed["Point_2.g.cs"])
+            .Contains("public static ref readonly double X(this in Point_2 self)");
+        await Assert.That(managed["Segment_2.g.cs"])
+            .Contains("public static ref readonly Point_2 Source(this in Segment_2 self)");
+        await Assert.That(managed["Point_2.g.cs"]).DoesNotContain("public double StorageX");
+        await Assert.That(managed["Segment_2.g.cs"]).DoesNotContain("public Point_2 StorageSource");
         await Assert.That(plan.NativeExports).Contains("Cgal_Point2_Create");
+        await Assert.That(plan.NativeExports).Contains("Cgal_Point2_X");
+        await Assert.That(plan.NativeExports).Contains("Cgal_Segment2_Source");
         await Assert.That(plan.NativeExports).Contains("Cgal_Segment2_Intersection");
-        await Assert.That(plan.NativeExports.Count).IsEqualTo(10);
+        await Assert.That(plan.NativeExports.Count).IsEqualTo(17);
         await Assert.That(provider.Inventory.ManagedArtifacts
             .Select(static item => item.RelativePath).Distinct().All(managed.ContainsKey)).IsTrue();
         await Assert.That(provider.Inventory.NativeArtifacts
@@ -115,6 +125,8 @@ internal sealed class CgalGenerationProviderTests
             .IsEquivalentTo(provider.Inventory.Admitted.Select(static item => item.Id));
         await Assert.That(provider.Inventory.NativeArtifacts.Select(static item => item.DeclarationId))
             .IsEquivalentTo(provider.Inventory.Admitted.Select(static item => item.Id));
+        await Assert.That(provider.Inventory.NativeArtifacts.All(item =>
+            native[item.RelativePath].Contains(item.Symbol, StringComparison.Ordinal))).IsTrue();
     }
 
     /// <summary>
@@ -191,7 +203,7 @@ internal sealed class CgalGenerationProviderTests
             var provider = CreateProvider(file, explicitProfile.ProfileId);
             var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
 
-            await Assert.That(provider.Inventory.Candidates.Count).IsGreaterThan(profile.Declarations.Count + 1);
+            await Assert.That(provider.Inventory.Candidates.Count).IsEqualTo(profile.Declarations.Count + 1);
             await Assert.That(provider.Inventory.Unsupported.Select(static item => item.Id)).Contains(unsupported.Id);
             await Assert.That(provider.Inventory.Unsupported.Single(item => item.Id == unsupported.Id).Proof)
                 .IsEqualTo("no-provider-semantic-projection");
@@ -201,6 +213,41 @@ internal sealed class CgalGenerationProviderTests
         {
             File.Delete(file.FullName);
         }
+    }
+
+    /// <summary>
+    /// Verifies a known declaration identity cannot admit a different closed native signature.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_reject_a_mutated_supported_signature_Async()
+    {
+        var profile = CgalProfileManifest.LoadDefault();
+        var declarations = profile.Declarations.Select(static item => item.Id == "point-2-x"
+            ? item with { NativeSignature = "Kernel::Point_2::y() const", }
+            : item).ToArray();
+        var invalid = profile with
+        {
+            ProfileId = "epick-mutated-signature-test-v1",
+            Declarations = Array.AsReadOnly(declarations),
+        };
+        var file = WriteProfile(invalid);
+        InvalidOperationException? failure = null;
+        try
+        {
+            _ = CreateProvider(file, invalid.ProfileId);
+        }
+        catch (InvalidOperationException exception)
+        {
+            failure = exception;
+        }
+        finally
+        {
+            File.Delete(file.FullName);
+        }
+
+        await Assert.That(failure).IsNotNull();
+        await Assert.That(failure!.Message).Contains("does not match its compiler-proved closed signature");
     }
 
     /// <summary>

@@ -5,8 +5,10 @@ platform packages without adding CGAL policy to Shared.
 
 The first maintained profile is `epick-windows-v1`. Its Generator package embeds the CGAL 6.2
 public-header snapshot and explicitly closes the selected EPICK class and free-function templates.
-Every installed header receives a source disposition, and every finite candidate is admitted or
-rejected with a stable proof. This is deliberately not a claim over CGAL's unbounded template space.
+Every installed header and compiler-observed source declaration receives a source disposition, and
+every explicit finite candidate is admitted or rejected with a stable proof. Open templates remain
+source-visible but are not candidates. This is deliberately not a claim over CGAL's unbounded
+template space.
 
 | Project | Responsibility |
 | --- | --- |

@@ -28,12 +28,18 @@ profile. Its selected headers, closed signatures, source evidence, roots, and de
 dependencies are snapshotted before generation. The bundled `profiles/epick-windows-v1` vcpkg
 manifest and registry configuration reproduce the default package inputs.
 
-Generated inventory files distinguish all installed public headers from the finite candidate set.
+Generated inventory files distinguish all installed public headers and compiler-observed source
+declarations from the finite candidate set.
 The Generator recursively closes real `#include <CGAL/...>` dependencies from the maintained roots,
 reports other headers as `not-reachable-from-finite-profile`, and uses Clang to enumerate every
-public declaration originating in that closure. Compiler declarations without a closed provider
-projection remain visible in the unsupported inventory with a narrow reason; the manifest cannot
-silently omit them. Admitted declarations become a nonempty Shared semantic graph, and Shared derives
-their managed/native files and function-table exports from that one model. Per-declaration artifact
-inventories bind every admitted declaration to both emitted sides. Value transports keep ABI storage
-private and expose native const accessors as read-only managed properties.
+public declaration originating in that closure. Open templates and other declarations outside the
+explicit closed profile remain visible in `source-declaration-inventory.json`; they are not finite
+candidates. Clang compiles the profile's kernel alias, layouts, closed constructors, operations, and
+return-reference categories before a supported entry can be admitted. Unsupported finite entries
+remain in `unsupported-inventory.json` with a narrow reason.
+
+Admitted declarations become a nonempty Shared semantic graph, and Shared derives their
+managed/native files and function-table exports from that one model. Per-declaration artifact
+inventories name the actual emitted file and symbol on both sides. Value transports keep ABI storage
+private. Native `const T&` accessors are emitted as `ref readonly T`; each returned reference is
+borrowed from the receiver and remains subject to that receiver's lifetime and invalidation rules.

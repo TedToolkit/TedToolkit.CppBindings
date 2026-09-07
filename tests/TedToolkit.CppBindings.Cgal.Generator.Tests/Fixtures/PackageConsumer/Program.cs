@@ -53,10 +53,11 @@ if (!paired || !managed.ContainsKey("NativeApi.g.cs") || !native.ContainsKey("Na
     || provider.Inventory.Candidates.Count
     != provider.Inventory.Admitted.Count + provider.Inventory.Unsupported.Count
     || provider.Inventory.Admitted.Count != provider.Profile.Declarations.Count
-    || provider.Inventory.Unsupported.Count == 0
-    || !provider.Inventory.Unsupported.Any(static item =>
+    || provider.Inventory.Unsupported.Count != 0
+    || provider.Inventory.SourceDeclarations.Count <= provider.Inventory.Candidates.Count
+    || !provider.Inventory.SourceDeclarations.Any(static item =>
         item.NativeSignature.Contains("Point_2::dimension", StringComparison.Ordinal))
-    || plan.NativeExports.Count != 10)
+    || plan.NativeExports.Count != 17)
 {
     return 3;
 }
@@ -64,6 +65,7 @@ if (!paired || !managed.ContainsKey("NativeApi.g.cs") || !native.ContainsKey("Na
 var result = new
 {
     provider.Profile.ProfileId,
+    SourceDeclarationCount = provider.Inventory.SourceDeclarations.Count,
     DeclarationCount = provider.Inventory.Candidates.Count,
     AdmittedCount = provider.Inventory.Admitted.Count,
     UnsupportedCount = provider.Inventory.Unsupported.Count,
