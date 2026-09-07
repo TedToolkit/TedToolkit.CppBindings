@@ -17,6 +17,7 @@ $providerTermPattern = '(?i)(?:' + (($providerIdentifiers | ForEach-Object { [Re
 $expectedProjects = @(
     'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj',
     'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj',
+    'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj',

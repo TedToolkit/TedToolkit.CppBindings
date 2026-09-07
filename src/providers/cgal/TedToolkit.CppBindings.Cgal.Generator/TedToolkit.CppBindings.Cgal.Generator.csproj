@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <Title>TedToolkit C++ Bindings CGAL Generator</Title>
+    <Description>Generate deterministic finite-profile managed and native CGAL bindings.</Description>
+    <TargetFramework>net10.0</TargetFramework>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
+    <EmbeddedResource Include="Resources\epick-windows-v1.json"
+                      LogicalName="TedToolkit.CppBindings.Cgal.Generator.Resources.epick-windows-v1.json" />
+    <EmbeddedResource Include="Resources\cgal-6.2-x64-windows.headers.*.txt" />
+  </ItemGroup>
+
+</Project>

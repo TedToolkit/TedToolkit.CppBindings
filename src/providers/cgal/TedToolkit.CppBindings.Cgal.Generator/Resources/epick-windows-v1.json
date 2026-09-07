@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "profileId": "epick-windows-v1",
+  "cgalVersion": "6.2",
+  "vcpkgBuiltinBaseline": "30ef65cad98f08e7197c9a1656fbd871bcb72f2d",
+  "triplet": "x64-windows",
+  "kernelAlias": "CGAL::Exact_predicates_inexact_constructions_kernel",
+  "selectedHeaders": [
+    "CGAL/Exact_predicates_inexact_constructions_kernel.h",
+    "CGAL/Point_2.h",
+    "CGAL/Point_3.h",
+    "CGAL/Segment_2.h",
+    "CGAL/intersections.h",
+    "CGAL/squared_distance_2.h",
+    "CGAL/squared_distance_3.h"
+  ],
+  "declarations": [
+    { "id": "point-2", "nativeSignature": "Kernel::Point_2", "header": "CGAL/Point_2.h", "kind": "closed-class-template", "disposition": "admitted", "proof": "Projected as a Cartesian value with two doubles; native operations reconstruct the EPICK value." },
+    { "id": "point-2-cartesian", "nativeSignature": "Kernel::Point_2::cartesian(int) const", "header": "CGAL/Point_2.h", "kind": "method", "disposition": "admitted", "proof": "Primitive double result with CGAL precondition projection." },
+    { "id": "point-2-constructor", "nativeSignature": "Kernel::Point_2(double,double)", "header": "CGAL/Point_2.h", "kind": "constructor", "disposition": "admitted", "proof": "Finite Cartesian double constructor." },
+    { "id": "point-2-x", "nativeSignature": "Kernel::Point_2::x() const", "header": "CGAL/Point_2.h", "kind": "method", "disposition": "admitted", "proof": "Preserved Cartesian coordinate in the managed value." },
+    { "id": "point-2-y", "nativeSignature": "Kernel::Point_2::y() const", "header": "CGAL/Point_2.h", "kind": "method", "disposition": "admitted", "proof": "Preserved Cartesian coordinate in the managed value." },
+    { "id": "point-3", "nativeSignature": "Kernel::Point_3", "header": "CGAL/Point_3.h", "kind": "closed-class-template", "disposition": "admitted", "proof": "Projected as a Cartesian value with three doubles; native operations reconstruct the EPICK value." },
+    { "id": "point-3-cartesian", "nativeSignature": "Kernel::Point_3::cartesian(int) const", "header": "CGAL/Point_3.h", "kind": "method", "disposition": "admitted", "proof": "Primitive double result with CGAL precondition projection." },
+    { "id": "point-3-constructor", "nativeSignature": "Kernel::Point_3(double,double,double)", "header": "CGAL/Point_3.h", "kind": "constructor", "disposition": "admitted", "proof": "Finite Cartesian double constructor." },
+    { "id": "point-3-x", "nativeSignature": "Kernel::Point_3::x() const", "header": "CGAL/Point_3.h", "kind": "method", "disposition": "admitted", "proof": "Preserved Cartesian coordinate in the managed value." },
+    { "id": "point-3-y", "nativeSignature": "Kernel::Point_3::y() const", "header": "CGAL/Point_3.h", "kind": "method", "disposition": "admitted", "proof": "Preserved Cartesian coordinate in the managed value." },
+    { "id": "point-3-z", "nativeSignature": "Kernel::Point_3::z() const", "header": "CGAL/Point_3.h", "kind": "method", "disposition": "admitted", "proof": "Preserved Cartesian coordinate in the managed value." },
+    { "id": "segment-2", "nativeSignature": "Kernel::Segment_2", "header": "CGAL/Segment_2.h", "kind": "closed-class-template", "disposition": "admitted", "proof": "Projected as two admitted Point_2 values." },
+    { "id": "segment-2-constructor", "nativeSignature": "Kernel::Segment_2(Kernel::Point_2,Kernel::Point_2)", "header": "CGAL/Segment_2.h", "kind": "constructor", "disposition": "admitted", "proof": "Finite value construction over admitted Point_2 values." },
+    { "id": "segment-2-source", "nativeSignature": "Kernel::Segment_2::source() const", "header": "CGAL/Segment_2.h", "kind": "method", "disposition": "admitted", "proof": "Returns a copied Point_2 value without borrowing a native temporary." },
+    { "id": "segment-2-target", "nativeSignature": "Kernel::Segment_2::target() const", "header": "CGAL/Segment_2.h", "kind": "method", "disposition": "admitted", "proof": "Returns a copied Point_2 value without borrowing a native temporary." },
+    { "id": "segment-2-squared-length", "nativeSignature": "Kernel::Segment_2::squared_length() const", "header": "CGAL/Segment_2.h", "kind": "method", "disposition": "admitted", "proof": "Native EPICK computation returns a primitive double." },
+    { "id": "squared-distance-2", "nativeSignature": "CGAL::squared_distance(Kernel::Point_2,Kernel::Point_2)", "header": "CGAL/squared_distance_2.h", "kind": "closed-free-function-template", "disposition": "admitted", "proof": "Closed Point_2 overload returns a primitive double through the native adapter." },
+    { "id": "squared-distance-3", "nativeSignature": "CGAL::squared_distance(Kernel::Point_3,Kernel::Point_3)", "header": "CGAL/squared_distance_3.h", "kind": "closed-free-function-template", "disposition": "admitted", "proof": "Closed Point_3 overload returns a primitive double through the native adapter." },
+    { "id": "intersection-segment-2", "nativeSignature": "CGAL::intersection(Kernel::Segment_2,Kernel::Segment_2)", "header": "CGAL/intersections.h", "kind": "closed-free-function-template", "disposition": "admitted", "proof": "Finite None, Point_2, and Segment_2 alternatives are transferred by value and tagged explicitly." }
+  ],
+  "toolchain": {
+    "msvc": "19.51.36256",
+    "cmake": "4.4.3",
+    "gmp": "6.3.0#5",
+    "mpfr": "4.2.2#1"
+  }
+}
