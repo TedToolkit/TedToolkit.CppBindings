@@ -4,6 +4,14 @@ param([string] $ReportDirectory)
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
+# Codex-launched processes can inherit both `Path` and `PATH`. MSBuild's native ToolTask copies the
+# process environment into a case-insensitive table and fails before invoking cl.exe when both exist.
+$processPath = $env:Path
+if (@([Environment]::GetEnvironmentVariables().Keys | Where-Object { $_ -ceq 'PATH' }).Count -ne 0) {
+    [Environment]::SetEnvironmentVariable('PATH', [NullString]::Value, 'Process')
+    [Environment]::SetEnvironmentVariable('Path', $processPath, 'Process')
+}
+
 $repository = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $candidateRevision = (& git -C $repository rev-parse HEAD).Trim()
 $startingStatus = @(& git -C $repository status --porcelain --untracked-files=all)
