@@ -40,6 +40,16 @@ public sealed class FieldModel
     public bool IsReadOnlyBitField { get; init; }
 
     /// <summary>
+    /// Gets a value indicating whether the managed ABI storage field is private.
+    /// </summary>
+    public bool IsManagedStoragePrivate { get; init; }
+
+    /// <summary>
+    /// Gets the optional public read-only property name used to hide ABI storage.
+    /// </summary>
+    public string? ManagedReadOnlyPropertyName { get; init; }
+
+    /// <summary>
     /// Gets the open managed field type when the declaring record is a generic template family.
     /// </summary>
     public string CSharpTemplateType { get; init; } = "";

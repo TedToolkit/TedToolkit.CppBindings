@@ -39,59 +39,57 @@ internal static class CgalSourceRenderer
 
                      struct Point_2
                      {
-                         double X;
-                         double Y;
+                         double StorageX;
+                         double StorageY;
 
-                         Point_2(double x, double y) noexcept : X(x), Y(y) {}
+                         Point_2(double x, double y) noexcept : StorageX(x), StorageY(y) {}
 
                          double Cartesian(int index) const
                          {
                              CGAL_precondition(index >= 0 && index < 2);
-                             return NativePoint2(X, Y).cartesian(index);
+                             return NativePoint2(StorageX, StorageY).cartesian(index);
                          }
                      };
 
                      struct Point_3
                      {
-                         double X;
-                         double Y;
-                         double Z;
+                         double StorageX;
+                         double StorageY;
+                         double StorageZ;
 
-                         Point_3(double x, double y, double z) noexcept : X(x), Y(y), Z(z) {}
+                         Point_3(double x, double y, double z) noexcept
+                             : StorageX(x), StorageY(y), StorageZ(z) {}
 
                          double Cartesian(int index) const
                          {
                              CGAL_precondition(index >= 0 && index < 3);
-                             return NativePoint3(X, Y, Z).cartesian(index);
+                             return NativePoint3(StorageX, StorageY, StorageZ).cartesian(index);
                          }
                      };
 
                      struct Segment_2
                      {
-                         Point_2 SourceValue;
-                         Point_2 TargetValue;
+                         Point_2 StorageSource;
+                         Point_2 StorageTarget;
 
                          Segment_2(Point_2 source, Point_2 target) noexcept
-                             : SourceValue(source), TargetValue(target) {}
-
-                         Point_2 Source() const { return SourceValue; }
-                         Point_2 Target() const { return TargetValue; }
+                             : StorageSource(source), StorageTarget(target) {}
 
                          double SquaredLength() const
                          {
                              return CGAL::to_double(NativeSegment2(
-                                 NativePoint2(SourceValue.X, SourceValue.Y),
-                                 NativePoint2(TargetValue.X, TargetValue.Y)).squared_length());
+                                 NativePoint2(StorageSource.StorageX, StorageSource.StorageY),
+                                 NativePoint2(StorageTarget.StorageX, StorageTarget.StorageY)).squared_length());
                          }
                      };
 
                      struct Segment_2_Intersection_Transport
                      {
-                         int Tag{};
-                         double AX{};
-                         double AY{};
-                         double BX{};
-                         double BY{};
+                         int StorageTag{};
+                         double StorageAX{};
+                         double StorageAY{};
+                         double StorageBX{};
+                         double StorageBY{};
                      };
 
                      struct Kernel_API
@@ -99,24 +97,25 @@ internal static class CgalSourceRenderer
                          static double SquaredDistance(Point_2 left, Point_2 right)
                          {
                              return CGAL::to_double(CGAL::squared_distance(
-                                 NativePoint2(left.X, left.Y), NativePoint2(right.X, right.Y)));
+                                 NativePoint2(left.StorageX, left.StorageY),
+                                 NativePoint2(right.StorageX, right.StorageY)));
                          }
 
                          static double SquaredDistance(Point_3 left, Point_3 right)
                          {
                              return CGAL::to_double(CGAL::squared_distance(
-                                 NativePoint3(left.X, left.Y, left.Z),
-                                 NativePoint3(right.X, right.Y, right.Z)));
+                                 NativePoint3(left.StorageX, left.StorageY, left.StorageZ),
+                                 NativePoint3(right.StorageX, right.StorageY, right.StorageZ)));
                          }
 
                          static Segment_2_Intersection_Transport Intersect(Segment_2 left, Segment_2 right)
                          {
                              const auto first = NativeSegment2(
-                                 NativePoint2(left.SourceValue.X, left.SourceValue.Y),
-                                 NativePoint2(left.TargetValue.X, left.TargetValue.Y));
+                                 NativePoint2(left.StorageSource.StorageX, left.StorageSource.StorageY),
+                                 NativePoint2(left.StorageTarget.StorageX, left.StorageTarget.StorageY));
                              const auto second = NativeSegment2(
-                                 NativePoint2(right.SourceValue.X, right.SourceValue.Y),
-                                 NativePoint2(right.TargetValue.X, right.TargetValue.Y));
+                                 NativePoint2(right.StorageSource.StorageX, right.StorageSource.StorageY),
+                                 NativePoint2(right.StorageTarget.StorageX, right.StorageTarget.StorageY));
                              const auto result = CGAL::intersection(first, second);
                              if (!result) return {};
                              if (const auto* point = std::get_if<NativePoint2>(&*result))
@@ -195,15 +194,16 @@ internal static class CgalSourceRenderer
                          return value.Tag switch
                          {
                              0 => new(Segment_2IntersectionKind.None, default, default),
-                             1 => new(Segment_2IntersectionKind.Point, new() { X = value.AX, Y = value.AY }, default),
+                             1 => new(
+                                 Segment_2IntersectionKind.Point,
+                                 Point_2Extensions.Create(value.AX, value.AY),
+                                 default),
                              2 => new(
                                  Segment_2IntersectionKind.Segment,
                                  default,
-                                 new()
-                                 {
-                                     Source = new() { X = value.AX, Y = value.AY },
-                                     Target = new() { X = value.BX, Y = value.BY },
-                                 }),
+                                 Segment_2Extensions.Create(
+                                     Point_2Extensions.Create(value.AX, value.AY),
+                                     Point_2Extensions.Create(value.BX, value.BY))),
                              _ => throw new CgalUnknownResultException(
                                  $"Native CGAL intersection returned undeclared alternative tag {value.Tag}."),
                          };

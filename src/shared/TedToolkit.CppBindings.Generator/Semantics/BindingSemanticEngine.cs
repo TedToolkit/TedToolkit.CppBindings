@@ -313,6 +313,15 @@ public sealed class BindingSemanticEngine
                     $"Field '{record.Type.CppTypeName}.{field.Name}' has invalid compiler layout evidence.");
             }
 
+            if (field.ManagedReadOnlyPropertyName is not null
+                && (!field.IsManagedStoragePrivate
+                    || string.IsNullOrWhiteSpace(field.ManagedReadOnlyPropertyName)
+                    || string.Equals(field.Name, field.ManagedReadOnlyPropertyName, StringComparison.Ordinal)))
+            {
+                throw new InvalidOperationException(
+                    $"Field '{record.Type.CppTypeName}.{field.Name}' has an invalid managed read-only projection.");
+            }
+
             ValidateType(field.Type, $"field '{record.Type.CppTypeName}.{field.Name}'");
         }
 

@@ -52,10 +52,22 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(firstProvider.Inventory.Sources.Count(static item => item.Disposition == "reachable-dependency"))
             .IsGreaterThan(0);
         await Assert.That(firstProvider.Inventory.Candidates.Count)
-            .IsEqualTo(firstProvider.Profile.Declarations.Count);
+            .IsGreaterThan(firstProvider.Profile.Declarations.Count);
         await Assert.That(firstProvider.Inventory.Admitted.Count + firstProvider.Inventory.Unsupported.Count)
             .IsEqualTo(firstProvider.Inventory.Candidates.Count);
-        await Assert.That(firstProvider.Inventory.Unsupported).IsEmpty();
+        await Assert.That(firstProvider.Inventory.Admitted.Count)
+            .IsEqualTo(firstProvider.Profile.Declarations.Count);
+        await Assert.That(firstProvider.Inventory.Unsupported).IsNotEmpty();
+        await Assert.That(firstProvider.Inventory.Candidates.Select(static item => item.Id).Distinct().Count())
+            .IsEqualTo(firstProvider.Inventory.Candidates.Count);
+        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+            item.NativeSignature.Contains("Point_2::dimension", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+            item.NativeSignature.Contains("Point_2::homogeneous", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+            item.NativeSignature.Contains("Point_2::bbox", StringComparison.Ordinal))).IsTrue();
+        await Assert.That(firstProvider.Inventory.Unsupported.Any(static item =>
+            item.NativeSignature.Contains("Point_2::transform", StringComparison.Ordinal))).IsTrue();
         await Assert.That(firstProvider.Inventory.Toolchain.Cgal).IsEqualTo("6.2");
         await Assert.That(firstProvider.Inventory.Toolchain.CgalAbi).IsNotEmpty();
         await Assert.That(firstProvider.Inventory.Toolchain.CMake).IsEqualTo("4.4.3");
@@ -94,7 +106,7 @@ internal sealed class CgalGenerationProviderTests
             .Contains("extern \"C\" double Cgal_Point2_Cartesian");
         await Assert.That(plan.NativeExports).Contains("Cgal_Point2_Create");
         await Assert.That(plan.NativeExports).Contains("Cgal_Segment2_Intersection");
-        await Assert.That(plan.NativeExports.Count).IsEqualTo(12);
+        await Assert.That(plan.NativeExports.Count).IsEqualTo(10);
         await Assert.That(provider.Inventory.ManagedArtifacts
             .Select(static item => item.RelativePath).Distinct().All(managed.ContainsKey)).IsTrue();
         await Assert.That(provider.Inventory.NativeArtifacts
@@ -113,7 +125,12 @@ internal sealed class CgalGenerationProviderTests
     public async Task Should_generate_an_explicit_finite_profile_and_snapshot_its_collections_Async()
     {
         var defaultProfile = CgalProfileManifest.LoadDefault();
-        var explicitProfile = defaultProfile with { ProfileId = "epick-explicit-test-v1" };
+        var explicitProfile = defaultProfile with
+        {
+            ProfileId = "epick-explicit-test-v1",
+            Declarations = Array.AsReadOnly(defaultProfile.Declarations
+                .Where(static item => item.Id != "point-2-cartesian").ToArray()),
+        };
         var file = WriteProfile(explicitProfile);
         try
         {
@@ -133,6 +150,9 @@ internal sealed class CgalGenerationProviderTests
 
             await Assert.That(provider.Profile.ProfileId).IsEqualTo("epick-explicit-test-v1");
             await Assert.That(manifest).Contains("epick-explicit-test-v1");
+            await Assert.That(provider.Inventory.Admitted.Count)
+                .IsEqualTo(defaultProfile.Declarations.Count - 1);
+            await Assert.That(plan.NativeExports).DoesNotContain("Cgal_Point2_Cartesian");
             await Assert.That(mutationFailure).IsNotNull();
             await Assert.That(CgalProfileManifest.LoadDefault().ProfileId).IsEqualTo("epick-windows-v1");
         }
@@ -171,10 +191,10 @@ internal sealed class CgalGenerationProviderTests
             var provider = CreateProvider(file, explicitProfile.ProfileId);
             var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
 
-            await Assert.That(provider.Inventory.Candidates.Count).IsEqualTo(profile.Declarations.Count + 1);
-            await Assert.That(provider.Inventory.Unsupported.Count).IsEqualTo(1);
-            await Assert.That(provider.Inventory.Unsupported[0].Id).IsEqualTo(unsupported.Id);
-            await Assert.That(provider.Inventory.Unsupported[0].Proof).IsEqualTo("no-provider-semantic-projection");
+            await Assert.That(provider.Inventory.Candidates.Count).IsGreaterThan(profile.Declarations.Count + 1);
+            await Assert.That(provider.Inventory.Unsupported.Select(static item => item.Id)).Contains(unsupported.Id);
+            await Assert.That(provider.Inventory.Unsupported.Single(item => item.Id == unsupported.Id).Proof)
+                .IsEqualTo("no-provider-semantic-projection");
             await Assert.That(plan.NativeExports).DoesNotContain("unsupported-point-capability");
         }
         finally

@@ -63,8 +63,23 @@ internal static partial class CgalProfileDiscovery
             }
         }
 
-        var candidates = profile.Declarations.OrderBy(static item => item.Id, StringComparer.Ordinal)
+        var selectedCandidates = profile.Declarations.OrderBy(static item => item.Id, StringComparer.Ordinal)
             .Select(item => Classify(item, reachable, sourceText))
+            .ToArray();
+        var compilerCandidates = CgalCompilerDiscovery.Discover(
+                includeRoot,
+                profile.SelectedHeaders,
+                reachable)
+            .Select(static item => new CgalDeclarationDisposition(
+                item.Identity,
+                item.Signature,
+                item.Header,
+                item.Kind,
+                "unsupported",
+                "compiler-discovered-declaration-has-no-closed-profile-projection"))
+            .ToArray();
+        var candidates = selectedCandidates.Concat(compilerCandidates)
+            .OrderBy(static item => item.Id, StringComparer.Ordinal)
             .ToArray();
         var admitted = candidates.Where(static item => item.Disposition == "admitted").ToArray();
         var unsupported = candidates.Where(static item => item.Disposition == "unsupported").ToArray();

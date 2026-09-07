@@ -30,8 +30,10 @@ manifest and registry configuration reproduce the default package inputs.
 
 Generated inventory files distinguish all installed public headers from the finite candidate set.
 The Generator recursively closes real `#include <CGAL/...>` dependencies from the maintained roots,
-reports other headers as `not-reachable-from-finite-profile`, and independently requires the source
-evidence named by every candidate. Candidates without a provider semantic projection are emitted in
-the unsupported inventory with a narrow reason. Admitted declarations become a nonempty Shared
-semantic graph; Shared derives their managed/native files and function-table exports from that one
-model. Per-declaration artifact inventories bind every admitted declaration to both emitted sides.
+reports other headers as `not-reachable-from-finite-profile`, and uses Clang to enumerate every
+public declaration originating in that closure. Compiler declarations without a closed provider
+projection remain visible in the unsupported inventory with a narrow reason; the manifest cannot
+silently omit them. Admitted declarations become a nonempty Shared semantic graph, and Shared derives
+their managed/native files and function-table exports from that one model. Per-declaration artifact
+inventories bind every admitted declaration to both emitted sides. Value transports keep ABI storage
+private and expose native const accessors as read-only managed properties.

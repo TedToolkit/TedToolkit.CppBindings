@@ -113,6 +113,8 @@ internal sealed class BindingSemanticGraphSnapshot
             BitOffset = source.BitOffset,
             IsSignedBitField = source.IsSignedBitField,
             IsReadOnlyBitField = source.IsReadOnlyBitField,
+            IsManagedStoragePrivate = source.IsManagedStoragePrivate,
+            ManagedReadOnlyPropertyName = source.ManagedReadOnlyPropertyName,
             CSharpTemplateType = source.CSharpTemplateType,
             CppTemplateType = source.CppTemplateType,
             DescriptionItems = CloneRootDescriptions(Required(source.DescriptionItems)),

@@ -457,11 +457,30 @@ public sealed class BindingManagedEmitter(
             : fieldModel.Type.CppTypeName;
         var field = Field(managedType, fieldModel.Name)
             .AddAttribute(Attribute(new DataType("global::TedToolkit.CppBindings.NativeTypeNameAttribute"))
-                .AddArgument(Argument(nativeType.ToLiteral())))
-            .Public;
+                .AddArgument(Argument(nativeType.ToLiteral())));
+        if (!fieldModel.IsManagedStoragePrivate)
+        {
+            field = field.Public;
+        }
+        else
+        {
+            field = field.Private;
+        }
+
         AddRootDescriptions(field, fieldModel.DescriptionItems, static (target, description) =>
             target.AddRootDescription(description));
         structDeclaration.AddMember(field);
+        if (fieldModel.ManagedReadOnlyPropertyName is not null)
+        {
+            var property = Property(managedType, fieldModel.ManagedReadOnlyPropertyName).Public;
+            property.IsReadonly = true;
+            var getter = Accessor(AccessorType.GET);
+            getter.Statements.Add(new Custom($"return {fieldModel.Name};"));
+            property.AddAccessor(getter);
+            AddRootDescriptions(property, fieldModel.DescriptionItems, static (target, description) =>
+                target.AddRootDescription(description));
+            structDeclaration.AddMember(property);
+        }
     }
 
     private void AddHandleReferenceProperty(TypeDeclaration declaration, FieldModel field)

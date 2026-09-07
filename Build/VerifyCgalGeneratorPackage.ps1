@@ -5,6 +5,12 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 
 $repository = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
+$candidateRevision = (& git -C $repository rev-parse HEAD).Trim()
+$startingStatus = @(& git -C $repository status --porcelain --untracked-files=all)
+if ($startingStatus.Count -ne 0) {
+    throw 'CGAL Generator verification requires a clean exact candidate.'
+}
+
 if (-not $ReportDirectory) {
     $ReportDirectory = Join-Path $repository ('out/verification/cg-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
 }
@@ -68,6 +74,19 @@ if ($LASTEXITCODE -ne 0) {
 }
 $consumerResult = Get-Content -LiteralPath $consumerResultPath -Raw | ConvertFrom-Json -AsHashtable
 
+$managedConsumer = Join-Path $report 'generated-managed-consumer'
+$null = New-Item -ItemType Directory -Path $managedConsumer
+$managedFixture = Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Cgal.Generator.Tests/Fixtures/GeneratedManagedConsumer'
+Get-ChildItem -LiteralPath $managedFixture -File | Copy-Item -Destination $managedConsumer
+$managedBuildLog = Join-Path $report 'generated-managed-build.log'
+& dotnet build (Join-Path $managedConsumer 'GeneratedManagedConsumer.csproj') -c Release `
+    --disable-build-servers --maxcpucount:1 -p:NuGetAudit=false `
+    "-p:GeneratedRoot=$generated/csharp" *> $managedBuildLog
+if ($LASTEXITCODE -ne 0) {
+    throw "Generated CGAL managed compilation failed; see $managedBuildLog"
+}
+
 $nativeBuild = Join-Path $report 'native-build'
 $nativeBuildLog = Join-Path $report 'native-build.log'
 $vcpkgRoot = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { 'C:\vcpkg' }
@@ -94,6 +113,31 @@ if (@($assets.libraries.Keys | Where-Object { $_ -match 'Occt' }).Count -ne 0) {
     throw 'The CGAL Generator package consumer acquired an OCCT dependency.'
 }
 
+$cgalTestsLog = Join-Path $report 'cgal-generator-tests.log'
+$cgalTestResults = Join-Path $report 'cgal-generator-test-results'
+& dotnet run --project (Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj') `
+    -c Release --disable-build-servers -- --report-trx --results-directory $cgalTestResults *> $cgalTestsLog
+if ($LASTEXITCODE -ne 0) {
+    throw "CGAL Generator TUnit proof failed; see $cgalTestsLog"
+}
+
+$occtTestsLog = Join-Path $report 'occt-generator-tests.log'
+$occtTestResults = Join-Path $report 'occt-generator-test-results'
+& dotnet run --project (Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj') `
+    -c Release --disable-build-servers -- --report-trx --results-directory $occtTestResults *> $occtTestsLog
+if ($LASTEXITCODE -ne 0) {
+    throw "OCCT Generator regression failed; see $occtTestsLog"
+}
+
+$boundaryResult = Join-Path $report 'provider-boundaries.json'
+& (Join-Path $repository 'Build/VerifyProviderBoundaries.ps1') -ReportPath $boundaryResult `
+    *> (Join-Path $report 'provider-boundaries.log')
+if ($LASTEXITCODE -ne 0) {
+    throw 'Provider-boundary verification failed.'
+}
+
 @(
     'TedToolkit.CppBindings.Generator',
     'TedToolkit.CppBindings.Cgal.Generator'
@@ -107,19 +151,31 @@ if (@($assets.libraries.Keys | Where-Object { $_ -match 'Occt' }).Count -ne 0) {
     }
 }
 
+$endingRevision = (& git -C $repository rev-parse HEAD).Trim()
+$endingStatus = @(& git -C $repository status --porcelain --untracked-files=all)
+if ($endingRevision -cne $candidateRevision -or $endingStatus.Count -ne 0) {
+    throw 'The candidate revision or worktree changed during CGAL Generator verification.'
+}
+
 [ordered]@{
     Passed = $true
-    CandidateRevision = (& git -C $repository rev-parse HEAD)
+    CandidateRevision = $candidateRevision
     Profile = $consumerResult.ProfileId
     DeclarationCount = $consumerResult.DeclarationCount
     HeaderCount = $consumerResult.HeaderCount
     ExportCount = $consumerResult.ExportCount
+    AdmittedCount = $consumerResult.AdmittedCount
+    UnsupportedCount = $consumerResult.UnsupportedCount
     Toolchain = $consumerResult.Toolchain
     ManagedHash = $consumerResult.ManagedHash
     NativeHash = $consumerResult.NativeHash
     NativeLibraryHash = (Get-FileHash -LiteralPath $nativeLibrary.FullName -Algorithm SHA256 | Select-Object Path,Hash)
     PackageHash = (Get-FileHash -LiteralPath $package -Algorithm SHA256 | Select-Object Path,Hash)
     ConsumerExitCode = 0
+    ManagedCompileExitCode = 0
+    CgalGeneratorTestsExitCode = 0
+    OcctGeneratorTestsExitCode = 0
+    ProviderBoundaries = (Get-Content -LiteralPath $boundaryResult -Raw | ConvertFrom-Json -AsHashtable)
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $report 'result.json') -Encoding utf8
 
 Write-Output "CGAL Generator package verification passed: $report"

@@ -147,6 +147,51 @@ internal sealed class BindingSemanticEngineTests
     }
 
     /// <summary>
+    /// Verifies providers can hide ABI storage behind a read-only managed value property.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_project_hidden_abi_storage_as_a_read_only_property_Async()
+    {
+        var engine = CreateEngine([new TypeRule(true, "Projected"),]);
+        var declaration = CreateDeclaration("fixture::value", "Value", true, [], "ValueExport");
+        var original = declaration.Record.FieldModels[0];
+        declaration.Record.FieldModels =
+        [
+            new()
+            {
+                DescriptionItems = original.DescriptionItems,
+                Offset = original.Offset,
+                Size = original.Size,
+                Alignment = original.Alignment,
+                Name = "StorageValue",
+                IsManagedStoragePrivate = true,
+                ManagedReadOnlyPropertyName = "Value",
+                Type = original.Type,
+            },
+        ];
+        var model = new BindingProviderModel(
+            [declaration,],
+            [],
+            CreateEmissionProfile(),
+            [],
+            [],
+            [],
+            "source-stem",
+            "source-stem",
+            nativeProject: null);
+
+        var plan = engine.CreatePlan(model);
+        var managed = await RenderAsync(plan.CSharpSources.Single(static source =>
+            source.RelativePath == "fixture_value.g.cs")).ConfigureAwait(false);
+
+        await Assert.That(managed).Contains("private int StorageValue;");
+        await Assert.That(managed).Contains("public readonly int Value");
+        await Assert.That(managed).Contains("return StorageValue;");
+        await Assert.That(managed).DoesNotContain("public int StorageValue;");
+    }
+
+    /// <summary>
     /// Verifies a completed plan does not retain caller-owned nested semantic state.
     /// </summary>
     /// <returns>A task that completes when assertions finish.</returns>

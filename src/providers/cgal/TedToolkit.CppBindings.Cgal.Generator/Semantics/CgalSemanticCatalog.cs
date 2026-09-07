@@ -35,8 +35,8 @@ internal static class CgalSemanticCatalog
             ["point-3-z"] = new("Point_3.Z", null),
             ["segment-2"] = new("Segment_2", null),
             ["segment-2-constructor"] = new("Segment_2.Create", "Cgal_Segment2_Create"),
-            ["segment-2-source"] = new("Segment_2.Source", "Cgal_Segment2_Source"),
-            ["segment-2-target"] = new("Segment_2.Target", "Cgal_Segment2_Target"),
+            ["segment-2-source"] = new("Segment_2.Source", null),
+            ["segment-2-target"] = new("Segment_2.Target", null),
             ["segment-2-squared-length"] = new("Segment_2.SquaredLength", "Cgal_Segment2_SquaredLength"),
             ["squared-distance-2"] = new("Kernel_API.SquaredDistance(Point_2,Point_2)", "Cgal_Point2_SquaredDistance"),
             ["squared-distance-3"] = new("Kernel_API.SquaredDistance(Point_3,Point_3)", "Cgal_Point3_SquaredDistance"),
@@ -146,8 +146,8 @@ internal static class CgalSemanticCatalog
         var record = CreateRecord("Point_2", 16, 8);
         record.FieldModels =
         [
-            Field("X", 0, Double()),
-            Field("Y", 8, Double()),
+            Field("StorageX", ids.Contains("point-2-x") ? "X" : null, 0, Double()),
+            Field("StorageY", ids.Contains("point-2-y") ? "Y" : null, 8, Double()),
         ];
         var methods = new List<MethodModel>();
         if (ids.Contains("point-2-constructor"))
@@ -174,9 +174,9 @@ internal static class CgalSemanticCatalog
         var record = CreateRecord("Point_3", 24, 8);
         record.FieldModels =
         [
-            Field("X", 0, Double()),
-            Field("Y", 8, Double()),
-            Field("Z", 16, Double()),
+            Field("StorageX", ids.Contains("point-3-x") ? "X" : null, 0, Double()),
+            Field("StorageY", ids.Contains("point-3-y") ? "Y" : null, 8, Double()),
+            Field("StorageZ", ids.Contains("point-3-z") ? "Z" : null, 16, Double()),
         ];
         var methods = new List<MethodModel>();
         if (ids.Contains("point-3-constructor"))
@@ -206,8 +206,8 @@ internal static class CgalSemanticCatalog
         var record = CreateRecord("Segment_2", 32, 8);
         record.FieldModels =
         [
-            Field("Source", 0, pointType, 16, 8),
-            Field("Target", 16, pointType, 16, 8),
+            Field("StorageSource", ids.Contains("segment-2-source") ? "Source" : null, 0, pointType, 16, 8),
+            Field("StorageTarget", ids.Contains("segment-2-target") ? "Target" : null, 16, pointType, 16, 8),
         ];
         var methods = new List<MethodModel>();
         if (ids.Contains("segment-2-constructor"))
@@ -215,16 +215,6 @@ internal static class CgalSemanticCatalog
             methods.Add(Constructor(
                 "Cgal_Segment2_Create",
                 [Parameter("source", pointType), Parameter("target", pointType),]));
-        }
-
-        if (ids.Contains("segment-2-source"))
-        {
-            methods.Add(Method("Source", "Cgal_Segment2_Source", pointType, false, []));
-        }
-
-        if (ids.Contains("segment-2-target"))
-        {
-            methods.Add(Method("Target", "Cgal_Segment2_Target", pointType, false, []));
         }
 
         if (ids.Contains("segment-2-squared-length"))
@@ -249,11 +239,11 @@ internal static class CgalSemanticCatalog
         var record = CreateRecord("Segment_2_Intersection_Transport", 40, 8);
         record.FieldModels =
         [
-            Field("Tag", 0, Int(), 4, 4),
-            Field("AX", 8, Double()),
-            Field("AY", 16, Double()),
-            Field("BX", 24, Double()),
-            Field("BY", 32, Double()),
+            Field("StorageTag", "Tag", 0, Int(), 4, 4),
+            Field("StorageAX", "AX", 8, Double()),
+            Field("StorageAY", "AY", 16, Double()),
+            Field("StorageBX", "BX", 24, Double()),
+            Field("StorageBY", "BY", 32, Double()),
         ];
         record.MethodModels = [];
         return record;
@@ -337,6 +327,7 @@ internal static class CgalSemanticCatalog
 
     private static FieldModel Field(
         string name,
+        string? managedReadOnlyPropertyName,
         long offset,
         TypeModel type,
         long size = 8,
@@ -346,6 +337,8 @@ internal static class CgalSemanticCatalog
         {
             DescriptionItems = [],
             Name = name,
+            IsManagedStoragePrivate = true,
+            ManagedReadOnlyPropertyName = managedReadOnlyPropertyName,
             Offset = offset,
             Size = size,
             Alignment = alignment,

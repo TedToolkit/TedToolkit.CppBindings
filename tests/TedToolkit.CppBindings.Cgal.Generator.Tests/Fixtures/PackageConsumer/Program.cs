@@ -50,8 +50,13 @@ var native = ReadSources(nativeRoot);
 var paired = provider.Inventory.ManagedArtifacts.All(item => managed.ContainsKey(item.RelativePath))
     && provider.Inventory.NativeArtifacts.All(item => native.ContainsKey(item.RelativePath));
 if (!paired || !managed.ContainsKey("NativeApi.g.cs") || !native.ContainsKey("NativeFunctionTable.cpp")
-    || provider.Inventory.Candidates.Count != provider.Inventory.Admitted.Count
-    || provider.Inventory.Unsupported.Count != 0 || plan.NativeExports.Count != 12)
+    || provider.Inventory.Candidates.Count
+    != provider.Inventory.Admitted.Count + provider.Inventory.Unsupported.Count
+    || provider.Inventory.Admitted.Count != provider.Profile.Declarations.Count
+    || provider.Inventory.Unsupported.Count == 0
+    || !provider.Inventory.Unsupported.Any(static item =>
+        item.NativeSignature.Contains("Point_2::dimension", StringComparison.Ordinal))
+    || plan.NativeExports.Count != 10)
 {
     return 3;
 }
@@ -60,6 +65,8 @@ var result = new
 {
     provider.Profile.ProfileId,
     DeclarationCount = provider.Inventory.Candidates.Count,
+    AdmittedCount = provider.Inventory.Admitted.Count,
+    UnsupportedCount = provider.Inventory.Unsupported.Count,
     HeaderCount = provider.Inventory.Sources.Count,
     ExportCount = plan.NativeExports.Count,
     provider.Inventory.Toolchain,
