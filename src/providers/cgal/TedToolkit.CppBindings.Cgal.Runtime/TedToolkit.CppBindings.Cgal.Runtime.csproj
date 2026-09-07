@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <Title>CGAL bindings Runtime</Title>
+    <Description>CGAL failure, diagnostic ownership, and finite-result runtime contracts.</Description>
+    <RootNamespace>TedToolkit.CppBindings.Cgal</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA1032;CA1711;RCS1194</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>

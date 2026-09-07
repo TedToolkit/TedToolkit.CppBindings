@@ -17,5 +17,5 @@ over CGAL's unbounded template space.
 | `TedToolkit.CppBindings.Cgal.Runtime` | Project CGAL failures and finite polymorphic native results without OCCT semantics |
 | `TedToolkit.CppBindings.Cgal.Windows` | Carry the generated `win-x64` EPICK assembly, native wrapper, imported dependencies, and notices |
 
-Only the Generator project exists until the corresponding independently verified delivery adds the
-Runtime and Windows projects.
+The Generator and Runtime projects are independently consumable. The Windows project is added by
+the final packaging delivery after both contracts are verified.

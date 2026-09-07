@@ -18,6 +18,7 @@
   </Folder>
   <Folder Name="/src/providers/cgal/">
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj" />
+    <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj" />
   </Folder>
   <Folder Name="/src/providers/occt/">
     <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj" />
@@ -30,6 +31,7 @@
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/TedToolkit.CppBindings.Cgal.Runtime.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Generator.Tests/TedToolkit.CppBindings.Generator.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Runtime.FirstWrapper/TedToolkit.CppBindings.Runtime.FirstWrapper.csproj" />
