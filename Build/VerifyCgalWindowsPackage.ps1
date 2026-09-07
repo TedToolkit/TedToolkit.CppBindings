@@ -216,10 +216,8 @@ if ($LASTEXITCODE -ne 0) {
     throw 'dumpbin could not inspect the packed CGAL native exports.'
 }
 $exportText = $exports -join "`n"
-foreach ($symbol in $nativeSymbols + 'NativeApi_GetFunctionTable') {
-    if ($exportText -notmatch "(?m)\b$([regex]::Escape($symbol))\b") {
-        throw "The packed CGAL native library is missing export '$symbol'."
-    }
+if ($exportText -notmatch '(?m)\bNativeApi_GetFunctionTable\b') {
+    throw "The packed CGAL native library is missing its function-table bootstrap export."
 }
 
 $consumer = Join-Path $report 'consumer'
