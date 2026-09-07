@@ -100,6 +100,9 @@ the verified exception/result ABI contract supplied to CGAL-003.
 - Supplied to CGAL-003: the verified Runtime exception taxonomy, diagnostic ownership boundary,
   operation-specific result ABI, and exact-once native temporary cleanup contract. Runtime and CGAL
   provider documentation describe the implemented ownership, failure, and result semantics.
+- Integration: fast-forwarded the unchanged implementation and evidence record through
+  `81dd0253fd095350845adb608ef13aabdbb99a1b` into `codex/deliver-cgal-provider`; this later status
+  update does not change the independently reviewed implementation candidate or its retained proof.
 
 ## Risks and implementation notes
 
