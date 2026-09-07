@@ -8,7 +8,7 @@
 namespace TedToolkit.CppBindings.Cgal.Generator;
 
 /// <summary>
-/// Describes one finite candidate declaration and its admission proof.
+/// Describes one finite declaration requested by a CGAL profile.
 /// </summary>
 public sealed record CgalProfileDeclaration
 {
@@ -33,12 +33,17 @@ public sealed record CgalProfileDeclaration
     public required string Kind { get; init; }
 
     /// <summary>
-    /// Gets the stable disposition: admitted or unsupported.
+    /// Gets the source token that independently demonstrates the declaration is reachable.
     /// </summary>
-    public required string Disposition { get; init; }
+    public required string Evidence { get; init; }
 
     /// <summary>
-    /// Gets the narrow admission or rejection proof.
+    /// Gets a value indicating whether the declaration is an explicit profile root.
     /// </summary>
-    public required string Proof { get; init; }
+    public bool IsRoot { get; init; }
+
+    /// <summary>
+    /// Gets declaration identities required by this declaration.
+    /// </summary>
+    public IReadOnlyList<string> Dependencies { get; init; } = [];
 }

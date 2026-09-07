@@ -16,37 +16,6 @@ namespace TedToolkit.CppBindings.Cgal.Generator;
 /// </summary>
 public sealed class CgalGenerationProvider : SemanticGenerationProvider
 {
-    private static readonly string[] Exports =
-    [
-        "Cgal_NativeError_Clear",
-        "Cgal_Point2_Cartesian",
-        "Cgal_Point2_SquaredDistance",
-        "Cgal_Point3_Cartesian",
-        "Cgal_Point3_SquaredDistance",
-        "Cgal_Segment2_Intersection",
-        "Cgal_Segment2_SquaredLength",
-    ];
-
-    private static readonly string[] ManagedFileInventory =
-    [
-        "Cgal.Generated.g.cs",
-        "NativeApi.g.cs",
-        "admitted-inventory.json",
-        "candidate-inventory.json",
-        "managed-inventory.json",
-        "profile-manifest.json",
-        "source-inventory.json",
-        "unsupported-inventory.json",
-    ];
-
-    private static readonly string[] NativeFileInventory =
-    [
-        "CMakeLists.txt",
-        "Cgal.Native.cpp",
-        "NativeFunctionTable.cpp",
-        "native-inventory.json",
-    ];
-
     private readonly CgalGenerationOptions _options;
 
     /// <summary>
@@ -58,9 +27,11 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options;
-        Profile = CgalProfileManifest.LoadDefault();
+        Profile = options.ProfileManifestFile is null
+            ? CgalProfileManifest.LoadDefault()
+            : CgalProfileManifest.Load(options.ProfileManifestFile);
         ValidateOptions();
-        Inventory = ResolveInventory();
+        Inventory = CgalProfileDiscovery.Resolve(options, Profile);
     }
 
     /// <summary>
@@ -80,9 +51,8 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
     protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        BindingSourceDefinition[] managedSources =
+        var managedSources = new List<BindingSourceDefinition>()
         {
-            TextSource("Cgal.Generated.g.cs", CgalSourceRenderer.RenderManaged(_options.CSharpNamespace, Exports)),
             JsonSource(
                 "profile-manifest.json",
                 new
@@ -94,24 +64,34 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
             JsonSource("candidate-inventory.json", Inventory.Candidates),
             JsonSource("admitted-inventory.json", Inventory.Admitted),
             JsonSource("unsupported-inventory.json", Inventory.Unsupported),
-            JsonSource("managed-inventory.json", Inventory.ManagedFiles),
+            JsonSource("managed-inventory.json", Inventory.ManagedArtifacts),
+            JsonSource("toolchain-inventory.json", Inventory.Toolchain),
         };
+        if (Inventory.Admitted.Any(static item => item.Id == "intersection-segment-2"))
+        {
+            managedSources.Add(TextSource(
+                "Cgal.ResultProjection.g.cs",
+                CgalSourceRenderer.RenderManagedResultProjection(_options.CSharpNamespace)));
+        }
+
         BindingSourceDefinition[] nativeSources =
         {
-            TextSource("Cgal.Native.cpp", CgalSourceRenderer.RenderNative()),
-            JsonSource("native-inventory.json", Inventory.NativeFiles),
+            TextSource("CgalProfileAdapter.hpp", CgalSourceRenderer.RenderAdapter(Profile)),
+            TextSource("CgalNativeError.hpp", CgalSourceRenderer.RenderNativeErrorHeader()),
+            TextSource("CgalNativeError.cpp", CgalSourceRenderer.RenderNativeErrorSource()),
+            JsonSource("native-inventory.json", Inventory.NativeArtifacts),
         };
         var nativeProject = new BindingNativeProject(
             "CMakeLists.txt",
             (sources, writer, token) => writer.WriteAsync(
                 CgalSourceRenderer.RenderCMake(_options.NativeLibraryBaseName, sources).AsMemory(), token));
         return Task.FromResult(new BindingProviderModel(
-            [],
+            CgalSemanticCatalog.CreateDeclarations(Inventory.Admitted),
             [],
             CgalSemanticProfile.CreateEmissionProfile(_options.CSharpNamespace, _options.IsInternal),
             managedSources,
             nativeSources,
-            Exports,
+            ["Cgal_NativeError_Clear",],
             CgalSemanticProfile.ManagedSourceStem,
             CgalSemanticProfile.NativeSourceStem,
             nativeProject));
@@ -130,68 +110,23 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
 
     private void ValidateOptions()
     {
-        if (!string.Equals(_options.ProfileId, CgalGenerationOptions.DefaultProfileId, StringComparison.Ordinal))
+        if (!string.Equals(_options.ProfileId, Profile.ProfileId, StringComparison.Ordinal))
         {
-            throw new NotSupportedException($"Unknown finite CGAL profile '{_options.ProfileId}'.");
+            throw new InvalidOperationException(
+                $"Requested profile '{_options.ProfileId}' does not match manifest '{Profile.ProfileId}'.");
         }
 
-        if (string.Equals(Profile.ProfileId, _options.ProfileId, StringComparison.Ordinal)
-            && string.Equals(Profile.CgalVersion, "6.2", StringComparison.Ordinal)
-            && string.Equals(Profile.Triplet, "x64-windows", StringComparison.Ordinal))
+        if (_options.ProfileManifestFile is not null
+            || (string.Equals(Profile.CgalVersion, "6.2", StringComparison.Ordinal)
+                && string.Equals(Profile.Triplet, "x64-windows", StringComparison.Ordinal)
+                && string.Equals(
+                    Profile.VcpkgBuiltinBaseline,
+                    "30ef65cad98f08e7197c9a1656fbd871bcb72f2d",
+                    StringComparison.Ordinal)))
         {
             return;
         }
 
         throw new InvalidOperationException("The embedded CGAL profile identity is inconsistent.");
-    }
-
-    private CgalGenerationInventory ResolveInventory()
-    {
-        var includeRoot = Path.Combine(_options.VcpkgRoot.FullName, "installed", Profile.Triplet, "include");
-        var cgalRoot = Path.Combine(includeRoot, "CGAL");
-        if (!Directory.Exists(cgalRoot))
-        {
-            throw new DirectoryNotFoundException($"CGAL public headers were not found beneath '{cgalRoot}'.");
-        }
-
-        var installed = Directory.EnumerateFiles(cgalRoot, "*", SearchOption.AllDirectories)
-            .Select(path => Path.GetRelativePath(includeRoot, path).Replace('\\', '/'))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        var locked = CgalProfileResources.LoadLockedHeaders();
-        if (_options.RequireLockedHeaderInventory && !installed.SequenceEqual(locked, StringComparer.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"The installed CGAL public-header inventory does not match the locked {Profile.CgalVersion} profile.");
-        }
-
-        var selected = Profile.SelectedHeaders.ToHashSet(StringComparer.Ordinal);
-        foreach (var header in selected)
-        {
-            if (!installed.Contains(header, StringComparer.Ordinal))
-            {
-                throw new InvalidOperationException($"Profile header '{header}' is absent from the installed CGAL package.");
-            }
-        }
-
-        var candidates = Profile.Declarations.OrderBy(static item => item.Id, StringComparer.Ordinal).ToArray();
-        var admitted = candidates.Where(static item => item.Disposition == "admitted").ToArray();
-        var unsupported = candidates.Where(static item => item.Disposition == "unsupported").ToArray();
-        if (admitted.Length + unsupported.Length != candidates.Length)
-        {
-            throw new InvalidOperationException("Every CGAL candidate must be admitted or unsupported.");
-        }
-
-        return new()
-        {
-            Sources = Array.AsReadOnly(installed.Select(header => new CgalSourceDisposition(
-                header,
-                selected.Contains(header) ? "profile-root" : "not-selected-by-finite-profile")).ToArray()),
-            Candidates = Array.AsReadOnly(candidates),
-            Admitted = Array.AsReadOnly(admitted),
-            Unsupported = Array.AsReadOnly(unsupported),
-            ManagedFiles = Array.AsReadOnly(ManagedFileInventory),
-            NativeFiles = Array.AsReadOnly(NativeFileInventory),
-        };
     }
 }

@@ -65,4 +65,15 @@ public sealed record CgalProfileManifest
     {
         return CgalProfileResources.LoadManifest();
     }
+
+    /// <summary>
+    /// Loads one explicit finite profile document.
+    /// </summary>
+    /// <param name="file">The JSON profile document.</param>
+    /// <returns>A detached immutable profile.</returns>
+    public static CgalProfileManifest Load(FileInfo file)
+    {
+        ArgumentNullException.ThrowIfNull(file);
+        return CgalProfileResources.LoadManifest(file);
+    }
 }

@@ -612,12 +612,24 @@ public sealed class BindingNativeEmitter(RecordModel record, BindingEmissionProf
             _ = builder.Append("    catch (const ").Append(projection.CppType).Append("& exception)\n    {\n")
                 .Append("        ").Append(emissionProfile.NativeErrorSetter).Append("(__error, ")
                 .Append(projection.Code).Append(", ").Append(projection.NativeTypeExpression).Append(", ")
-                .Append(projection.MessageExpression).Append(");\n        ").Append(failureReturn).Append("\n    }\n");
+                .Append(projection.MessageExpression);
+            if (projection.StackExpression is not null)
+            {
+                _ = builder.Append(", ").Append(projection.StackExpression);
+            }
+
+            _ = builder.Append(");\n        ").Append(failureReturn).Append("\n    }\n");
         }
 
         _ = builder.Append("    catch (...)\n    {\n        ").Append(emissionProfile.NativeErrorSetter)
             .Append("(__error, ").Append(emissionProfile.UnknownNativeExceptionCode)
-            .Append(", nullptr, nullptr);\n        ").Append(failureReturn).Append("\n    }\n");
+            .Append(", nullptr, nullptr");
+        if (emissionProfile.UnknownNativeStackExpression is not null)
+        {
+            _ = builder.Append(", ").Append(emissionProfile.UnknownNativeStackExpression);
+        }
+
+        _ = builder.Append(");\n        ").Append(failureReturn).Append("\n    }\n");
     }
 
     private static string GetFailureReturn(

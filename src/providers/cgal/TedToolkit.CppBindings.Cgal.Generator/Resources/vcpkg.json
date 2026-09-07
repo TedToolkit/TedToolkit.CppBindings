@@ -1,0 +1,14 @@
+{
+  "name": "tedtoolkit-cppbindings-cgal-profile",
+  "version-string": "epick-windows-v1",
+  "dependencies": [
+    "cgal",
+    "gmp",
+    "mpfr"
+  ],
+  "overrides": [
+    { "name": "cgal", "version": "6.2" },
+    { "name": "gmp", "version": "6.3.0", "port-version": 5 },
+    { "name": "mpfr", "version": "4.2.2", "port-version": 1 }
+  ]
+}

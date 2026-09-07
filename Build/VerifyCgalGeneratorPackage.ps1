@@ -37,10 +37,12 @@ Get-ChildItem -LiteralPath $fixture -File | Copy-Item -Destination $consumer
 $consumerProject = Join-Path $consumer 'PackageConsumer.csproj'
 $packages = Join-Path $report 'packages'
 $runLog = Join-Path $report 'consumer-run.log'
+$consumerResultPath = Join-Path $report 'consumer-result.json'
+$generated = Join-Path $report 'generated'
 $arguments = @(
     'run', '--project', $consumerProject, '-c', 'Release',
     '--disable-build-servers', '--no-launch-profile', '--',
-    '--unused'
+    $consumerResultPath, $generated
 )
 $restoreProperties = @(
     ('-p:RestoreSources=' + $feed),
@@ -48,10 +50,28 @@ $restoreProperties = @(
     ('-p:RestorePackagesPath=' + $packages),
     '-p:NuGetAudit=false'
 )
-& dotnet @($arguments[0..5] + $restoreProperties + $arguments[6..8]) *> $runLog
+& dotnet @($arguments[0..5] + $restoreProperties + $arguments[6..9]) *> $runLog
 if ($LASTEXITCODE -ne 0) {
     throw "Independent CGAL Generator package consumer failed; see $runLog"
 }
+$consumerResult = Get-Content -LiteralPath $consumerResultPath -Raw | ConvertFrom-Json -AsHashtable
+
+$nativeBuild = Join-Path $report 'native-build'
+$nativeBuildLog = Join-Path $report 'native-build.log'
+$vcpkgRoot = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { 'C:\vcpkg' }
+& cmake --fresh -G 'Visual Studio 18 2026' -A x64 `
+    -S (Join-Path $generated 'cpp') -B $nativeBuild `
+    "-DCMAKE_TOOLCHAIN_FILE=$vcpkgRoot\scripts\buildsystems\vcpkg.cmake" `
+    -DVCPKG_TARGET_TRIPLET=x64-windows -DVCPKG_APPLOCAL_DEPS=OFF *>> $nativeBuildLog
+if ($LASTEXITCODE -ne 0) {
+    throw "Generated CGAL native configuration failed; see $nativeBuildLog"
+}
+& cmake --build $nativeBuild --config Release --parallel 1 *>> $nativeBuildLog
+if ($LASTEXITCODE -ne 0) {
+    throw "Generated CGAL native build failed; see $nativeBuildLog"
+}
+$nativeLibrary = Get-ChildItem -LiteralPath $nativeBuild -Recurse -File `
+    -Filter 'ted_toolkit_cpp_bindings_cgal.dll' | Select-Object -Single
 
 $assets = Get-Content -LiteralPath (Join-Path $consumer 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
 if (@($assets.libraries.Keys | Where-Object { $_ -match 'Occt' }).Count -ne 0) {
@@ -66,9 +86,15 @@ if ($assets.libraries['TedToolkit.CppBindings.Cgal.Generator/1.0.0'].sha512 -cne
 
 [ordered]@{
     Passed = $true
-    Profile = 'epick-windows-v1'
-    DeclarationCount = 19
-    HeaderCount = 3773
+    CandidateRevision = (& git -C $repository rev-parse HEAD)
+    Profile = $consumerResult.ProfileId
+    DeclarationCount = $consumerResult.DeclarationCount
+    HeaderCount = $consumerResult.HeaderCount
+    ExportCount = $consumerResult.ExportCount
+    Toolchain = $consumerResult.Toolchain
+    ManagedHash = $consumerResult.ManagedHash
+    NativeHash = $consumerResult.NativeHash
+    NativeLibraryHash = (Get-FileHash -LiteralPath $nativeLibrary.FullName -Algorithm SHA256 | Select-Object Path,Hash)
     PackageHash = (Get-FileHash -LiteralPath $package -Algorithm SHA256 | Select-Object Path,Hash)
     ConsumerExitCode = 0
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $report 'result.json') -Encoding utf8

@@ -40,8 +40,24 @@ internal static class CgalProfileResources
     internal static CgalProfileManifest LoadManifest()
     {
         using var stream = Open(ManifestResource);
-        return JsonSerializer.Deserialize<CgalProfileManifest>(stream, SerializerOptions)
-            ?? throw new InvalidOperationException("The embedded CGAL profile is empty.");
+        return ReadManifest(stream, "embedded CGAL profile");
+    }
+
+    /// <summary>
+    /// Loads an explicit profile document.
+    /// </summary>
+    /// <param name="file">The profile file.</param>
+    /// <returns>The detached immutable profile.</returns>
+    /// <exception cref="FileNotFoundException">The explicit profile does not exist.</exception>
+    internal static CgalProfileManifest LoadManifest(FileInfo file)
+    {
+        if (!file.Exists)
+        {
+            throw new FileNotFoundException("The explicit CGAL profile was not found.", file.FullName);
+        }
+
+        using var stream = file.OpenRead();
+        return ReadManifest(stream, file.FullName);
     }
 
     /// <summary>
@@ -82,5 +98,20 @@ internal static class CgalProfileResources
     {
         return Assembly.GetExecutingAssembly().GetManifestResourceStream(name)
             ?? throw new InvalidOperationException($"Embedded CGAL resource '{name}' is missing.");
+    }
+
+    private static CgalProfileManifest ReadManifest(Stream stream, string source)
+    {
+        var manifest = JsonSerializer.Deserialize<CgalProfileManifest>(stream, SerializerOptions)
+            ?? throw new InvalidOperationException($"The CGAL profile '{source}' is empty.");
+        return manifest with
+        {
+            SelectedHeaders = Array.AsReadOnly(manifest.SelectedHeaders.ToArray()),
+            Declarations = Array.AsReadOnly(manifest.Declarations.Select(static declaration => declaration with
+            {
+                Dependencies = Array.AsReadOnly(declaration.Dependencies.ToArray()),
+            }).ToArray()),
+            Toolchain = manifest.Toolchain with { },
+        };
     }
 }

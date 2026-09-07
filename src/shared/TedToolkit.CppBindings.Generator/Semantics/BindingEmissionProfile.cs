@@ -88,6 +88,11 @@ public sealed class BindingEmissionProfile
     public int UnknownNativeExceptionCode { get; init; } = 255;
 
     /// <summary>
+    /// Gets the optional stack expression passed when projecting an unknown native exception.
+    /// </summary>
+    public string? UnknownNativeStackExpression { get; init; }
+
+    /// <summary>
     /// Gets the expression that decrements an intrusive reference and reports whether deletion is required.
     /// </summary>
     public string IntrusiveReleaseCondition { get; init; } = "self->DecrementRefCounter() == 0";
@@ -125,6 +130,7 @@ public sealed class BindingEmissionProfile
             NativeErrorSetter = NativeErrorSetter,
             NativeExceptionProjections = Array.AsReadOnly(NativeExceptionProjections.ToArray()),
             UnknownNativeExceptionCode = UnknownNativeExceptionCode,
+            UnknownNativeStackExpression = UnknownNativeStackExpression,
             IntrusiveReleaseCondition = IntrusiveReleaseCondition,
             IntrusiveDeleteStatement = IntrusiveDeleteStatement,
             IntrusiveRetainStatement = IntrusiveRetainStatement,

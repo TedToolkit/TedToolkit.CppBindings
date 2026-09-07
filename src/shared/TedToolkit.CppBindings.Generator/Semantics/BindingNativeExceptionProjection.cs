@@ -14,8 +14,10 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// <param name="Code">The stable provider error code.</param>
 /// <param name="NativeTypeExpression">The expression naming the native exception type.</param>
 /// <param name="MessageExpression">The expression yielding an optional UTF-8 message.</param>
+/// <param name="StackExpression">The optional expression yielding copied native stack text.</param>
 public sealed record BindingNativeExceptionProjection(
     string CppType,
     int Code,
     string NativeTypeExpression,
-    string MessageExpression);
+    string MessageExpression,
+    string? StackExpression = null);

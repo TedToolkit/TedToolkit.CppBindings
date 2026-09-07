@@ -7,6 +7,7 @@
 
 using System.Security.Cryptography;
 using System.Text;
+using System.Text.Json;
 
 using TedToolkit.CppBindings.Cgal.Generator;
 using TedToolkit.CppBindings.Generator;
@@ -14,12 +15,18 @@ using TedToolkit.CppBindings.Generator;
 namespace TedToolkit.CppBindings.Cgal.Generator.Tests;
 
 /// <summary>
-/// Verifies the locked finite CGAL profile against real installed headers.
+/// Verifies the locked finite CGAL profile against independently observed installed headers.
 /// </summary>
 internal sealed class CgalGenerationProviderTests
 {
+    private static readonly JsonSerializerOptions ProfileJsonOptions = new()
+    {
+        PropertyNamingPolicy = JsonNamingPolicy.CamelCase,
+        WriteIndented = true,
+    };
+
     /// <summary>
-    /// Verifies two real-header runs produce byte-identical complete inventories and paired sources.
+    /// Verifies two real-header runs produce byte-identical discovered inventories and Shared outputs.
     /// </summary>
     /// <returns>A task that completes when assertions finish.</returns>
     [Test]
@@ -34,60 +41,188 @@ internal sealed class CgalGenerationProviderTests
         var secondManaged = await RenderAsync(secondPlan.CSharpSources).ConfigureAwait(false);
         var firstNative = await RenderAsync(firstPlan.CppSources).ConfigureAwait(false);
         var secondNative = await RenderAsync(secondPlan.CppSources).ConfigureAwait(false);
+        var independentlyEnumeratedHeaders = EnumerateInstalledHeaders();
 
         await Assert.That(firstProvider.Profile.ProfileId).IsEqualTo("epick-windows-v1");
         await Assert.That(firstProvider.Profile.CgalVersion).IsEqualTo("6.2");
-        await Assert.That(firstProvider.Inventory.Sources.Count).IsEqualTo(3773);
+        await Assert.That(firstProvider.Inventory.Sources.Select(static item => item.Header))
+            .IsEquivalentTo(independentlyEnumeratedHeaders);
         await Assert.That(firstProvider.Inventory.Sources.Count(static item => item.Disposition == "profile-root"))
-            .IsEqualTo(7);
-        await Assert.That(firstProvider.Inventory.Candidates.Count).IsEqualTo(19);
-        await Assert.That(firstProvider.Inventory.Admitted.Count).IsEqualTo(19);
-        await Assert.That(firstProvider.Inventory.Unsupported.Count).IsEqualTo(0);
+            .IsEqualTo(firstProvider.Profile.SelectedHeaders.Count);
+        await Assert.That(firstProvider.Inventory.Sources.Count(static item => item.Disposition == "reachable-dependency"))
+            .IsGreaterThan(0);
+        await Assert.That(firstProvider.Inventory.Candidates.Count)
+            .IsEqualTo(firstProvider.Profile.Declarations.Count);
         await Assert.That(firstProvider.Inventory.Admitted.Count + firstProvider.Inventory.Unsupported.Count)
             .IsEqualTo(firstProvider.Inventory.Candidates.Count);
+        await Assert.That(firstProvider.Inventory.Unsupported).IsEmpty();
+        await Assert.That(firstProvider.Inventory.Toolchain.Cgal).IsEqualTo("6.2");
+        await Assert.That(firstProvider.Inventory.Toolchain.CgalAbi).IsNotEmpty();
+        await Assert.That(firstProvider.Inventory.Toolchain.CMake).IsEqualTo("4.4.3");
+        await Assert.That(firstProvider.Inventory.Toolchain.Msvc).IsEqualTo("19.51.36256");
         await Assert.That(Hash(firstManaged)).IsEqualTo(Hash(secondManaged));
         await Assert.That(Hash(firstNative)).IsEqualTo(Hash(secondNative));
         await Assert.That(firstPlan.NativeExports.SequenceEqual(secondPlan.NativeExports, StringComparer.Ordinal)).IsTrue();
+        await Assert.That(firstPlan.NativeExports.SequenceEqual(
+            firstPlan.NativeExports.Order(StringComparer.Ordinal),
+            StringComparer.Ordinal)).IsTrue();
     }
 
     /// <summary>
-    /// Verifies the plan carries the finite API, failure boundary, build metadata, and explicit source dispositions.
+    /// Verifies Shared emits every admitted declaration's paired artifact and export inventory.
     /// </summary>
     /// <returns>A task that completes when assertions finish.</returns>
     [Test]
-    public async Task Should_emit_matching_managed_and_native_profile_artifacts_Async()
+    public async Task Should_emit_the_nonempty_shared_semantic_model_and_paired_artifacts_Async()
     {
         var provider = CreateProvider();
         var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
         var managed = await RenderAsync(plan.CSharpSources).ConfigureAwait(false);
         var native = await RenderAsync(plan.CppSources).ConfigureAwait(false);
 
-        await Assert.That(managed.Keys).Contains("Cgal.Generated.g.cs");
-        await Assert.That(managed.Keys).Contains("source-inventory.json");
-        await Assert.That(managed.Keys).Contains("candidate-inventory.json");
-        await Assert.That(managed["Cgal.Generated.g.cs"]).Contains("public readonly struct Point_2");
-        await Assert.That(managed["Cgal.Generated.g.cs"]).Contains("public static double SquaredDistance(Point_3");
-        await Assert.That(native.Keys).Contains("Cgal.Native.cpp");
-        await Assert.That(native.Keys).Contains("CMakeLists.txt");
-        await Assert.That(native["Cgal.Native.cpp"]).Contains("CGAL::intersection");
-        await Assert.That(native["CMakeLists.txt"])
-            .Contains("target_compile_definitions(ted_toolkit_cpp_bindings_cgal PRIVATE CGAL_DEBUG)");
-        await Assert.That(plan.NativeExports.Count).IsEqualTo(7);
-        await Assert.That(plan.NativeExports).Contains("Cgal_NativeError_Clear");
+        await Assert.That(managed.Keys).Contains("Point_2.g.cs");
+        await Assert.That(managed.Keys).Contains("Point_3.g.cs");
+        await Assert.That(managed.Keys).Contains("Segment_2.g.cs");
+        await Assert.That(managed.Keys).Contains("Kernel_API.g.cs");
+        await Assert.That(managed.Keys).Contains("Cgal.ResultProjection.g.cs");
+        await Assert.That(native.Keys).Contains("TedToolkit_CppBindings_Cgal_Point_2.cpp");
+        await Assert.That(native.Keys).Contains("TedToolkit_CppBindings_Cgal_Kernel_API.cpp");
+        await Assert.That(native.Keys).Contains("CgalProfileAdapter.hpp");
+        await Assert.That(native.Keys).Contains("CgalNativeError.cpp");
+        await Assert.That(managed["Point_2.g.cs"]).Contains("NativeApi.GetFunction");
+        await Assert.That(native["TedToolkit_CppBindings_Cgal_Point_2.cpp"])
+            .Contains("extern \"C\" double Cgal_Point2_Cartesian");
+        await Assert.That(plan.NativeExports).Contains("Cgal_Point2_Create");
         await Assert.That(plan.NativeExports).Contains("Cgal_Segment2_Intersection");
+        await Assert.That(plan.NativeExports.Count).IsEqualTo(12);
+        await Assert.That(provider.Inventory.ManagedArtifacts
+            .Select(static item => item.RelativePath).Distinct().All(managed.ContainsKey)).IsTrue();
+        await Assert.That(provider.Inventory.NativeArtifacts
+            .Select(static item => item.RelativePath).Distinct().All(native.ContainsKey)).IsTrue();
+        await Assert.That(provider.Inventory.ManagedArtifacts.Select(static item => item.DeclarationId))
+            .IsEquivalentTo(provider.Inventory.Admitted.Select(static item => item.Id));
+        await Assert.That(provider.Inventory.NativeArtifacts.Select(static item => item.DeclarationId))
+            .IsEquivalentTo(provider.Inventory.Admitted.Select(static item => item.Id));
     }
 
-    private static CgalGenerationProvider CreateProvider()
+    /// <summary>
+    /// Verifies an explicit profile document is accepted without mutating the embedded default authority.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_generate_an_explicit_finite_profile_and_snapshot_its_collections_Async()
     {
-        var root = Environment.GetEnvironmentVariable("VCPKG_ROOT");
-        if (string.IsNullOrWhiteSpace(root))
+        var defaultProfile = CgalProfileManifest.LoadDefault();
+        var explicitProfile = defaultProfile with { ProfileId = "epick-explicit-test-v1" };
+        var file = WriteProfile(explicitProfile);
+        try
         {
-            root = @"C:\vcpkg";
+            var provider = CreateProvider(file, explicitProfile.ProfileId);
+            var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+            var manifest = await RenderAsync(plan.CSharpSources.Single(
+                static item => item.RelativePath == "profile-manifest.json")).ConfigureAwait(false);
+            NotSupportedException? mutationFailure = null;
+            try
+            {
+                ((IList<string>)provider.Profile.SelectedHeaders)[0] = "mutated";
+            }
+            catch (NotSupportedException exception)
+            {
+                mutationFailure = exception;
+            }
+
+            await Assert.That(provider.Profile.ProfileId).IsEqualTo("epick-explicit-test-v1");
+            await Assert.That(manifest).Contains("epick-explicit-test-v1");
+            await Assert.That(mutationFailure).IsNotNull();
+            await Assert.That(CgalProfileManifest.LoadDefault().ProfileId).IsEqualTo("epick-windows-v1");
+        }
+        finally
+        {
+            File.Delete(file.FullName);
+        }
+    }
+
+    /// <summary>
+    /// Verifies real source evidence cannot silently admit a declaration without provider semantics.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_report_a_narrow_unsupported_declaration_Async()
+    {
+        var profile = CgalProfileManifest.LoadDefault();
+        var unsupported = new CgalProfileDeclaration()
+        {
+            Id = "unsupported-point-capability",
+            NativeSignature = "Kernel::Point_2::unsupported_capability() const",
+            Header = "CGAL/Point_2.h",
+            Kind = "method",
+            Evidence = "class Point_2 :",
+            IsRoot = true,
+            Dependencies = ["point-2",],
+        };
+        var explicitProfile = profile with
+        {
+            ProfileId = "epick-unsupported-test-v1",
+            Declarations = Array.AsReadOnly(profile.Declarations.Append(unsupported).ToArray()),
+        };
+        var file = WriteProfile(explicitProfile);
+        try
+        {
+            var provider = CreateProvider(file, explicitProfile.ProfileId);
+            var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+
+            await Assert.That(provider.Inventory.Candidates.Count).IsEqualTo(profile.Declarations.Count + 1);
+            await Assert.That(provider.Inventory.Unsupported.Count).IsEqualTo(1);
+            await Assert.That(provider.Inventory.Unsupported[0].Id).IsEqualTo(unsupported.Id);
+            await Assert.That(provider.Inventory.Unsupported[0].Proof).IsEqualTo("no-provider-semantic-projection");
+            await Assert.That(plan.NativeExports).DoesNotContain("unsupported-point-capability");
+        }
+        finally
+        {
+            File.Delete(file.FullName);
+        }
+    }
+
+    /// <summary>
+    /// Verifies a finite profile cannot omit a declaration required by another candidate.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_reject_a_missing_declaration_dependency_Async()
+    {
+        var profile = CgalProfileManifest.LoadDefault();
+        var invalid = profile with
+        {
+            ProfileId = "epick-missing-dependency-test-v1",
+            Declarations = Array.AsReadOnly(profile.Declarations.Where(static item => item.Id != "point-2").ToArray()),
+        };
+        var file = WriteProfile(invalid);
+        InvalidOperationException? failure = null;
+        try
+        {
+            _ = CreateProvider(file, invalid.ProfileId);
+        }
+        catch (InvalidOperationException exception)
+        {
+            failure = exception;
+        }
+        finally
+        {
+            File.Delete(file.FullName);
         }
 
+        await Assert.That(failure).IsNotNull();
+        await Assert.That(failure!.Message).Contains("requires missing declaration 'point-2'");
+    }
+
+    private static CgalGenerationProvider CreateProvider(FileInfo? profile = null, string? profileId = null)
+    {
+        var root = GetVcpkgRoot();
         return new(new()
         {
             VcpkgRoot = new(root),
+            ProfileManifestFile = profile,
+            ProfileId = profileId ?? CgalGenerationOptions.DefaultProfileId,
             CSharpFolder = new(Path.Combine(Path.GetTempPath(), "tedtoolkit-cgal-managed")),
             CppFolder = new(Path.Combine(Path.GetTempPath(), "tedtoolkit-cgal-native")),
             CSharpNamespace = "TedToolkit.CppBindings.Cgal",
@@ -96,20 +231,46 @@ internal sealed class CgalGenerationProviderTests
         });
     }
 
+    private static string GetVcpkgRoot()
+    {
+        return Environment.GetEnvironmentVariable("VCPKG_ROOT") is { Length: > 0, } root ? root : @"C:\vcpkg";
+    }
+
+    private static string[] EnumerateInstalledHeaders()
+    {
+        var includeRoot = Path.Combine(GetVcpkgRoot(), "installed", "x64-windows", "include");
+        return Directory.EnumerateFiles(Path.Combine(includeRoot, "CGAL"), "*", SearchOption.AllDirectories)
+            .Select(path => Path.GetRelativePath(includeRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static FileInfo WriteProfile(CgalProfileManifest profile)
+    {
+        var file = new FileInfo(Path.Combine(Path.GetTempPath(), $"tedtoolkit-cgal-{Guid.NewGuid():N}.json"));
+        File.WriteAllText(file.FullName, JsonSerializer.Serialize(profile, ProfileJsonOptions));
+        return file;
+    }
+
     private static async Task<SortedDictionary<string, string>> RenderAsync(IEnumerable<GeneratedSource> sources)
     {
         var result = new SortedDictionary<string, string>(StringComparer.Ordinal);
         foreach (var source in sources)
         {
-            var writer = new StringWriter();
-            await using (writer.ConfigureAwait(false))
-            {
-                await source.RenderAsync(writer, CancellationToken.None).ConfigureAwait(false);
-                result.Add(source.RelativePath, writer.ToString());
-            }
+            result.Add(source.RelativePath, await RenderAsync(source).ConfigureAwait(false));
         }
 
         return result;
+    }
+
+    private static async Task<string> RenderAsync(GeneratedSource source)
+    {
+        var writer = new StringWriter();
+        await using (writer.ConfigureAwait(false))
+        {
+            await source.RenderAsync(writer, CancellationToken.None).ConfigureAwait(false);
+            return writer.ToString();
+        }
     }
 
     private static string Hash(IReadOnlyDictionary<string, string> sources)

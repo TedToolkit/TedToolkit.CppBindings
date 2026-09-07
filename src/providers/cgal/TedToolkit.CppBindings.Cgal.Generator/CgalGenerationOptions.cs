@@ -30,7 +30,17 @@ public sealed record CgalGenerationOptions : GenerationOptions
     public string ProfileId { get; init; } = DefaultProfileId;
 
     /// <summary>
+    /// Gets an explicit finite profile document. When absent, the embedded default profile is used.
+    /// </summary>
+    public FileInfo? ProfileManifestFile { get; init; }
+
+    /// <summary>
     /// Gets a value indicating whether the installed public-header set must equal the locked profile inventory.
     /// </summary>
     public bool RequireLockedHeaderInventory { get; init; } = true;
+
+    /// <summary>
+    /// Gets a value indicating whether installed packages, CMake, and MSVC must match the profile identity.
+    /// </summary>
+    public bool RequireLockedToolchain { get; init; } = true;
 }

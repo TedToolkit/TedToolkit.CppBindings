@@ -20,25 +20,30 @@ public sealed record CgalGenerationInventory
     /// <summary>
     /// Gets the finite candidate declarations.
     /// </summary>
-    public required IReadOnlyList<CgalProfileDeclaration> Candidates { get; init; }
+    public required IReadOnlyList<CgalDeclarationDisposition> Candidates { get; init; }
 
     /// <summary>
     /// Gets the admitted candidate partition.
     /// </summary>
-    public required IReadOnlyList<CgalProfileDeclaration> Admitted { get; init; }
+    public required IReadOnlyList<CgalDeclarationDisposition> Admitted { get; init; }
 
     /// <summary>
     /// Gets the unsupported candidate partition.
     /// </summary>
-    public required IReadOnlyList<CgalProfileDeclaration> Unsupported { get; init; }
+    public required IReadOnlyList<CgalDeclarationDisposition> Unsupported { get; init; }
 
     /// <summary>
     /// Gets the complete managed output inventory, including Shared support.
     /// </summary>
-    public required IReadOnlyList<string> ManagedFiles { get; init; }
+    public required IReadOnlyList<CgalArtifactInventoryEntry> ManagedArtifacts { get; init; }
 
     /// <summary>
     /// Gets the complete native output inventory, including Shared support.
     /// </summary>
-    public required IReadOnlyList<string> NativeFiles { get; init; }
+    public required IReadOnlyList<CgalArtifactInventoryEntry> NativeArtifacts { get; init; }
+
+    /// <summary>
+    /// Gets the resolved native toolchain and package ABI identities.
+    /// </summary>
+    public required CgalResolvedToolchain Toolchain { get; init; }
 }
