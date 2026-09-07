@@ -15,7 +15,8 @@ over CGAL's unbounded template space.
 | --- | --- |
 | `TedToolkit.CppBindings.Cgal.Generator` | Resolve the locked vcpkg installation and emit deterministic source, candidate, admission, managed, and native inventories through Shared |
 | `TedToolkit.CppBindings.Cgal.Runtime` | Project CGAL failures and finite polymorphic native results without OCCT semantics |
-| `TedToolkit.CppBindings.Cgal.Windows` | Carry the generated `win-x64` EPICK assembly, native wrapper, imported dependencies, and notices |
+| `TedToolkit.CppBindings.Cgal.Windows` | Carry the generated `win-x64` EPICK assembly, matched native wrapper, recursively resolved dependencies, and notices |
+| `TedToolkit.CppBindings.Cgal.Generator.Tool` | Provide the repository-local executable host used to materialize a Generator plan; not a package |
 
-The Generator and Runtime projects are independently consumable. The Windows project is added by
-the final packaging delivery after both contracts are verified.
+The Generator and Runtime packages are independently consumable. The Windows package depends on
+Runtime but does not carry or execute Generator tooling on consumer machines.

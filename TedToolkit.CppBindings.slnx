@@ -18,7 +18,9 @@
   </Folder>
   <Folder Name="/src/providers/cgal/">
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj" />
+    <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator.Tool/TedToolkit.CppBindings.Cgal.Generator.Tool.csproj" />
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj" />
+    <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj" />
   </Folder>
   <Folder Name="/src/providers/occt/">
     <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj" />
