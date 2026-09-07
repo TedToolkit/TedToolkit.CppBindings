@@ -132,11 +132,12 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $boundaryResult = Join-Path $report 'provider-boundaries.json'
-& (Join-Path $repository 'Build/VerifyProviderBoundaries.ps1') -ReportPath $boundaryResult `
-    *> (Join-Path $report 'provider-boundaries.log')
+$boundaryLog = Join-Path $report 'provider-boundaries.log'
+$boundaryOutput = & (Join-Path $repository 'Build/VerifyProviderBoundaries.ps1') 2> $boundaryLog
 if ($LASTEXITCODE -ne 0) {
     throw 'Provider-boundary verification failed.'
 }
+$boundaryOutput | Set-Content -LiteralPath $boundaryResult -Encoding utf8
 
 @(
     'TedToolkit.CppBindings.Generator',
