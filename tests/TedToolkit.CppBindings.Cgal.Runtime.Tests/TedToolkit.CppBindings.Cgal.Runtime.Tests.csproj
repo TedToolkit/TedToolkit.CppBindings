@@ -24,7 +24,10 @@
     <Compile Remove="Fixtures\**\*.cs" />
   </ItemGroup>
 
-  <Target Name="BuildCgalRuntimeNativeFixture" BeforeTargets="CoreCompile" Condition="$([MSBuild]::IsOSPlatform('Windows'))">
+  <Target Name="BuildCgalRuntimeNativeFixture" BeforeTargets="CoreCompile"
+          Condition="$([MSBuild]::IsOSPlatform('Windows'))"
+          Inputs="$(MSBuildProjectDirectory)\BuildNativeFixture.ps1;$(MSBuildProjectDirectory)\..\native\cgal-runtime-fixture\CMakeLists.txt;$(MSBuildProjectDirectory)\..\native\cgal-runtime-fixture\CgalRuntimeFixture.cpp"
+          Outputs="$(TargetDir)cgal_runtime_fixture.dll">
     <Exec Command="powershell -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\BuildNativeFixture.ps1&quot; -Source &quot;$(MSBuildProjectDirectory)\..\native\cgal-runtime-fixture\CgalRuntimeFixture.cpp&quot; -Output &quot;$(TargetDir)cgal_runtime_fixture.dll&quot;" />
   </Target>
 

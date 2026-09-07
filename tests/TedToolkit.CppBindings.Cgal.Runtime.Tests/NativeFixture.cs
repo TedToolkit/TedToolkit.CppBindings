@@ -34,14 +34,24 @@ internal static unsafe class NativeFixture
     private static readonly delegate* unmanaged[Cdecl]<int> GetAlternativeTransferCountExport =
         (delegate* unmanaged[Cdecl]<int>)GetExport("CgalRuntime_GetAlternativeTransferCount");
 
-    private static readonly delegate* unmanaged[Cdecl]<int, int, NativeError*, void> CreateErrorExport =
-        (delegate* unmanaged[Cdecl]<int, int, NativeError*, void>)GetExport("CgalRuntime_CreateError");
+    private static readonly delegate* unmanaged[Cdecl]<NativeError*, void> CreateMalformedErrorExport =
+        (delegate* unmanaged[Cdecl]<NativeError*, void>)GetExport("CgalRuntime_CreateMalformedError");
+
+    private static readonly delegate* unmanaged[Cdecl]<int, NativeError*, void> InvokeFailureExport =
+        (delegate* unmanaged[Cdecl]<int, NativeError*, void>)GetExport("CgalRuntime_InvokeFailure");
 
     private static readonly delegate* unmanaged[Cdecl]<NativeError*, void> ClearErrorExport =
         (delegate* unmanaged[Cdecl]<NativeError*, void>)GetExport("CgalRuntime_ClearError");
 
-    private static readonly delegate* unmanaged[Cdecl]<int, NativeResult*, void> CreateResultExport =
-        (delegate* unmanaged[Cdecl]<int, NativeResult*, void>)GetExport("CgalRuntime_CreateResult");
+    private static readonly delegate* unmanaged[Cdecl]<int, Segment_2_Intersection_Transport*, void>
+        CreateVariantResultExport =
+            (delegate* unmanaged[Cdecl]<int, Segment_2_Intersection_Transport*, void>)GetExport(
+                "CgalRuntime_CreateVariantResult");
+
+    private static readonly delegate* unmanaged[Cdecl]<int, Segment_2_Intersection_Transport*, void>
+        CreateObjectResultExport =
+            (delegate* unmanaged[Cdecl]<int, Segment_2_Intersection_Transport*, void>)GetExport(
+                "CgalRuntime_CreateObjectResult");
 
     /// <summary>
     /// Gets the number of native diagnostic clears.
@@ -107,25 +117,47 @@ internal static unsafe class NativeFixture
     /// <summary>
     /// Creates a native diagnostic owner.
     /// </summary>
-    /// <param name="kind">The native error kind.</param>
-    /// <param name="malformedUtf8">Whether the message contains malformed UTF-8.</param>
+    /// <param name="scenario">The actual CGAL, standard, or unknown failure scenario.</param>
     /// <returns>The owning error carrier.</returns>
-    internal static NativeError CreateError(int kind, bool malformedUtf8 = false)
+    internal static NativeError InvokeFailure(int scenario)
     {
         NativeError error = default;
-        CreateErrorExport(kind, malformedUtf8 ? 1 : 0, &error);
+        InvokeFailureExport(scenario, &error);
         return error;
     }
 
     /// <summary>
-    /// Creates one native polymorphic-result scenario.
+    /// Creates a malformed diagnostic through the native owner boundary.
+    /// </summary>
+    /// <returns>The owning error carrier.</returns>
+    internal static NativeError CreateMalformedError()
+    {
+        NativeError error = default;
+        CreateMalformedErrorExport(&error);
+        return error;
+    }
+
+    /// <summary>
+    /// Creates one native optional/variant result scenario.
     /// </summary>
     /// <param name="scenario">The result scenario number.</param>
     /// <returns>The value-only ABI transport.</returns>
-    internal static NativeResult CreateResult(int scenario)
+    internal static Segment_2_Intersection_Transport CreateVariantResult(int scenario)
     {
-        NativeResult result = default;
-        CreateResultExport(scenario, &result);
+        Segment_2_Intersection_Transport result = default;
+        CreateVariantResultExport(scenario, &result);
+        return result;
+    }
+
+    /// <summary>
+    /// Creates one native CGAL Object result scenario.
+    /// </summary>
+    /// <param name="scenario">The result scenario number.</param>
+    /// <returns>The value-only ABI transport.</returns>
+    internal static Segment_2_Intersection_Transport CreateObjectResult(int scenario)
+    {
+        Segment_2_Intersection_Transport result = default;
+        CreateObjectResultExport(scenario, &result);
         return result;
     }
 

@@ -95,6 +95,26 @@ if ($LASTEXITCODE -ne 0) {
     throw "CGAL Runtime TUnit proof failed; see $testsLog"
 }
 
+$generatorTestsLog = Join-Path $report 'cgal-generator-compatibility-tests.log'
+$generatorTestResults = Join-Path $report 'cgal-generator-compatibility-test-results'
+& dotnet run --project (Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj') `
+    -c Release --disable-build-servers -- --report-trx --results-directory $generatorTestResults `
+    *> $generatorTestsLog
+if ($LASTEXITCODE -ne 0) {
+    throw "CGAL Generator result-projection compatibility proof failed; see $generatorTestsLog"
+}
+$generatorTrx = Get-ChildItem -LiteralPath $generatorTestResults -Filter '*.trx' -File | Select-Object -First 1
+if ($null -eq $generatorTrx) {
+    throw 'CGAL Generator compatibility proof did not emit a TRX result.'
+}
+[xml]$generatorTrxDocument = Get-Content -LiteralPath $generatorTrx.FullName -Raw
+$generatorCounters = $generatorTrxDocument.TestRun.ResultSummary.Counters
+if ([int]$generatorCounters.total -eq 0 -or [int]$generatorCounters.failed -ne 0 `
+    -or [int]$generatorCounters.notExecuted -ne 0) {
+    throw 'CGAL Generator compatibility proof did not pass every discovered test.'
+}
+
 $trx = Get-ChildItem -LiteralPath $testResults -Filter '*.trx' -File | Select-Object -First 1
 if ($null -eq $trx) {
     throw 'CGAL Runtime TUnit proof did not emit a TRX result.'
@@ -135,6 +155,12 @@ if ($compilerVersion -cne '19.51.36256.0') {
     TestPassed = [int]$counters.passed
     TestFailed = [int]$counters.failed
     TestSkipped = [int]$counters.notExecuted
+    FailureScenarioCount = 14
+    ResultContainerKinds = @('std::optional<std::variant>', 'CGAL::Object')
+    ResultPartitionCountPerContainer = 5
+    GeneratorCompatibilityTestsExitCode = 0
+    GeneratorTestTotal = [int]$generatorCounters.total
+    GeneratorTestPassed = [int]$generatorCounters.passed
     NativeCompiler = "MSVC $compilerVersion"
     RuntimePackageHash = (Get-FileHash -LiteralPath `
         (Join-Path $feed 'TedToolkit.CppBindings.Cgal.Runtime.1.0.0.nupkg') -Algorithm SHA256).Hash

@@ -22,34 +22,43 @@ internal sealed class NativeErrorProjectionTests
     [Test]
     public async Task Should_map_every_failure_category_and_clear_once_Async()
     {
-        var cases = new (int Kind, Type ExceptionType)[]
+        var cases = new (int Scenario, Type ExceptionType, string? NativeType, bool HasNativeStack)[]
         {
-            (1, typeof(CgalArgumentException)),
-            (2, typeof(CgalArgumentOutOfRangeException)),
-            (6, typeof(CgalOutOfMemoryException)),
-            (7, typeof(CgalArithmeticException)),
-            (9, typeof(CgalStandardException)),
-            (10, typeof(CgalErrorException)),
-            (11, typeof(CgalPreconditionException)),
-            (12, typeof(CgalPostconditionException)),
-            (13, typeof(CgalAssertionException)),
-            (14, typeof(CgalTestException)),
-            (15, typeof(CgalWarningException)),
-            (16, typeof(CgalFailureException)),
-            (255, typeof(CgalUnknownException)),
-            (42, typeof(CgalUnknownException)),
+            (1, typeof(CgalArgumentException), "std::invalid_argument", false),
+            (2, typeof(CgalArgumentOutOfRangeException), "std::out_of_range", false),
+            (3, typeof(CgalOutOfMemoryException), "std::bad_alloc", false),
+            (4, typeof(CgalArithmeticException), "std::overflow_error", false),
+            (5, typeof(CgalArithmeticException), "std::underflow_error", false),
+            (6, typeof(CgalStandardException), "std::exception", false),
+            (7, typeof(CgalUnknownException), null, false),
+            (10, typeof(CgalErrorException), "CGAL::Error_exception", true),
+            (11, typeof(CgalPreconditionException), "CGAL::Precondition_exception", true),
+            (12, typeof(CgalPostconditionException), "CGAL::Postcondition_exception", true),
+            (13, typeof(CgalAssertionException), "CGAL::Assertion_exception", true),
+            (14, typeof(CgalTestException), "CGAL::Test_exception", true),
+            (15, typeof(CgalWarningException), "CGAL::Warning_exception", true),
+            (16, typeof(CgalFailureException), "CGAL::Failure_exception", true),
         };
 
         foreach (var testCase in cases)
         {
             NativeFixture.ResetCounters();
-            var exception = Project(NativeFixture.CreateError(testCase.Kind));
+            var exception = Project(NativeFixture.InvokeFailure(testCase.Scenario));
 
             await Assert.That(exception.GetType()).IsEqualTo(testCase.ExceptionType);
             await Assert.That(exception).IsAssignableTo<CgalException>();
-            await Assert.That(exception.Message).IsEqualTo("fixture failure");
-            await Assert.That(exception.NativeTypeName).IsEqualTo("fixture::native_failure");
-            await Assert.That(exception.NativeStackTrace).IsEqualTo("fixture.cpp:42");
+            await Assert.That(exception.Message).IsNotEmpty();
+            await Assert.That(exception.NativeTypeName).IsEqualTo(testCase.NativeType);
+            if (testCase.HasNativeStack)
+            {
+                await Assert.That(exception.NativeStackTrace).IsNotNull();
+                await Assert.That(exception.NativeStackTrace!).Contains("CgalRuntimeFixture.cpp");
+            }
+            else
+            {
+                await Assert.That(exception.NativeStackTrace).IsNull();
+            }
+
             await Assert.That(NativeFixture.DiagnosticClearCount).IsEqualTo(1);
         }
     }
@@ -62,11 +71,11 @@ internal sealed class NativeErrorProjectionTests
     public async Task Should_clear_once_when_utf8_conversion_fails_Async()
     {
         NativeFixture.ResetCounters();
-        var exception = Project(NativeFixture.CreateError(11, malformedUtf8: true));
+        var exception = Project(NativeFixture.CreateMalformedError());
 
         await Assert.That(exception).IsTypeOf<CgalPreconditionException>();
         await Assert.That(exception.Message).IsEqualTo("Native CGAL operation failed with error kind 11.");
-        await Assert.That(exception.NativeTypeName).IsEqualTo("fixture::native_failure");
+        await Assert.That(exception.NativeTypeName).IsEqualTo("CGAL::Precondition_exception");
         await Assert.That(exception.NativeStackTrace).IsEqualTo("fixture.cpp:42");
         await Assert.That(NativeFixture.DiagnosticClearCount).IsEqualTo(1);
     }
