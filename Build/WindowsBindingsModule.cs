@@ -15,7 +15,7 @@ using TedToolkit.ModularPipelines.Modules;
 using TedToolkit.ModularPipelines.Options;
 
 /// <summary>
-/// Prepares the expensive generated native artifact before the shared solution-build timeout starts.
+/// Prepares every generated Windows provider before the shared solution-build timeout starts.
 /// </summary>
 /// <param name="files">The repository files.</param>
 /// <param name="options">The build configuration.</param>
@@ -32,6 +32,11 @@ public sealed class WindowsBindingsModule(
     /// <inheritdoc />
     protected override async Task<bool> ExecuteAsync(IModuleContext context, CancellationToken cancellationToken)
     {
+        if (!OperatingSystem.IsWindows())
+        {
+            return true;
+        }
+
         var root = files.Solution.Directory
             ?? throw new InvalidOperationException("The repository root could not be resolved.");
         var vcpkgRoot = Environment.GetEnvironmentVariable("VCPKG_ROOT");
@@ -41,32 +46,50 @@ public sealed class WindowsBindingsModule(
         }
 
         var configuration = options.Value.Configuration;
-        var hostDirectory = Path.Combine(root.FullName, "tests", "TedToolkit.CppBindings.Occt.Console");
         await BuildProcess.RunAsync(
                 "pwsh",
                 ["-NoProfile", "-File", Path.Combine(root.FullName, "Build", "VerifyGenerationCache.ps1"),],
                 root.FullName,
                 cancellationToken)
             .ConfigureAwait(false);
-        await BuildProcess.RunAsync(
-                "dotnet",
-                ["build", Path.Combine(hostDirectory, "TedToolkit.CppBindings.Occt.Console.csproj"), "-c", configuration,],
+
+        var windowsProjects = new[]
+        {
+            Path.Combine(
                 root.FullName,
-                cancellationToken)
-            .ConfigureAwait(false);
-        await BuildProcess.RunAsync(
-                "pwsh",
-                [
-                    "-NoProfile", "-File", Path.Combine(root.FullName, "Build", "GenerateWindowsBindings.ps1"),
-                    "-RepositoryRoot", root.FullName,
-                    "-GeneratorHost", Path.Combine(hostDirectory, "bin", configuration, "net10.0", "TedToolkit.CppBindings.Occt.Console.dll"),
-                    "-GeneratedRoot", Path.Combine(root.FullName, "output", "generated"),
-                    "-VcpkgRoot", vcpkgRoot,
-                    "-Configuration", configuration,
-                ],
+                "src", "providers", "occt", "TedToolkit.CppBindings.Occt.Windows",
+                "TedToolkit.CppBindings.Occt.Windows.csproj"),
+            Path.Combine(
                 root.FullName,
-                cancellationToken)
-            .ConfigureAwait(false);
+                "src", "providers", "cgal", "TedToolkit.CppBindings.Cgal.Windows",
+                "TedToolkit.CppBindings.Cgal.Windows.csproj"),
+            Path.Combine(
+                root.FullName,
+                "src", "providers", "manifold", "TedToolkit.CppBindings.Manifold.Windows",
+                "TedToolkit.CppBindings.Manifold.Windows.csproj"),
+            Path.Combine(
+                root.FullName,
+                "src", "providers", "fcl", "TedToolkit.CppBindings.Fcl.Windows",
+                "TedToolkit.CppBindings.Fcl.Windows.csproj"),
+        };
+        foreach (var project in windowsProjects)
+        {
+            await BuildProcess.RunAsync(
+                    "dotnet",
+                    [
+                        "build", project,
+                        "-c", configuration,
+                        "--disable-build-servers",
+                        "--maxcpucount:1",
+                        "-p:GeneratePackageOnBuild=false",
+                        "-p:NuGetAudit=false",
+                        $"-p:VcpkgRoot={vcpkgRoot}",
+                    ],
+                    root.FullName,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
+
         return true;
     }
 }

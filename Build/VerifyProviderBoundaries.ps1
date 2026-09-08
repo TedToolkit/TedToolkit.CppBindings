@@ -175,6 +175,44 @@ foreach ($scriptName in @(
         throw "Native provider generation is not constrained to one compiler worker: Build/$scriptName"
     }
 }
+
+$windowsBindingsModule = Get-Content -LiteralPath (Join-Path $repository 'Build/WindowsBindingsModule.cs') -Raw
+if ($windowsBindingsModule -notmatch 'OperatingSystem\.IsWindows\(\)') {
+    throw 'The Windows generation module does not explicitly skip non-Windows hosts.'
+}
+foreach ($projectName in @(
+        'TedToolkit.CppBindings.Occt.Windows.csproj',
+        'TedToolkit.CppBindings.Cgal.Windows.csproj',
+        'TedToolkit.CppBindings.Manifold.Windows.csproj',
+        'TedToolkit.CppBindings.Fcl.Windows.csproj')) {
+    if (-not $windowsBindingsModule.Contains($projectName, [StringComparison]::Ordinal)) {
+        throw "The Windows generation module does not build $projectName."
+    }
+}
+if ($windowsBindingsModule -notmatch '--maxcpucount:1') {
+    throw 'The Windows generation module does not constrain managed provider builds to one worker.'
+}
+
+$windowsWorkflow = Get-Content -LiteralPath (Join-Path $repository '.github/workflows/build.yml') -Raw
+foreach ($requiredWorkflowText in @(
+        'runs-on: windows-2025-vs2026',
+        'ref: 30ef65cad98f08e7197c9a1656fbd871bcb72f2d',
+        'cmake==4.4.3',
+        'opencascade:x64-windows',
+        'cgal:x64-windows',
+        'manifold:x64-windows',
+        'fcl:x64-windows',
+        'dotnet run --project Build/Build.csproj -c Release',
+        'Build/VerifyWindowsGenerationOutputs.ps1')) {
+    if (-not $windowsWorkflow.Contains($requiredWorkflowText, [StringComparison]::Ordinal)) {
+        throw "The Windows CI workflow is missing '$requiredWorkflowText'."
+    }
+}
+$outputVerifier = Join-Path $repository 'Build/VerifyWindowsGenerationOutputs.ps1'
+if (-not (Test-Path -LiteralPath $outputVerifier -PathType Leaf)) {
+    throw 'The Windows CI generation output verifier is missing.'
+}
+
 $occtPackageVerifier = Get-Content -LiteralPath (Join-Path $repository 'Build/VerifyWindowsPackage.ps1') -Raw
 if (-not $occtPackageVerifier.Contains(
         "-InputPath (Join-Path `$generated 'csharp/native-layouts.json')",
@@ -279,4 +317,5 @@ foreach ($relativePath in $expectedProjects) {
     ProviderIdentifiers = $providerIdentifiers
     NegativeCases = 5
     NativePackagingRules = $windowsPackagingRules.Count
+    WindowsCiGenerationProviders = $windowsPackagingRules.Count
 } | ConvertTo-Json
