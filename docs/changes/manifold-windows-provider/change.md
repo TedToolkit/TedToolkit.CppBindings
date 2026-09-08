@@ -3,11 +3,11 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: draft -->
+<!-- change-status: approved -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
-<!-- approval-source: none -->
+<!-- approval-source: 2026-09-08 user message "批准并继续。" -->
 <!-- candidate-binding: none -->
 
 <!-- section: goal-rationale -->
