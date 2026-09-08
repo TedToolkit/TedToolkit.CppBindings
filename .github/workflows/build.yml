@@ -55,6 +55,7 @@ jobs:
         run: |
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
           & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
             opencascade:x64-windows `

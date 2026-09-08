@@ -202,6 +202,7 @@ foreach ($requiredWorkflowText in @(
         'cgal:x64-windows',
         'manifold:x64-windows',
         'fcl:x64-windows',
+        'New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force',
         'dotnet run --project Build/Build.csproj -c Release',
         'Build/VerifyWindowsGenerationOutputs.ps1')) {
     if (-not $windowsWorkflow.Contains($requiredWorkflowText, [StringComparison]::Ordinal)) {
