@@ -5,6 +5,9 @@ using TedToolkit.CppBindings.Occt;
 #if INCLUDE_MANIFOLD
 using TedToolkit.CppBindings.Manifold;
 #endif
+#if INCLUDE_FCL
+using TedToolkit.CppBindings.Fcl;
+#endif
 
 if (args.Length != 1)
 {
@@ -44,6 +47,28 @@ string? manifoldStatus = null;
 ulong? manifoldTriangleCount = null;
 #endif
 
+#if INCLUDE_FCL
+double[] fclVertices =
+[
+    0, 0, 0,
+    1, 0, 0,
+    0, 1, 0,
+];
+nuint[] fclTriangles = [0, 1, 2];
+var fclBuild = FclBvhModel.Create(fclVertices, fclTriangles);
+using var fclModel = fclBuild.Model!;
+var fclCollision = FclContinuousCollision.Query(fclModel, fclModel, new FclVector3(1, 0, 0));
+var fclCode = fclBuild.Code.ToString();
+if (fclCode != "BVH_OK" || !fclCollision.IsCollide || fclCollision.TimeOfContact != 0)
+{
+    return 4;
+}
+#else
+string? fclCode = null;
+bool? fclIsCollide = null;
+double? fclTimeOfContact = null;
+#endif
+
 await File.WriteAllTextAsync(args[0], JsonSerializer.Serialize(new
 {
     Passed = true,
@@ -52,5 +77,13 @@ await File.WriteAllTextAsync(args[0], JsonSerializer.Serialize(new
     OcctY = occtY,
     ManifoldStatus = manifoldStatus,
     ManifoldTriangleCount = manifoldTriangleCount,
+    FclCode = fclCode,
+#if INCLUDE_FCL
+    FclIsCollide = (bool?)fclCollision.IsCollide,
+    FclTimeOfContact = (double?)fclCollision.TimeOfContact,
+#else
+    FclIsCollide = fclIsCollide,
+    FclTimeOfContact = fclTimeOfContact,
+#endif
 }));
 return 0;

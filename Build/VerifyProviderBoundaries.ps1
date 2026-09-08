@@ -18,6 +18,10 @@ $expectedProjects = @(
     'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj',
     'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj',
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj',
+    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/TedToolkit.CppBindings.Fcl.Generator.csproj',
+    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator.Tool/TedToolkit.CppBindings.Fcl.Generator.Tool.csproj',
+    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Runtime/TedToolkit.CppBindings.Fcl.Runtime.csproj',
+    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/TedToolkit.CppBindings.Fcl.Windows.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator.Tool/TedToolkit.CppBindings.Manifold.Generator.Tool.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Runtime/TedToolkit.CppBindings.Manifold.Runtime.csproj',
@@ -141,6 +145,8 @@ $windowsPackagingRules = [ordered]@{
         'ted_toolkit_cpp_bindings_cgal.dll'
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj' =
         'ted_toolkit_cpp_bindings_manifold.dll'
+    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/TedToolkit.CppBindings.Fcl.Windows.csproj' =
+        'ted_toolkit_cpp_bindings_fcl.dll'
 }
 $bindingNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($entry in $windowsPackagingRules.GetEnumerator()) {
@@ -160,7 +166,8 @@ foreach ($entry in $windowsPackagingRules.GetEnumerator()) {
 foreach ($scriptName in @(
         'GenerateWindowsBindings.ps1',
         'GenerateCgalWindowsBindings.ps1',
-        'GenerateManifoldWindowsBindings.ps1')) {
+        'GenerateManifoldWindowsBindings.ps1',
+        'GenerateFclWindowsBindings.ps1')) {
     $contents = Get-Content -LiteralPath (Join-Path $repository "Build/$scriptName") -Raw
     $parallelCounts = @([regex]::Matches($contents, '--parallel\s+(\d+)') |
         ForEach-Object { [int]$_.Groups[1].Value })

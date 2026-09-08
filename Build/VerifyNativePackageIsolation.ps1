@@ -542,10 +542,6 @@ try {
     if ($Providers -notcontains 'Occt' -or $Providers -notcontains 'Cgal') {
         throw 'The current coexistence fixture requires both Occt and Cgal.'
     }
-    if ($Providers -contains 'Fcl') {
-        throw 'The Fcl coexistence lane is available only after the approved Fcl delivery completes.'
-    }
-
     $vcpkg = if ($env:VCPKG_ROOT) { [IO.Path]::GetFullPath($env:VCPKG_ROOT) } else { 'C:\vcpkg' }
     $occtRoot = Join-Path $report 'o'
     $occtGenerated = Join-Path $repository 'output/generated'
@@ -579,10 +575,20 @@ try {
         if ($LASTEXITCODE -ne 0) { throw 'Manifold Windows package verification failed.' }
     }
 
+    $fclRoot = $null
+    if ($Providers -contains 'Fcl') {
+        Assert-NativeBuildDiskBoundary -Path $report -Phase 'FCL provider build' `
+            -ScratchRoot $report | Out-Null
+        $fclRoot = Join-Path $report 'f'
+        & (Join-Path $PSScriptRoot 'VerifyFclWindowsPackage.ps1') -ReportDirectory $fclRoot
+        if ($LASTEXITCODE -ne 0) { throw 'FCL Windows package verification failed.' }
+    }
+
     $packages = Join-Path $report 'packages'
     $null = New-Item -ItemType Directory -Path $packages
     $feeds = @((Join-Path $occtRoot 'v/feed'), (Join-Path $cgalRoot 'feed'))
     if ($manifoldRoot) { $feeds += Join-Path $manifoldRoot 'feed' }
+    if ($fclRoot) { $feeds += Join-Path $fclRoot 'feed' }
     foreach ($feed in $feeds) {
         foreach ($package in @(Get-ChildItem -LiteralPath $feed -Filter '*.nupkg' -File)) {
             $destination = Join-Path $packages $package.Name
@@ -604,6 +610,12 @@ try {
         $manifoldExtract = Join-Path $extractRoot 'manifold'
         [IO.Compression.ZipFile]::ExtractToDirectory(
             (Join-Path $packages 'TedToolkit.CppBindings.Manifold.Windows.1.0.0.nupkg'), $manifoldExtract)
+    }
+    $fclExtract = $null
+    if ($fclRoot) {
+        $fclExtract = Join-Path $extractRoot 'fcl'
+        [IO.Compression.ZipFile]::ExtractToDirectory(
+            (Join-Path $packages 'TedToolkit.CppBindings.Fcl.Windows.1.0.0.nupkg'), $fclExtract)
     }
 
     $visualStudioRoot = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'Microsoft Visual Studio'
@@ -633,6 +645,16 @@ try {
             NativeRoot = $manifoldNativeRoot
         }
     }
+    $fclClosure = @()
+    if ($fclExtract) {
+        $fclNativeRoot = Join-Path $fclExtract 'runtimes/win-x64/native'
+        $fclClosure = @(Assert-ExactPackageNativeClosure -NativeRoot $fclNativeRoot `
+            -BindingName 'ted_toolkit_cpp_bindings_fcl.dll' -Dumpbin $dumpbin)
+        $providerPackages += [pscustomobject]@{
+            Name = 'TedToolkit.CppBindings.Fcl.Windows'
+            NativeRoot = $fclNativeRoot
+        }
+    }
     $overlaps = @(Assert-CompatibleNativeAssets -Packages $providerPackages)
 
     Assert-NativeBuildDiskBoundary -Path $report -Phase 'combined consumer execution' `
@@ -649,13 +671,16 @@ try {
         --disable-build-servers --no-launch-profile "-p:RestoreSources=$packages" `
         -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json `
         "-p:RestorePackagesPath=$restoreCache" -p:NuGetAudit=false `
-        "-p:IncludeManifold=$($Providers -contains 'Manifold')" -- $consumerResultPath *> $consumerLog
+        "-p:IncludeManifold=$($Providers -contains 'Manifold')" `
+        "-p:IncludeFcl=$($Providers -contains 'Fcl')" -- $consumerResultPath *> $consumerLog
     if ($LASTEXITCODE -ne 0) { throw "The combined provider consumer failed; see $consumerLog" }
     $consumerResult = Get-Content -LiteralPath $consumerResultPath -Raw | ConvertFrom-Json
     if (-not $consumerResult.Passed -or $consumerResult.CgalSquaredDistance -ne 25 `
         -or $consumerResult.OcctX -ne 7 -or $consumerResult.OcctY -ne 11 `
         -or (($Providers -contains 'Manifold') -and ($consumerResult.ManifoldStatus -cne 'NoError' `
-            -or $consumerResult.ManifoldTriangleCount -ne 4))) {
+            -or $consumerResult.ManifoldTriangleCount -ne 4)) `
+        -or (($Providers -contains 'Fcl') -and ($consumerResult.FclCode -cne 'BVH_OK' `
+            -or -not $consumerResult.FclIsCollide -or $consumerResult.FclTimeOfContact -ne 0))) {
         throw 'The combined provider consumer did not observe every selected native call.'
     }
 
@@ -669,6 +694,7 @@ try {
         OcctClosure = $occtClosure
         CgalClosure = $cgalClosure
         ManifoldClosure = $manifoldClosure
+        FclClosure = $fclClosure
         IdenticalOverlaps = $overlaps
         Consumer = $consumerResult
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $report 'result.json') -Encoding utf8
@@ -691,7 +717,7 @@ catch {
     throw
 }
 finally {
-    foreach ($child in @('o', 'c', 'm', 'x', 'u', 'r')) {
+    foreach ($child in @('o', 'c', 'm', 'f', 'x', 'u', 'r')) {
         Remove-OwnedDirectory -Target (Join-Path $report $child) -OwnedRoot $report
     }
     $env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT = $previousScratchRoot

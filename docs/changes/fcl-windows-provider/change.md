@@ -3,7 +3,7 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: approved -->
+<!-- change-status: in-progress -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
@@ -45,7 +45,7 @@ or native-module interference.
 | --- | --- | --- | --- | --- |
 | OB-01 | FCL binding generation | No FCL provider or finite generation profile exists | The locked `fcl-0.7.0-obbrss-double-windows-v1` profile emits one matched managed/native artifact set and complete deterministic inventories | Shared remains provider-neutral and the supported surface is finite |
 | OB-02 | Triangle-mesh BVH construction | KitchenSink uses heap wrappers, temporary native vectors, and discards FCL build statuses | A provider-local bulk factory validates lengths and indices, copies inputs, returns the exact native BVH code for operations FCL executes, and yields an owned model only on BVH_OK | Native `size_t` triangle indices, call-scoped borrowing, and same-module destruction are preserved |
-| OB-03 | Continuous collision | KitchenSink sets request fields ignored by the selected OBBRSS path and exposes only time | A narrow parameterless-profile query fixes the first model, linearly translates the second, uses FCL conservative advancement, and returns the raw native collision flag and time | Ignored controls are not exposed as effective inputs and endpoint ambiguity is documented |
+| OB-03 | Continuous collision | KitchenSink sets request fields ignored by the selected OBBRSS path and exposes only time | A narrow parameterless-profile query fixes the first model, linearly translates the second, uses FCL conservative advancement, confirms its FCL 0.7 pure-translation false negatives with FCL's exact translation solver, and returns collision plus time | Ignored controls are not exposed as effective inputs and endpoint ambiguity is documented |
 | OB-04 | Four-provider package set | No FCL package participates in provider isolation verification | Separate OCCT, CGAL, Manifold, and FCL Windows packages restore and execute together after deterministic collision validation | No provider package depends on another provider or supplies cross-provider conversions |
 
 <!-- acceptance-case: AC-01 -->
@@ -79,8 +79,8 @@ Scenario: Dispose a model owner
 ```gherkin
 Scenario: Query linear triangle-mesh continuous collision
   Given two built models and a three-double movement vector
-  When the first model remains fixed and the second is linearly translated using FCL conservative advancement
-  Then initial overlap reports true with time zero, an impact before the endpoint reports true with time in [0,1), and both exact endpoint contact and no impact report false with time one as the selected native algorithm defines
+  When the first model remains fixed and the second is linearly translated using FCL conservative advancement with exact FCL translation confirmation for a reported miss
+  Then initial overlap reports true with time zero, an impact before the endpoint reports true with time in [0,1), and both exact endpoint contact and no impact report false with time one as the provider profile defines
 ```
 
 <!-- acceptance-case: AC-04 -->
@@ -124,11 +124,13 @@ Scenario: Use OCCT, CGAL, Manifold, and FCL together
   reach FCL and return BVH_ERR_BUILD_EMPTY_MODEL. Other native BVH codes remain exact status data.
 - `FclContinuousCollision.Query` accepts two borrowed same-provider owners and an `FclVector3`
   translation and returns `FclContinuousCollisionResult` with `bool IsCollide` and
-  `double TimeOfContact`. It preserves `CCDM_LINEAR`, `CCDC_CONSERVATIVE_ADVANCEMENT`, and the
-  profile's default GJK solver. The selected OBBRSS dispatch ignores request iteration/tolerance
-  fields, so this profile exposes neither as an effective input. It preserves FCL's `toc < 1`
-  collision rule: endpoint contact and a miss both return `false, 1`. Contact transforms remain
-  outside this profile.
+  `double TimeOfContact`. Its primary query preserves `CCDM_LINEAR`,
+  `CCDC_CONSERVATIVE_ADVANCEMENT`, and the profile's default GJK solver. FCL 0.7 can normalize a
+  zero separation vector and lose a pure-translation OBBRSS mesh hit, so a reported miss is
+  confirmed by FCL's `CCDM_TRANS` polynomial solver; only a confirmed contact with `toc < 1` is
+  promoted. The selected OBBRSS conservative-advancement dispatch ignores request
+  iteration/tolerance fields, so this profile exposes neither as an effective input. Endpoint
+  contact and a miss both return `false, 1`. Contact transforms remain outside this profile.
 - Native C++ failures map through the provider error carrier to public `FclArgumentException`,
   `FclArgumentOutOfRangeException`, `FclOutOfMemoryException`, `FclException`, and
   `FclUnknownException`, then the same module clears copied diagnostics. Managed span validation is

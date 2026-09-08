@@ -22,6 +22,12 @@
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj" />
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj" />
   </Folder>
+  <Folder Name="/src/providers/fcl/">
+    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/TedToolkit.CppBindings.Fcl.Generator.csproj" />
+    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator.Tool/TedToolkit.CppBindings.Fcl.Generator.Tool.csproj" />
+    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Runtime/TedToolkit.CppBindings.Fcl.Runtime.csproj" />
+    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/TedToolkit.CppBindings.Fcl.Windows.csproj" />
+  </Folder>
   <Folder Name="/src/providers/manifold/">
     <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj" />
     <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator.Tool/TedToolkit.CppBindings.Manifold.Generator.Tool.csproj" />
@@ -40,6 +46,8 @@
   <Folder Name="/tests/">
     <Project Path="tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/TedToolkit.CppBindings.Cgal.Runtime.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Fcl.Generator.Tests/TedToolkit.CppBindings.Fcl.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Fcl.Runtime.Tests/TedToolkit.CppBindings.Fcl.Runtime.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Generator.Tests/TedToolkit.CppBindings.Generator.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Manifold.Generator.Tests/TedToolkit.CppBindings.Manifold.Generator.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Manifold.Runtime.Tests/TedToolkit.CppBindings.Manifold.Runtime.Tests.csproj" />

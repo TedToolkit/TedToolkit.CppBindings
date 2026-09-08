@@ -1,0 +1,9 @@
+# FCL provider
+
+The FCL provider is an independent finite binding family for FCL 0.7.0 on Windows x64. It exposes
+double-precision `BVHModel<OBBRSS<double>>` construction and linear continuous collision without
+referencing or converting OCCT, CGAL, or Manifold types.
+
+- `TedToolkit.CppBindings.Fcl.Generator` owns the locked profile and deterministic inventories.
+- `TedToolkit.CppBindings.Fcl.Runtime` owns native diagnostic projection.
+- `TedToolkit.CppBindings.Fcl.Windows` packages the matched managed/native binding and exact DLL closure.

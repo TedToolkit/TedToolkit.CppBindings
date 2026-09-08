@@ -1,0 +1,20 @@
+{
+  "profileId": "fcl-0.7.0-obbrss-double-windows-v1",
+  "fcl": "0.7.0#5",
+  "ccd": "2.1#4",
+  "eigen": "5.0.1",
+  "octomap": "1.10.0",
+  "triplet": "x64-windows",
+  "nativeLibraryBaseName": "ted_toolkit_cpp_bindings_fcl",
+  "bvhReturnCodes": {
+    "BVH_OK": 0,
+    "BVH_ERR_MODEL_OUT_OF_MEMORY": -1,
+    "BVH_ERR_BUILD_OUT_OF_SEQUENCE": -2,
+    "BVH_ERR_BUILD_EMPTY_MODEL": -3,
+    "BVH_ERR_BUILD_EMPTY_PREVIOUS_FRAME": -4,
+    "BVH_ERR_UNSUPPORTED_FUNCTION": -5,
+    "BVH_ERR_UNUPDATED_MODEL": -6,
+    "BVH_ERR_INCORRECT_DATA": -7,
+    "BVH_ERR_UNKNOWN": -8
+  }
+}

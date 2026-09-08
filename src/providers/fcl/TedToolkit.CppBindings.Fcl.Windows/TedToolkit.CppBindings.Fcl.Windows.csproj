@@ -1,0 +1,40 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+  <PropertyGroup>
+    <AssemblyName>TedToolkit.CppBindings.Fcl.Windows</AssemblyName>
+    <RootNamespace>TedToolkit.CppBindings.Fcl</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Title>TedToolkit FCL Windows bindings</Title>
+    <Description>Generated finite-profile FCL bindings for the locked Windows x64 native artifact.</Description>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\..\output\providers\fcl</GeneratedRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.CppBindings.Fcl.Runtime\TedToolkit.CppBindings.Fcl.Runtime.csproj" />
+    <ProjectReference Include="..\TedToolkit.CppBindings.Fcl.Generator.Tool\TedToolkit.CppBindings.Fcl.Generator.Tool.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true"
+                      OutputItemType="FclGeneratorHost" />
+    <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_cpp_bindings_fcl.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\third-party-notices\*.txt"
+          Pack="true" PackagePath="third-party-notices" />
+  </ItemGroup>
+  <Target Name="GenerateFclWindowsBindings" BeforeTargets="CoreCompile">
+    <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Fcl.Windows." />
+    <Error Condition="'@(FclGeneratorHost)' == ''" Text="The FCL generator host output was not resolved." />
+    <Exec Command="pwsh -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\..\..\Build\GenerateFclWindowsBindings.ps1&quot; -RepositoryRoot &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; -GeneratorHost &quot;@(FclGeneratorHost)&quot; -GeneratedRoot &quot;$(GeneratedRoot)&quot; -VcpkgRoot &quot;$(VcpkgRoot)&quot; -Configuration &quot;$(Configuration)&quot;" />
+  </Target>
+  <Target Name="IncludeGeneratedFclWindowsBindings" BeforeTargets="CoreCompile" DependsOnTargets="GenerateFclWindowsBindings">
+    <ItemGroup>
+      <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
+    </ItemGroup>
+  </Target>
+</Project>
