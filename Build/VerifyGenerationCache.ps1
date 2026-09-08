@@ -49,7 +49,8 @@ function cmake {
     }
 
     New-Item -ItemType Directory -Path (Join-Path $generatedRoot 'native-build\Release') -Force | Out-Null
-    Set-Content -LiteralPath (Join-Path $generatedRoot 'native-build\Release\ted_toolkit_occt.dll') -Value 'fixture'
+    Copy-Item -LiteralPath (Join-Path ([Environment]::SystemDirectory) 'version.dll') `
+        -Destination (Join-Path $generatedRoot 'native-build\Release\ted_toolkit_occt.dll') -Force
     $global:LASTEXITCODE = 0
 }
 
@@ -72,6 +73,10 @@ function Invoke-Coordinator {
 
 try {
     $env:COMSPEC = 'Invoke-TestCompilerEnvironment'
+    $vcpkgBin = Join-Path $testRoot 'installed\x64-windows\bin'
+    New-Item -ItemType Directory -Path $vcpkgBin -Force | Out-Null
+    Copy-Item -LiteralPath (Join-Path ([Environment]::SystemDirectory) 'msvcrt.dll') `
+        -Destination (Join-Path $vcpkgBin 'msvcrt.dll')
     $sourceRoot = Join-Path $testRoot 'src\shared\TedToolkit.CppBindings.Generator'
     New-Item -ItemType Directory -Path $sourceRoot -Force | Out-Null
     $source = Join-Path $sourceRoot 'Input.cs'
