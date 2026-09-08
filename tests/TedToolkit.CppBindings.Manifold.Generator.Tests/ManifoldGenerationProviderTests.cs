@@ -48,6 +48,7 @@ internal sealed class ManifoldGenerationProviderTests
         await Assert.That(managed).Contains("public enum ManifoldOp : sbyte");
         await Assert.That(managed).Contains("public static global::TedToolkit.CppBindings.Owned<Manifold> Create");
         await Assert.That(managed).Contains("ReadOnlySpan<double> vertexCoordinates");
+        await Assert.That(managed).Contains("GC.SuppressFinalize(result);");
         await Assert.That(native).Contains("static_assert(sizeof(ManifoldAdapter) == 8");
         await Assert.That(native).Contains("Manifold::Error::Cancelled) == 14");
         await Assert.That(native).Contains("NativeApi_GetFunctionTable");

@@ -42,6 +42,7 @@
     <Project Path="tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/TedToolkit.CppBindings.Cgal.Runtime.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Generator.Tests/TedToolkit.CppBindings.Generator.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Manifold.Generator.Tests/TedToolkit.CppBindings.Manifold.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Manifold.Runtime.Tests/TedToolkit.CppBindings.Manifold.Runtime.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Runtime.FirstWrapper/TedToolkit.CppBindings.Runtime.FirstWrapper.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Runtime.NativeIntegration/TedToolkit.CppBindings.Runtime.NativeIntegration.csproj" />

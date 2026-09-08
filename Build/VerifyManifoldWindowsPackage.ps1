@@ -22,9 +22,15 @@ $vcpkg = if ($env:VCPKG_ROOT) { [IO.Path]::GetFullPath($env:VCPKG_ROOT) } else {
 $generated = Join-Path $report 'generated'
 $windowsProject = Join-Path $repository `
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj'
+$runtimeTestProject = Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Manifold.Runtime.Tests/TedToolkit.CppBindings.Manifold.Runtime.Tests.csproj'
 
 Assert-NativeBuildDiskBoundary -Path $report -Phase 'Manifold package verification' `
     -ScratchRoot $scratchRoot | Out-Null
+$runtimeTestLog = Join-Path $report 'runtime-tests.log'
+& dotnet run --project $runtimeTestProject -c Release --disable-build-servers `
+    -p:NuGetAudit=false -- --report-trx *> $runtimeTestLog
+if ($LASTEXITCODE -ne 0) { throw "Manifold Runtime tests failed; see $runtimeTestLog" }
 $buildLog = Join-Path $report 'windows-build.log'
 & dotnet build $windowsProject -c Release --disable-build-servers --maxcpucount:1 `
     -p:GeneratePackageOnBuild=false -p:NuGetAudit=false "-p:VcpkgRoot=$vcpkg" `
@@ -172,10 +178,15 @@ if ($result.Status -cne 'NoError' -or $result.TriangleCount -ne 4 `
     -or $result.UnionStatus -cne 'NoError' -or $result.UnionTriangleCount -ne 14 `
     -or $result.IntersectionStatus -cne 'NoError' -or $result.IntersectionTriangleCount -ne 4 `
     -or $result.DifferenceStatus -cne 'NoError' -or $result.DifferenceTriangleCount -ne 8 `
-    -or $result.FoldedTriangleCount -ne 28 -or $result.EmptyFoldTriangleCount -ne 4 `
+    -or $result.UnionFoldTriangleCount -ne 4 -or $result.DifferenceFoldTriangleCount -ne 4 `
+    -or -not $result.UnionFoldOraclePassed -or -not $result.DifferenceFoldOraclePassed `
+    -or -not $result.EmptyUnionFoldPreserved -or -not $result.EmptyDifferenceFoldPreserved `
     -or $result.MeshVertexCoordinateCount -ne 12 -or $result.MeshTriangleIndexCount -ne 12 `
     -or $result.NonFiniteStatus -cne 'NonFiniteVertex' `
     -or $result.OutOfRangeStatus -cne 'VertexOutOfBounds' `
+    -or $result.NonManifoldStatus -cne 'NotManifold' `
+    -or -not $result.InvalidVertexLengthRejected -or -not $result.InvalidIndexLengthRejected `
+    -or -not $result.ConcurrentDisposeRejectedLaterUse `
     -or $result.InitialContact -ne 0 -or -not $result.EndpointMissIsNaN `
     -or [math]::Abs($result.DetectedContact - (2.0 / 3.0)) -gt (1e-6 / 1.5) `
     -or -not $result.TetraOraclePassed -or -not $result.BoxUnionOraclePassed `

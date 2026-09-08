@@ -23,15 +23,21 @@ ulong[] tetraTriangles =
     0, 3, 2,
     1, 2, 3,
 ];
+const string tetraOracle =
+    "0,0,0;0,0,1;0,1,0|0,0,0;0,1,0;1,0,0|0,0,0;1,0,0;0,0,1|0,0,1;1,0,0;0,1,0";
 
 using var tetrahedron = Manifold.Create(tetraVertices, tetraTriangles);
 using var translated = tetrahedron.Translate(0.125, 0.0, 0.0);
 using var union = tetrahedron.Boolean(translated, ManifoldOp.Add);
 using var intersection = tetrahedron.Boolean(translated, ManifoldOp.Intersect);
 using var difference = tetrahedron.Boolean(translated, ManifoldOp.Subtract);
-using var translatedAgain = tetrahedron.Translate(0.0, 0.125, 0.0);
-using var foldedOnce = tetrahedron.Boolean(translated, ManifoldOp.Add);
-using var foldedTwice = foldedOnce.Boolean(translatedAgain, ManifoldOp.Add);
+using var disjoint = tetrahedron.Translate(4.0, 0.0, 0.0);
+using var unionFold = Fold(tetrahedron, [tetrahedron, tetrahedron], ManifoldOp.Add);
+using var differenceFold = Fold(tetrahedron, [disjoint, disjoint], ManifoldOp.Subtract);
+var emptyUnionFoldPreserved = ReferenceEquals(
+    tetrahedron, Fold(tetrahedron, Array.Empty<Owned<Manifold>>(), ManifoldOp.Add));
+var emptyDifferenceFoldPreserved = ReferenceEquals(
+    tetrahedron, Fold(tetrahedron, Array.Empty<Owned<Manifold>>(), ManifoldOp.Subtract));
 var mesh = translated.GetMesh();
 using var firstBox = CreateBox(0, 0, 0, 1, 1, 1);
 using var secondBox = CreateBox(0.5, 0, 0, 1.5, 1, 1);
@@ -45,6 +51,18 @@ using var nonFinite = Manifold.Create(nonFiniteVertices, tetraTriangles);
 var outOfRangeTriangles = (ulong[])tetraTriangles.Clone();
 outOfRangeTriangles[0] = 99;
 using var outOfRange = Manifold.Create(tetraVertices, outOfRangeTriangles);
+using var nonManifold = Manifold.Create(tetraVertices, tetraTriangles.AsSpan(0, 9));
+var invalidVertexLengthRejected = RejectsArgument(() =>
+{
+    using var unused = Manifold.Create(tetraVertices.AsSpan(0, 11), tetraTriangles);
+});
+var invalidIndexLengthRejected = RejectsArgument(() =>
+{
+    using var unused = Manifold.Create(tetraVertices, tetraTriangles.AsSpan(0, 11));
+});
+var concurrentlyDisposed = Manifold.Create(tetraVertices, tetraTriangles);
+Parallel.For(0, 32, _ => concurrentlyDisposed.Dispose());
+var laterUseRejected = RejectsDisposed(() => concurrentlyDisposed.Status());
 using var moving = tetrahedron.Translate(2.0, 0.0, 0.0);
 var initialContact = ContinuousCollision(tetrahedron, tetrahedron, -1.0, 0.0, 0.0, 1e-6);
 var endpointMiss = ContinuousCollision(tetrahedron, moving, 1.0, 0.0, 0.0, 1e-6);
@@ -61,19 +79,27 @@ var result = new
     IntersectionTriangleCount = (ulong)intersection.NumTri(),
     DifferenceStatus = difference.Status().ToString(),
     DifferenceTriangleCount = (ulong)difference.NumTri(),
-    FoldedTriangleCount = (ulong)foldedTwice.NumTri(),
-    EmptyFoldTriangleCount = (ulong)tetrahedron.NumTri(),
+    UnionFoldTriangleCount = (ulong)unionFold.NumTri(),
+    DifferenceFoldTriangleCount = (ulong)differenceFold.NumTri(),
+    UnionFoldOraclePassed = MatchesCanonicalTriangles(unionFold.GetMesh(), tetraOracle),
+    DifferenceFoldOraclePassed = MatchesCanonicalTriangles(differenceFold.GetMesh(), tetraOracle),
+    EmptyUnionFoldPreserved = emptyUnionFoldPreserved,
+    EmptyDifferenceFoldPreserved = emptyDifferenceFoldPreserved,
     MeshVertexCoordinateCount = mesh.VertexCoordinates.Length,
     MeshTriangleIndexCount = mesh.TriangleIndices.Length,
     MeshMinX = mesh.VertexCoordinates.Where((_, index) => index % 3 == 0).Min(),
     NonFiniteStatus = nonFinite.Status().ToString(),
     OutOfRangeStatus = outOfRange.Status().ToString(),
+    NonManifoldStatus = nonManifold.Status().ToString(),
+    InvalidVertexLengthRejected = invalidVertexLengthRejected,
+    InvalidIndexLengthRejected = invalidIndexLengthRejected,
+    ConcurrentDisposeRejectedLaterUse = laterUseRejected,
     InitialContact = initialContact,
     EndpointMissIsNaN = double.IsNaN(endpointMiss),
     DetectedContact = detectedContact,
     TetraOraclePassed = MatchesCanonicalTriangles(
         tetrahedron.GetMesh(),
-        "0,0,0;0,0,1;0,1,0|0,0,0;0,1,0;1,0,0|0,0,0;1,0,0;0,0,1|0,0,1;1,0,0;0,1,0"),
+        tetraOracle),
     BoxUnionOraclePassed = MatchesCanonicalTriangles(
         boxUnion.GetMesh(),
         "0,0,0;0,0,1;0,1,1|0,0,0;0,1,0;0.5,0.5,0|0,0,0;0,1,1;0,1,0|0,0,0;0.5,0,0;0.5,0,1|0,0,0;0.5,0,1;0,0,1|0,0,0;0.5,0.5,0;0.5,0,0|0,0,1;0.5,0,1;0.5,0.5,1|0,0,1;0.5,0.5,1;0,1,1|0,1,0;0,1,1;0.5,1,0|0,1,0;0.5,1,0;0.5,0.5,0|0,1,1;0.5,0.5,1;0.5,1,1|0,1,1;0.5,1,1;0.5,1,0|0.5,0,0;0.5,0.5,0;1,0.5,0|0.5,0,0;1,0.5,0;1.5,0,0|0.5,0,0;1.5,0,0;1.5,0,1|0.5,0,0;1.5,0,1;0.5,0,1|0.5,0,1;1,0.5,1;0.5,0.5,1|0.5,0,1;1.5,0,1;1,0.5,1|0.5,0.5,0;0.5,1,0;1,0.5,0|0.5,0.5,1;1,0.5,1;0.5,1,1|0.5,1,0;0.5,1,1;1.5,1,1|0.5,1,0;1.5,1,0;1,0.5,0|0.5,1,0;1.5,1,1;1.5,1,0|0.5,1,1;1,0.5,1;1.5,1,1|1,0.5,0;1.5,1,0;1.5,0,0|1,0.5,1;1.5,0,1;1.5,1,1|1.5,0,0;1.5,1,0;1.5,1,1|1.5,0,0;1.5,1,1;1.5,0,1"),
@@ -86,6 +112,64 @@ var result = new
 };
 await File.WriteAllTextAsync(args[0], JsonSerializer.Serialize(result)).ConfigureAwait(false);
 return 0;
+
+static Owned<Manifold> Fold(
+    Owned<Manifold> seed,
+    IReadOnlyList<Owned<Manifold>> others,
+    ManifoldOp operation)
+{
+    if (others.Count == 0)
+    {
+        return seed;
+    }
+
+    var current = seed;
+    Owned<Manifold>? ownedCurrent = null;
+    try
+    {
+        foreach (var other in others)
+        {
+            var next = current.Boolean(other, operation);
+            ownedCurrent?.Dispose();
+            ownedCurrent = next;
+            current = next;
+        }
+
+        var result = ownedCurrent!;
+        ownedCurrent = null;
+        return result;
+    }
+    finally
+    {
+        ownedCurrent?.Dispose();
+    }
+}
+
+static bool RejectsArgument(Action action)
+{
+    try
+    {
+        action();
+        return false;
+    }
+    catch (ArgumentException)
+    {
+        return true;
+    }
+}
+
+static bool RejectsDisposed(Action action)
+{
+    try
+    {
+        action();
+        return false;
+    }
+    catch (ObjectDisposedException)
+    {
+        return true;
+    }
+}
 
 static Owned<Manifold> CreateBox(
     double minimumX,

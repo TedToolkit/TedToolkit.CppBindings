@@ -8,7 +8,8 @@ the shared generation platform.
 > [!WARNING]
 > The project is under active development. The complete Windows binding package can be built and
 > verified locally, but they are not yet published to a remote package feed. Current ready-to-use
-> artifacts target `win-x64` and `net8.0`: OCCT 8.0.1 and the finite CGAL 6.2 EPICK profile.
+> artifacts target `win-x64` and `net8.0`: OCCT 8.0.1, the finite CGAL 6.2 EPICK profile,
+> and the finite Manifold 3.5.2 profile.
 
 ## What this repository provides
 
@@ -96,12 +97,12 @@ convenience policy in generated bindings.
 | Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v1`; Manifold 3.5.2 `manifold-3.5.2-windows-v1` |
 | Binding target framework | `net8.0` |
 | Generator and development host | .NET 10 |
-| Native toolchain | Visual C++, C++17, CMake 3.28 or later |
+| Native toolchain | Visual C++; C++17 for OCCT/CGAL and C++20 for Manifold; CMake 3.28 or later |
 
 The repository root does not contain a `vcpkg.json` manifest. OCCT generation uses the installation
-under `VCPKG_ROOT`; the CGAL Generator package embeds its locked profile manifest and registry
-configuration. A new platform, architecture, compiler ABI, or header scope requires fresh compiler
-and native-behavior proof.
+under `VCPKG_ROOT`; the CGAL and Manifold Generator packages embed their locked profile manifests
+and registry configurations. A new platform, architecture, compiler ABI, or header scope requires
+fresh compiler and native-behavior proof.
 
 ## Build and generate locally
 
