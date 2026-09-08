@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: completed -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
 <!-- approval-source: 2026-09-08 user message "批准并继续。" -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:819a8188a416f258427b8e04fb94a9648e163076 -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
