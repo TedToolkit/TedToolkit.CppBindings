@@ -18,6 +18,10 @@ $expectedProjects = @(
     'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj',
     'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj',
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj',
+    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj',
+    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator.Tool/TedToolkit.CppBindings.Manifold.Generator.Tool.csproj',
+    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Runtime/TedToolkit.CppBindings.Manifold.Runtime.csproj',
+    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj',
@@ -135,6 +139,8 @@ $windowsPackagingRules = [ordered]@{
         'ted_toolkit_occt.dll'
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj' =
         'ted_toolkit_cpp_bindings_cgal.dll'
+    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj' =
+        'ted_toolkit_cpp_bindings_manifold.dll'
 }
 $bindingNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($entry in $windowsPackagingRules.GetEnumerator()) {
@@ -151,7 +157,10 @@ foreach ($entry in $windowsPackagingRules.GetEnumerator()) {
     }
 }
 
-foreach ($scriptName in @('GenerateWindowsBindings.ps1', 'GenerateCgalWindowsBindings.ps1')) {
+foreach ($scriptName in @(
+        'GenerateWindowsBindings.ps1',
+        'GenerateCgalWindowsBindings.ps1',
+        'GenerateManifoldWindowsBindings.ps1')) {
     $contents = Get-Content -LiteralPath (Join-Path $repository "Build/$scriptName") -Raw
     $parallelCounts = @([regex]::Matches($contents, '--parallel\s+(\d+)') |
         ForEach-Object { [int]$_.Groups[1].Value })
@@ -191,7 +200,7 @@ foreach ($legacyRoot in @('src/core', 'src/providers/common')) {
 $sharedProjectFiles = @(Get-ChildItem -LiteralPath $sharedRoot -Recurse -Filter '*.csproj' -File)
 foreach ($project in $sharedProjectFiles) {
     $contents = Get-Content -LiteralPath $project.FullName -Raw
-    if ($contents -match '(?i)providers[\\/]|CppBindings\.(Occt|Cgal)') {
+    if ($contents -match '(?i)providers[\\/]|CppBindings\.(Occt|Cgal|Manifold|Fcl)') {
         throw "Shared project has a provider dependency: $($project.FullName)"
     }
 }

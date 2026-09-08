@@ -1,6 +1,7 @@
 #Requires -Version 7.5
 param(
     [string] $ReportDirectory,
+    [string[]] $Providers = @('Occt', 'Cgal'),
     [switch] $ExerciseCollisionGuard,
     [switch] $ExerciseDiskGuard,
     [switch] $ExerciseCacheInvalidation
@@ -8,6 +9,12 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
+$Providers = @($Providers | ForEach-Object { $_.Split(',', [StringSplitOptions]::RemoveEmptyEntries) } |
+    ForEach-Object { $_.Trim() })
+$unsupportedProviders = @($Providers | Where-Object { $_ -notin @('Occt', 'Cgal', 'Manifold', 'Fcl') })
+if ($unsupportedProviders.Count -ne 0) {
+    throw "Unsupported provider selection: $($unsupportedProviders -join ', ')."
+}
 Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VerifyNativePackageClosure.psm1') -Force
 
@@ -532,9 +539,16 @@ $previousScratchRoot = $env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT
 $env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT = $report
 $success = $false
 try {
+    if ($Providers -notcontains 'Occt' -or $Providers -notcontains 'Cgal') {
+        throw 'The current coexistence fixture requires both Occt and Cgal.'
+    }
+    if ($Providers -contains 'Fcl') {
+        throw 'The Fcl coexistence lane is available only after the approved Fcl delivery completes.'
+    }
+
     $vcpkg = if ($env:VCPKG_ROOT) { [IO.Path]::GetFullPath($env:VCPKG_ROOT) } else { 'C:\vcpkg' }
     $occtRoot = Join-Path $report 'o'
-    $occtGenerated = Join-Path $occtRoot 'g'
+    $occtGenerated = Join-Path $repository 'output/generated'
     if ($occtGenerated.Length -gt 85) {
         throw "ReportDirectory is too long for the OCCT compiler path budget: '$report'."
     }
@@ -556,9 +570,20 @@ try {
     & (Join-Path $PSScriptRoot 'VerifyCgalWindowsPackage.ps1') -ReportDirectory $cgalRoot
     if ($LASTEXITCODE -ne 0) { throw 'CGAL Windows package verification failed.' }
 
+    $manifoldRoot = $null
+    if ($Providers -contains 'Manifold') {
+        Assert-NativeBuildDiskBoundary -Path $report -Phase 'Manifold provider build' `
+            -ScratchRoot $report | Out-Null
+        $manifoldRoot = Join-Path $report 'm'
+        & (Join-Path $PSScriptRoot 'VerifyManifoldWindowsPackage.ps1') -ReportDirectory $manifoldRoot
+        if ($LASTEXITCODE -ne 0) { throw 'Manifold Windows package verification failed.' }
+    }
+
     $packages = Join-Path $report 'packages'
     $null = New-Item -ItemType Directory -Path $packages
-    foreach ($feed in @((Join-Path $occtRoot 'v/feed'), (Join-Path $cgalRoot 'feed'))) {
+    $feeds = @((Join-Path $occtRoot 'v/feed'), (Join-Path $cgalRoot 'feed'))
+    if ($manifoldRoot) { $feeds += Join-Path $manifoldRoot 'feed' }
+    foreach ($feed in $feeds) {
         foreach ($package in @(Get-ChildItem -LiteralPath $feed -Filter '*.nupkg' -File)) {
             $destination = Join-Path $packages $package.Name
             if (-not (Test-Path -LiteralPath $destination)) {
@@ -574,6 +599,12 @@ try {
         (Join-Path $packages 'TedToolkit.CppBindings.Occt.Windows.1.0.0.nupkg'), $occtExtract)
     [IO.Compression.ZipFile]::ExtractToDirectory(
         (Join-Path $packages 'TedToolkit.CppBindings.Cgal.Windows.1.0.0.nupkg'), $cgalExtract)
+    $manifoldExtract = $null
+    if ($manifoldRoot) {
+        $manifoldExtract = Join-Path $extractRoot 'manifold'
+        [IO.Compression.ZipFile]::ExtractToDirectory(
+            (Join-Path $packages 'TedToolkit.CppBindings.Manifold.Windows.1.0.0.nupkg'), $manifoldExtract)
+    }
 
     $visualStudioRoot = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'Microsoft Visual Studio'
     $dumpbin = Get-ChildItem -LiteralPath $visualStudioRoot -Filter 'dumpbin.exe' -File -Recurse `
@@ -589,9 +620,20 @@ try {
         -BindingName 'ted_toolkit_occt.dll' -Dumpbin $dumpbin)
     $cgalClosure = @(Assert-ExactPackageNativeClosure -NativeRoot $cgalNativeRoot `
         -BindingName 'ted_toolkit_cpp_bindings_cgal.dll' -Dumpbin $dumpbin)
-    $overlaps = @(Assert-CompatibleNativeAssets -Packages @(
+    $providerPackages = @(
         [pscustomobject]@{ Name = 'TedToolkit.CppBindings.Occt.Windows'; NativeRoot = $occtNativeRoot },
-        [pscustomobject]@{ Name = 'TedToolkit.CppBindings.Cgal.Windows'; NativeRoot = $cgalNativeRoot }))
+        [pscustomobject]@{ Name = 'TedToolkit.CppBindings.Cgal.Windows'; NativeRoot = $cgalNativeRoot })
+    $manifoldClosure = @()
+    if ($manifoldExtract) {
+        $manifoldNativeRoot = Join-Path $manifoldExtract 'runtimes/win-x64/native'
+        $manifoldClosure = @(Assert-ExactPackageNativeClosure -NativeRoot $manifoldNativeRoot `
+            -BindingName 'ted_toolkit_cpp_bindings_manifold.dll' -Dumpbin $dumpbin)
+        $providerPackages += [pscustomobject]@{
+            Name = 'TedToolkit.CppBindings.Manifold.Windows'
+            NativeRoot = $manifoldNativeRoot
+        }
+    }
+    $overlaps = @(Assert-CompatibleNativeAssets -Packages $providerPackages)
 
     Assert-NativeBuildDiskBoundary -Path $report -Phase 'combined consumer execution' `
         -ScratchRoot $report | Out-Null
@@ -606,23 +648,27 @@ try {
     & dotnet run --project (Join-Path $consumer 'PackageConsumer.csproj') -c Release `
         --disable-build-servers --no-launch-profile "-p:RestoreSources=$packages" `
         -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json `
-        "-p:RestorePackagesPath=$restoreCache" -p:NuGetAudit=false -- $consumerResultPath *> $consumerLog
+        "-p:RestorePackagesPath=$restoreCache" -p:NuGetAudit=false `
+        "-p:IncludeManifold=$($Providers -contains 'Manifold')" -- $consumerResultPath *> $consumerLog
     if ($LASTEXITCODE -ne 0) { throw "The combined provider consumer failed; see $consumerLog" }
     $consumerResult = Get-Content -LiteralPath $consumerResultPath -Raw | ConvertFrom-Json
     if (-not $consumerResult.Passed -or $consumerResult.CgalSquaredDistance -ne 25 `
-        -or $consumerResult.OcctX -ne 7 -or $consumerResult.OcctY -ne 11) {
-        throw 'The combined provider consumer did not observe both native calls.'
+        -or $consumerResult.OcctX -ne 7 -or $consumerResult.OcctY -ne 11 `
+        -or (($Providers -contains 'Manifold') -and ($consumerResult.ManifoldStatus -cne 'NoError' `
+            -or $consumerResult.ManifoldTriangleCount -ne 4))) {
+        throw 'The combined provider consumer did not observe every selected native call.'
     }
 
     [ordered]@{
         Passed = $true
-        ProviderBuildOrder = @('OCCT', 'CGAL')
+        ProviderBuildOrder = @($Providers)
         CompilerWorkers = 1
         Packages = @(Get-ChildItem -LiteralPath $packages -Filter '*.nupkg' -File | ForEach-Object {
             [ordered]@{ Name = $_.Name; Hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
         })
         OcctClosure = $occtClosure
         CgalClosure = $cgalClosure
+        ManifoldClosure = $manifoldClosure
         IdenticalOverlaps = $overlaps
         Consumer = $consumerResult
     } | ConvertTo-Json -Depth 8 | Set-Content -LiteralPath (Join-Path $report 'result.json') -Encoding utf8
@@ -645,7 +691,7 @@ catch {
     throw
 }
 finally {
-    foreach ($child in @('o', 'c', 'x', 'u', 'r')) {
+    foreach ($child in @('o', 'c', 'm', 'x', 'u', 'r')) {
         Remove-OwnedDirectory -Target (Join-Path $report $child) -OwnedRoot $report
     }
     $env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT = $previousScratchRoot

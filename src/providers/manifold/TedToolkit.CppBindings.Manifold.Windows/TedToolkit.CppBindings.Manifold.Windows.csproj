@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <AssemblyName>TedToolkit.CppBindings.Manifold.Windows</AssemblyName>
+    <RootNamespace>TedToolkit.CppBindings.Manifold</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Title>TedToolkit Manifold Windows bindings</Title>
+    <Description>Generated finite-profile Manifold bindings for the locked Windows x64 native artifact.</Description>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\..\output\providers\manifold</GeneratedRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.CppBindings.Manifold.Runtime\TedToolkit.CppBindings.Manifold.Runtime.csproj" />
+    <ProjectReference Include="..\TedToolkit.CppBindings.Manifold.Generator.Tool\TedToolkit.CppBindings.Manifold.Generator.Tool.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      OutputItemType="ManifoldGeneratorHost" />
+    <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_cpp_bindings_manifold.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\third-party-notices\*.txt"
+          Pack="true" PackagePath="third-party-notices" />
+  </ItemGroup>
+
+  <Target Name="GenerateManifoldWindowsBindings" BeforeTargets="CoreCompile">
+    <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Manifold.Windows." />
+    <Error Condition="'@(ManifoldGeneratorHost)' == ''" Text="The Manifold generator host output was not resolved." />
+    <Exec Command="pwsh -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\..\..\Build\GenerateManifoldWindowsBindings.ps1&quot; -RepositoryRoot &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; -GeneratorHost &quot;@(ManifoldGeneratorHost)&quot; -GeneratedRoot &quot;$(GeneratedRoot)&quot; -VcpkgRoot &quot;$(VcpkgRoot)&quot; -Configuration &quot;$(Configuration)&quot;" />
+  </Target>
+
+  <Target Name="IncludeGeneratedManifoldWindowsBindings"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="GenerateManifoldWindowsBindings">
+    <ItemGroup>
+      <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
+    </ItemGroup>
+  </Target>
+
+</Project>

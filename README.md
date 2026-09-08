@@ -1,7 +1,7 @@
 # TedToolkit.CppBindings
 
 TedToolkit.CppBindings is a .NET platform for generating C++ bindings. This repository provides
-Open CASCADE Technology (OCCT) and Computational Geometry Algorithms Library (CGAL) providers.
+Open CASCADE Technology (OCCT), Computational Geometry Algorithms Library (CGAL), and Manifold providers.
 Each builds one normalized semantic model and emits a matched C++ ABI boundary and C# API through
 the shared generation platform.
 
@@ -21,6 +21,8 @@ the shared generation platform.
   delivered OCCT DLLs.
 - A deterministic CGAL Generator, provider-specific Runtime, and self-contained Windows package
   for the finite versioned `epick-windows-v1` profile.
+- A deterministic Manifold Generator, provider-specific Runtime, and self-contained Windows package
+  for the finite versioned `manifold-3.5.2-windows-v1` profile.
 
 ## Start here
 
@@ -29,6 +31,8 @@ the shared generation platform.
 | Understand the generated OCCT API and supported package | [OCCT Windows bindings](src/providers/occt/TedToolkit.CppBindings.Occt.Windows/README.md) |
 | Use the finite CGAL EPICK package | [CGAL Windows bindings](src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/README.md) |
 | Generate a finite CGAL profile | [CGAL Generator](src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/README.md) |
+| Use the finite Manifold package | [Manifold Windows bindings](src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/README.md) |
+| Generate the finite Manifold profile | [Manifold Generator](src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/README.md) |
 | Generate OCCT bindings | [OCCT Generator](src/providers/occt/TedToolkit.CppBindings.Occt.Generator/README.md) |
 | Use provider-neutral generation stages | [Generator](src/shared/TedToolkit.CppBindings.Generator/README.md) |
 | Understand ownership and generated-code contracts | [Runtime](src/shared/TedToolkit.CppBindings.Runtime/README.md) |
@@ -86,10 +90,10 @@ convenience policy in generated bindings.
 
 | Concern | Current support |
 | --- | --- |
-| Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows` |
-| Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal` |
+| Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows`, `TedToolkit.CppBindings.Manifold.Windows` |
+| Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal`, `TedToolkit.CppBindings.Manifold` |
 | Runtime identifier | `win-x64` |
-| Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v1` |
+| Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v1`; Manifold 3.5.2 `manifold-3.5.2-windows-v1` |
 | Binding target framework | `net8.0` |
 | Generator and development host | .NET 10 |
 | Native toolchain | Visual C++, C++17, CMake 3.28 or later |
@@ -109,6 +113,7 @@ and native-behavior proof.
 - Visual Studio with MSVC, CMake tools, and LLVM (`clang-cl`) components
 - vcpkg with OCCT 8.0.1 installed for `x64-windows`
 - vcpkg with CGAL 6.2, GMP 6.3.0#5, and MPFR 4.2.2#1 installed for `x64-windows`
+- vcpkg with Manifold 3.5.2 installed for `x64-windows`
 - `VCPKG_ROOT` set to the vcpkg installation directory
 
 Confirm the OCCT installation:
@@ -144,6 +149,16 @@ pwsh -NoProfile -File Build/VerifyCgalWindowsPackage.ps1
 CGAL outputs remain isolated under `output/providers/cgal`; its native build is serial to keep disk
 and compiler pressure bounded.
 
+Generate, compile, pack, and consume the locked Manifold profile with:
+
+```powershell
+pwsh -NoProfile -File Build/VerifyManifoldWindowsPackage.ps1
+```
+
+Manifold outputs remain isolated under `output/providers/manifold`. The package contains only its
+unique binding DLL and exact recursive non-system import closure; it has no cross-provider package
+dependency or conversion API.
+
 Use a short Windows checkout path. Deep worktrees combined with generated template names can exceed
 MSVC object-path limits.
 
@@ -163,6 +178,10 @@ MSVC object-path limits.
 | `TedToolkit.CppBindings.Cgal.Runtime` | CGAL exception, diagnostic, and finite polymorphic-result contracts |
 | `TedToolkit.CppBindings.Cgal.Windows` | Self-contained `win-x64` artifact for the admitted EPICK profile |
 | `TedToolkit.CppBindings.Cgal.Generator.Tool` | Repository-local, non-package generation host |
+| `TedToolkit.CppBindings.Manifold.Generator` | Locked Manifold profile and deterministic paired-source generation |
+| `TedToolkit.CppBindings.Manifold.Runtime` | Manifold diagnostic ownership and exception taxonomy |
+| `TedToolkit.CppBindings.Manifold.Windows` | Self-contained `win-x64` Manifold binding and exact native closure |
+| `TedToolkit.CppBindings.Manifold.Generator.Tool` | Repository-local, non-package Manifold generation host |
 | `Build` | Repository build, test, native fixture, and integration gates |
 
 ## Test and verification
@@ -175,6 +194,7 @@ dotnet run --project tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBi
 dotnet run --project tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj -c Release --no-build -- --report-trx
 dotnet run --project tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj -c Release --no-build -- --report-trx
 dotnet run --project tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/TedToolkit.CppBindings.Cgal.Runtime.Tests.csproj -c Release --no-build -- --report-trx
+dotnet run --project tests/TedToolkit.CppBindings.Manifold.Generator.Tests/TedToolkit.CppBindings.Manifold.Generator.Tests.csproj -c Release --no-build -- --report-trx
 ```
 
 Run the complete repository pipeline, including native handle fixtures and managed integration:
