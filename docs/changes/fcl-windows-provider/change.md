@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: completed -->
 <!-- delivery-shape: single -->
 
 - Priority: P1
-<!-- approval-source: 2026-09-08 user message "批准并继续。" -->
-<!-- candidate-binding: none -->
+<!-- approval-source: 2026-09-08 user message "批准。" approving the revised AC-03 -->
+<!-- candidate-binding: commit:8437ca279905fcc04eebb3d48db38f2a66065acf -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
