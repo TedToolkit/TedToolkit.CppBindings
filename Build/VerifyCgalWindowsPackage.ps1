@@ -3,48 +3,12 @@ param([string] $ReportDirectory)
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-
-function Get-ImportedDllNames {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $Dumpbin,
-
-        [Parameter(Mandatory = $true)]
-        [string] $Binary
-    )
-
-    $output = @(& $Dumpbin /NOLOGO /DEPENDENTS $Binary 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        throw "dumpbin failed for '$Binary'."
-    }
-
-    $reading = $false
-    $imports = [Collections.Generic.List[string]]::new()
-    foreach ($line in $output) {
-        $text = "$line".Trim()
-        if ($text -ceq 'Image has the following dependencies:') {
-            $reading = $true
-            continue
-        }
-
-        if ($reading -and $text -ceq 'Summary') {
-            break
-        }
-
-        if ($reading -and $text -match '^[A-Za-z0-9_.-]+\.dll$') {
-            $imports.Add($text)
-        }
-    }
-
-    return @($imports | Sort-Object -Unique)
-}
+Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'VerifyNativePackageClosure.psm1') -Force
 
 $repository = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $candidateRevision = (& git -C $repository rev-parse HEAD).Trim()
 $startingStatus = @(& git -C $repository status --porcelain --untracked-files=all)
-if ($startingStatus.Count -ne 0) {
-    throw 'CGAL Windows verification requires a clean exact candidate.'
-}
 
 if (-not $ReportDirectory) {
     $ReportDirectory = Join-Path $repository ('out/verification/cw-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
@@ -56,6 +20,13 @@ if (Test-Path -LiteralPath $report) {
 }
 
 $null = New-Item -ItemType Directory -Path $report
+$scratchRoot = if ($env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT) {
+    $env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT
+}
+else {
+    $report
+}
+$env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT = $scratchRoot
 $vcpkg = if ($env:VCPKG_ROOT) { [IO.Path]::GetFullPath($env:VCPKG_ROOT) } else { 'C:\vcpkg' }
 $generated = Join-Path $report 'generated'
 $windowsProject = Join-Path $repository `
@@ -82,6 +53,7 @@ if ($LASTEXITCODE -ne 0 `
 }
 
 $feed = Join-Path $report 'feed'
+Assert-NativeBuildDiskBoundary -Path $report -Phase 'CGAL packaging' -ScratchRoot $scratchRoot | Out-Null
 $projects = [ordered]@{
     'TedToolkit.CppBindings.Runtime' =
         'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj'
@@ -222,31 +194,8 @@ if (-not $dumpbin) {
     throw 'Visual Studio dumpbin is required to verify package dependency closure.'
 }
 
-$packagedByName = @{}
-Get-ChildItem -LiteralPath $nativeRoot -Filter '*.dll' -File | ForEach-Object {
-    $packagedByName[$_.Name] = $_.FullName
-}
-foreach ($binary in $packagedByName.Values) {
-    foreach ($import in Get-ImportedDllNames -Dumpbin $dumpbin -Binary $binary) {
-        if ($packagedByName.ContainsKey($import)) {
-            continue
-        }
-
-        $systemPath = Join-Path ([Environment]::SystemDirectory) $import
-        if ((Test-Path -LiteralPath $systemPath -PathType Leaf) `
-            -or $import -like 'api-ms-win-*.dll' `
-            -or $import -like 'ext-ms-win-*.dll') {
-            continue
-        }
-
-        throw "Package dependency closure is missing '$import', imported by '$binary'."
-    }
-}
-foreach ($required in @('gmp-10.dll', 'mpfr-6.dll')) {
-    if (-not $packagedByName.ContainsKey($required)) {
-        throw "The locked runtime dependency '$required' is absent from the package."
-    }
-}
+$verifiedClosure = @(Assert-ExactPackageNativeClosure -NativeRoot $nativeRoot `
+    -BindingName 'ted_toolkit_cpp_bindings_cgal.dll' -Dumpbin $dumpbin)
 
 $exports = @(& $dumpbin /NOLOGO /EXPORTS $packedNative 2>&1)
 if ($LASTEXITCODE -ne 0) {
@@ -267,18 +216,11 @@ $fixture = Join-Path $repository 'tests/TedToolkit.CppBindings.Cgal.Windows.Test
 Get-ChildItem -LiteralPath $fixture -File | Copy-Item -Destination $consumer
 $consumerResultPath = Join-Path $report 'consumer-result.json'
 $consumerLog = Join-Path $report 'consumer-run.log'
-$packages = Join-Path $repository 'out/package-cache/cgal-windows'
-$null = New-Item -ItemType Directory -Path $packages -Force
-foreach ($packageId in @(
-    'tedtoolkit.cppbindings.runtime',
-    'tedtoolkit.cppbindings.cgal.runtime',
-    'tedtoolkit.cppbindings.cgal.windows')) {
-    $cachedPackage = Join-Path $packages $packageId
-    if (Test-Path -LiteralPath $cachedPackage) {
-        Remove-Item -LiteralPath $cachedPackage -Recurse -Force
-    }
-}
+$packages = Join-Path $report 'packages'
+$null = New-Item -ItemType Directory -Path $packages
 
+Assert-NativeBuildDiskBoundary -Path $report -Phase 'CGAL consumer execution' `
+    -ScratchRoot $scratchRoot | Out-Null
 & dotnet run --project (Join-Path $consumer 'PackageConsumer.csproj') -c Release `
     --disable-build-servers --no-launch-profile `
     "-p:RestoreSources=$feed" `
@@ -317,7 +259,8 @@ if ($consumerResult.SquaredDistance2 -ne 25 `
 
 $endingRevision = (& git -C $repository rev-parse HEAD).Trim()
 $endingStatus = @(& git -C $repository status --porcelain --untracked-files=all)
-if ($endingRevision -cne $candidateRevision -or $endingStatus.Count -ne 0) {
+if ($endingRevision -cne $candidateRevision `
+    -or ($endingStatus -join "`n") -cne ($startingStatus -join "`n")) {
     throw 'The candidate revision or worktree changed during CGAL Windows verification.'
 }
 
@@ -332,6 +275,7 @@ if ($endingRevision -cne $candidateRevision -or $endingStatus.Count -ne 0) {
     PublicExportCount = $publicExports.Count
     NativeDependencies = $expectedDependencies
     NativeDependencyCount = $expectedDependencies.Count
+    VerifiedClosure = $verifiedClosure
     NoticeCount = 3
     Toolchain = $generationResult.Toolchain
     BuildToolchain = $buildToolchain

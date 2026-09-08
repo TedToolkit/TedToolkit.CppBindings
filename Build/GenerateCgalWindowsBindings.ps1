@@ -18,80 +18,7 @@ param(
 
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
-
-function Get-ImportedDllNames {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $Dumpbin,
-
-        [Parameter(Mandatory = $true)]
-        [string] $Binary
-    )
-
-    $output = @(& $Dumpbin /NOLOGO /DEPENDENTS $Binary 2>&1)
-    if ($LASTEXITCODE -ne 0) {
-        throw "dumpbin failed for '$Binary'."
-    }
-
-    $reading = $false
-    $imports = [Collections.Generic.List[string]]::new()
-    foreach ($line in $output) {
-        $text = "$line".Trim()
-        if ($text -ceq 'Image has the following dependencies:') {
-            $reading = $true
-            continue
-        }
-
-        if ($reading -and $text -ceq 'Summary') {
-            break
-        }
-
-        if ($reading -and $text -match '^[A-Za-z0-9_.-]+\.dll$') {
-            $imports.Add($text)
-        }
-    }
-
-    return @($imports | Sort-Object -Unique)
-}
-
-function Find-NativeToolchain {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $Compiler
-    )
-
-    $compilerPath = [IO.Path]::GetFullPath($Compiler)
-    if ($compilerPath -notmatch '^(.*[\\/]VC)[\\/]Tools[\\/]MSVC[\\/]([^\\/]+)[\\/]bin[\\/]Hostx64[\\/]x64[\\/]cl\.exe$') {
-        throw "CMake selected an unsupported compiler path '$compilerPath'."
-    }
-
-    $vcRoot = $Matches[1]
-    $toolsetVersion = $Matches[2]
-    $dumpbin = Join-Path (Split-Path $compilerPath -Parent) 'dumpbin.exe'
-    if (-not (Test-Path -LiteralPath $dumpbin -PathType Leaf)) {
-        throw "The selected compiler toolset has no matching dumpbin at '$dumpbin'."
-    }
-
-    $redistRoot = Join-Path $vcRoot "Redist\MSVC\$toolsetVersion\x64"
-    if (-not (Test-Path -LiteralPath $redistRoot -PathType Container)) {
-        throw "The selected compiler toolset has no matching x64 redistributable directory."
-    }
-
-    $redist = @{}
-    Get-ChildItem -LiteralPath $redistRoot -Filter '*.dll' -File -Recurse -ErrorAction SilentlyContinue |
-        Sort-Object -Property FullName -Descending |
-        ForEach-Object {
-            if (-not $redist.ContainsKey($_.Name)) {
-                $redist[$_.Name] = $_.FullName
-            }
-        }
-
-    return [pscustomobject]@{
-        Dumpbin = $dumpbin
-        Redist = $redist
-        ToolsetVersion = $toolsetVersion
-    }
-}
+Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
 
 function Get-OutputFiles {
     param(
@@ -201,102 +128,6 @@ function Test-OutputManifest {
     }
 }
 
-function Stage-NativeDependencies {
-    param(
-        [Parameter(Mandatory = $true)]
-        [string] $NativeLibrary,
-
-        [Parameter(Mandatory = $true)]
-        [string] $Destination,
-
-        [Parameter(Mandatory = $true)]
-        [string] $VcpkgBin,
-
-        [Parameter(Mandatory = $true)]
-        [object] $Toolchain
-    )
-
-    $resolvedDestination = [IO.Path]::GetFullPath($Destination)
-    if (Test-Path -LiteralPath $resolvedDestination) {
-        Remove-Item -LiteralPath $resolvedDestination -Recurse -Force
-    }
-
-    $null = New-Item -ItemType Directory -Path $resolvedDestination
-    $vcpkgFiles = @{}
-    Get-ChildItem -LiteralPath $VcpkgBin -Filter '*.dll' -File | ForEach-Object {
-        $vcpkgFiles[$_.Name] = $_.FullName
-    }
-
-    $sources = [Collections.Generic.Dictionary[string, string]]::new(
-        [StringComparer]::OrdinalIgnoreCase)
-    foreach ($required in @('gmp-10.dll', 'mpfr-6.dll')) {
-        if (-not $vcpkgFiles.ContainsKey($required)) {
-            throw "The locked CGAL runtime dependency '$required' is absent from '$VcpkgBin'."
-        }
-
-        $sources[$required] = $vcpkgFiles[$required]
-    }
-
-    $queue = [Collections.Generic.Queue[string]]::new()
-    $queue.Enqueue($NativeLibrary)
-    foreach ($source in $sources.Values) {
-        $queue.Enqueue($source)
-    }
-
-    $scanned = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    $systemImports = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
-    while ($queue.Count -gt 0) {
-        $binary = $queue.Dequeue()
-        if (-not $scanned.Add([IO.Path]::GetFileName($binary))) {
-            continue
-        }
-
-        foreach ($import in Get-ImportedDllNames -Dumpbin $Toolchain.Dumpbin -Binary $binary) {
-            if ($sources.ContainsKey($import)) {
-                continue
-            }
-
-            if ($vcpkgFiles.ContainsKey($import)) {
-                $sources[$import] = $vcpkgFiles[$import]
-                $queue.Enqueue($vcpkgFiles[$import])
-                continue
-            }
-
-            if ($Toolchain.Redist.ContainsKey($import)) {
-                $sources[$import] = $Toolchain.Redist[$import]
-                $queue.Enqueue($Toolchain.Redist[$import])
-                continue
-            }
-
-            $systemPath = Join-Path ([Environment]::SystemDirectory) $import
-            if ((Test-Path -LiteralPath $systemPath -PathType Leaf) `
-                -or $import -like 'api-ms-win-*.dll' `
-                -or $import -like 'ext-ms-win-*.dll') {
-                $null = $systemImports.Add($import)
-                continue
-            }
-
-            throw "Native dependency '$import' imported by '$binary' could not be resolved."
-        }
-    }
-
-    $dependencies = @($sources.GetEnumerator() | Sort-Object -Property Key | ForEach-Object {
-        $destinationPath = Join-Path $resolvedDestination $_.Key
-        Copy-Item -LiteralPath $_.Value -Destination $destinationPath
-        [ordered]@{
-            Name = $_.Key
-            Source = $_.Value
-            Hash = (Get-FileHash -LiteralPath $destinationPath -Algorithm SHA256).Hash
-        }
-    })
-    [ordered]@{
-        Dependencies = $dependencies
-        SystemImports = @($systemImports | Sort-Object)
-    } | ConvertTo-Json -Depth 5 |
-        Set-Content -LiteralPath (Join-Path (Split-Path $resolvedDestination -Parent) 'native-dependencies.json') `
-            -Encoding utf8
-}
-
 $repository = [IO.Path]::GetFullPath($RepositoryRoot)
 $generated = [IO.Path]::GetFullPath($GeneratedRoot)
 $vcpkg = [IO.Path]::GetFullPath($VcpkgRoot)
@@ -334,14 +165,13 @@ try {
         Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })
     $inputFiles += @(
         $PSCommandPath,
+        (Join-Path $repository 'Build\NativeDependencyClosure.psm1'),
         (Join-Path $repository 'Build\CgalCompilerIdentity.cmake'),
         (Join-Path $repository 'Directory.Build.props'),
         (Join-Path $repository 'Directory.Build.targets'),
         (Join-Path $repository 'Directory.Packages.props'),
         (Join-Path $repository 'src\providers\cgal\TedToolkit.CppBindings.Cgal.Windows\TedToolkit.CppBindings.Cgal.Windows.csproj'),
         (Join-Path $vcpkg 'installed\vcpkg\status'),
-        (Join-Path $vcpkg 'installed\x64-windows\bin\gmp-10.dll'),
-        (Join-Path $vcpkg 'installed\x64-windows\bin\mpfr-6.dll'),
         (Join-Path $vcpkg 'installed\x64-windows\share\cgal\copyright'),
         (Join-Path $vcpkg 'installed\x64-windows\share\gmp\copyright'),
         (Join-Path $vcpkg 'installed\x64-windows\share\mpfr\copyright')
@@ -364,16 +194,8 @@ try {
             }).Count -eq 0
     }
 
-    $dependenciesComplete = $false
-    if (Test-Path -LiteralPath $dependencyManifest -PathType Leaf) {
-        $dependencyState = Get-Content -LiteralPath $dependencyManifest -Raw | ConvertFrom-Json
-        $dependenciesComplete = @($dependencyState.Dependencies).Count -gt 1 `
-            -and @($dependencyState.Dependencies | Where-Object {
-                $file = Join-Path $generated "native-dependencies\$($_.Name)"
-                -not (Test-Path -LiteralPath $file -PathType Leaf) `
-                    -or (Get-FileHash -LiteralPath $file -Algorithm SHA256).Hash -cne $_.Hash
-            }).Count -eq 0
-    }
+    $dependenciesComplete = Test-NativeDependencyClosure -NativeLibrary $nativeLibrary `
+        -Destination (Join-Path $generated 'native-dependencies') -Manifest $dependencyManifest
 
     $noticesComplete = @('CGAL.txt', 'GMP.txt', 'MPFR.txt').Where({
         $path = Join-Path $generated "third-party-notices\$_"
@@ -399,6 +221,9 @@ try {
     }
 
     $null = New-Item -ItemType Directory -Path $generated -Force
+    $scratchRoot = $env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT
+    Assert-NativeBuildDiskBoundary -Path $generated -Phase 'CGAL generation' `
+        -ScratchRoot $scratchRoot | Out-Null
     & dotnet $GeneratorHost --output-root $generated --vcpkg-root $vcpkg
     if ($LASTEXITCODE -ne 0) {
         throw "The CGAL generator exited with code $LASTEXITCODE."
@@ -413,6 +238,8 @@ try {
         throw "CGAL native configuration failed with exit code $LASTEXITCODE."
     }
 
+    Assert-NativeBuildDiskBoundary -Path $generated -Phase 'CGAL native compilation' `
+        -ScratchRoot $scratchRoot | Out-Null
     & cmake --build (Join-Path $generated 'native-build') --config $Configuration --parallel 1
     if ($LASTEXITCODE -ne 0) {
         throw "CGAL native build failed with exit code $LASTEXITCODE."
@@ -444,7 +271,7 @@ try {
     }
 
     $cmakeVersion = $Matches[1]
-    $toolchain = Find-NativeToolchain -Compiler $compilerParts[2]
+    $toolchain = Get-WindowsNativeToolchain -Compiler $compilerParts[2]
     [ordered]@{
         CompilerId = $compilerParts[0]
         CompilerVersion = $compilerParts[1]
@@ -453,10 +280,10 @@ try {
         CMake = $cmakeVersion
     } | ConvertTo-Json -Depth 3 |
         Set-Content -LiteralPath (Join-Path $generated 'build-toolchain.json') -Encoding utf8
-    Stage-NativeDependencies -NativeLibrary $nativeLibrary `
+    $null = Set-NativeDependencyClosure -NativeLibrary $nativeLibrary `
         -Destination (Join-Path $generated 'native-dependencies') `
         -VcpkgBin (Join-Path $vcpkg 'installed\x64-windows\bin') `
-        -Toolchain $toolchain
+        -Toolchain $toolchain -OwnedRoot $generated
 
     $notices = Join-Path $generated 'third-party-notices'
     if (Test-Path -LiteralPath $notices) {

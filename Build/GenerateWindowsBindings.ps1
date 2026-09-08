@@ -1,3 +1,4 @@
+#Requires -Version 7.5
 param(
     [Parameter(Mandatory = $true)]
     [string] $RepositoryRoot,
@@ -16,8 +17,21 @@ param(
 )
 
 $ErrorActionPreference = 'Stop'
+Set-StrictMode -Version Latest
+Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
+
 $resolvedRepositoryRoot = [IO.Path]::GetFullPath($RepositoryRoot)
 $resolvedGeneratedRoot = [IO.Path]::GetFullPath($GeneratedRoot)
+$allowedRoots = @('output', 'out') | ForEach-Object {
+    [IO.Path]::GetFullPath((Join-Path $resolvedRepositoryRoot $_))
+}
+if (-not @($allowedRoots | Where-Object {
+        $resolvedGeneratedRoot.StartsWith($_ + [IO.Path]::DirectorySeparatorChar,
+            [StringComparison]::OrdinalIgnoreCase)
+    }).Count) {
+    throw 'GeneratedRoot must remain under the repository output or evidence root.'
+}
+
 $mutexHash = [Convert]::ToHexString(
     [Security.Cryptography.SHA256]::HashData(
         [Text.Encoding]::UTF8.GetBytes($resolvedGeneratedRoot)))
@@ -35,6 +49,8 @@ try {
     $stampPath = Join-Path $resolvedGeneratedRoot "native-build\$Configuration\generation.stamp"
     $manifestPath = Join-Path $resolvedGeneratedRoot "native-build\$Configuration\managed-files.txt"
     $nativeLibraryPath = Join-Path $resolvedGeneratedRoot "native-build\$Configuration\ted_toolkit_occt.dll"
+    $dependencyDirectory = Join-Path $resolvedGeneratedRoot 'native-dependencies'
+    $dependencyManifest = Join-Path $resolvedGeneratedRoot 'native-dependencies.json'
     $generatorInputRoots = @(
         (Join-Path $resolvedRepositoryRoot 'src\shared\TedToolkit.CppBindings.Generator'),
         (Join-Path $resolvedRepositoryRoot 'src\providers\occt\TedToolkit.CppBindings.Occt.Generator'),
@@ -49,6 +65,7 @@ try {
         Where-Object { $_.FullName -notmatch '[\\/](bin|obj)[\\/]' })
     $inputFiles += @(
         $PSCommandPath,
+        (Join-Path $resolvedRepositoryRoot 'Build\NativeDependencyClosure.psm1'),
         (Join-Path $resolvedRepositoryRoot 'Directory.Build.props'),
         (Join-Path $resolvedRepositoryRoot 'Directory.Build.targets'),
         (Join-Path $resolvedRepositoryRoot 'Directory.Packages.props'),
@@ -77,6 +94,8 @@ try {
     if ((Test-Path -LiteralPath $stampPath) -and
         (Test-Path -LiteralPath $nativeLibraryPath) -and
         $managedFilesComplete -and
+        (Test-NativeDependencyClosure -NativeLibrary $nativeLibraryPath `
+            -Destination $dependencyDirectory -Manifest $dependencyManifest) -and
         ((Get-Item -LiteralPath $nativeLibraryPath).Length -gt 0) -and
         ((Get-Content -LiteralPath $stampPath -Raw) -eq $inputFingerprint)) {
         Write-Output 'Windows bindings are up to date.'
@@ -87,6 +106,9 @@ try {
         Remove-Item -LiteralPath $stampPath
     }
 
+    $scratchRoot = $env:TEDTOOLKIT_NATIVE_SCRATCH_ROOT
+    Assert-NativeBuildDiskBoundary -Path $resolvedGeneratedRoot -Phase 'OCCT generation' `
+        -ScratchRoot $scratchRoot | Out-Null
     & dotnet $GeneratorHost --output-root $resolvedGeneratedRoot
     if ($LASTEXITCODE -ne 0) {
         throw "The OCCT generator exited with code $LASTEXITCODE."
@@ -140,7 +162,9 @@ try {
         throw 'The native object paths exceed the compiler budget. Use a shorter GeneratedRoot before compiling.'
     }
 
-    & cmake --build "$resolvedGeneratedRoot\native-build" --config $Configuration --parallel 8
+    Assert-NativeBuildDiskBoundary -Path $resolvedGeneratedRoot -Phase 'OCCT native compilation' `
+        -ScratchRoot $scratchRoot | Out-Null
+    & cmake --build "$resolvedGeneratedRoot\native-build" --config $Configuration --parallel 1
     if ($LASTEXITCODE -ne 0) {
         throw "The native build exited with code $LASTEXITCODE."
     }
@@ -153,6 +177,12 @@ try {
     if (-not (Test-Path -LiteralPath $nativeLibraryPath) -or (Get-Item -LiteralPath $nativeLibraryPath).Length -eq 0) {
         throw 'The native build did not produce a nonempty binding library.'
     }
+
+    $nativeToolchain = Get-WindowsNativeToolchain -Compiler $toolchain.Compiler
+    $null = Set-NativeDependencyClosure -NativeLibrary $nativeLibraryPath `
+        -Destination $dependencyDirectory `
+        -VcpkgBin (Join-Path $VcpkgRoot 'installed\x64-windows\bin') `
+        -Toolchain $nativeToolchain -OwnedRoot $resolvedGeneratedRoot
 
     $managedFiles |
         ForEach-Object { [IO.Path]::GetRelativePath($resolvedGeneratedRoot, $_.FullName) } |

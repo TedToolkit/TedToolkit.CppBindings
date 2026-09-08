@@ -8,7 +8,8 @@
 - Governing principles: [Repository design principles](../principles/README.md)
 - Related ADRs: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md),
   [ADR-003](../adr/ADR-003-native-function-table-bootstrap.md),
-  [ADR-004](../adr/ADR-004-provider-extension-and-cgal-profile.md), and superseded
+  [ADR-004](../adr/ADR-004-provider-extension-and-cgal-profile.md),
+  [ADR-005](../adr/ADR-005-provider-native-package-isolation.md), and superseded
   [ADR-001](../adr/ADR-001-native-release-binding/README.md)
 - Approval source: The maintainer explicitly approved this direction in the Codex task on
   2026-08-26 and approved the shared/provider source topology and finite EPICK-based CGAL provider
@@ -70,9 +71,13 @@ This record governs product identity, package allocation, and generic/provider d
 The current generated-binding and analyzer-boundary records govern exact layout, generation, native
 loading, ownership behavior, diagnostics, and failure boundaries under the same platform identity.
 
-The ready-to-use CGAL package is self-contained for `win-x64`: it carries the exact generated
-managed/native pair, recursively resolved app-local imports, the locked GMP/MPFR runtime files, and
-CGAL/GMP/MPFR notices. Its isolated consumer does not acquire Generator, Clang, or OCCT packages.
+Each ready-to-use provider package is self-contained for its RID: it carries the exact generated
+managed/native pair and only the binding module's recursively reachable non-system DLL imports.
+Provider packages never copy a vcpkg runtime directory. When independently published providers
+contain the same native filename, verification accepts the package set only when every copy is
+byte-identical. The CGAL package additionally carries CGAL/GMP/MPFR notices; a notice does not make
+an unreferenced native DLL part of the runtime closure. Its isolated consumer does not acquire
+Generator, Clang, or OCCT packages.
 
 ## Constraints for change design
 
@@ -90,6 +95,8 @@ CGAL/GMP/MPFR notices. Its isolated consumer does not acquire Generator, Clang, 
   claim or attempt an unbounded set of template instantiations.
 - Give CGAL Runtime only real CGAL-specific contracts, including check/exception and polymorphic
   result semantics; keep concrete generated declarations in the Windows artifact.
+- Give every provider binding module a unique basename, package only its recursive app-local import
+  closure, and fail package-set verification on differing same-name native assets.
 - A GitHub rename is an external operational handoff with maintainer ownership, preflight,
   post-rename evidence, and recovery. It is not a development work item.
 
@@ -110,6 +117,8 @@ ADR-001 remains historical evidence for the superseded loader decision.
   artifact identity.
 - A CGAL package silently omits a profile declaration or advertises an unbounded template surface.
 - A public ownership category beyond Value, Owned, and provider-specific Handle is proposed.
+- A provider package requires a native filename that conflicts byte-for-byte with another provider,
+  or cannot resolve its app-local import closure from its pinned toolchain and installation.
 - A new OS, ABI, architecture, RID, generic platform package, or analyzer distribution mechanism is
   proposed.
 - A published compatibility baseline makes coordinated identity replacement unacceptable.

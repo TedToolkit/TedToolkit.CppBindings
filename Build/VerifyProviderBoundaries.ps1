@@ -130,6 +130,53 @@ foreach ($relativePath in $expectedProjects) {
     }
 }
 
+$windowsPackagingRules = [ordered]@{
+    'src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj' =
+        'ted_toolkit_occt.dll'
+    'src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj' =
+        'ted_toolkit_cpp_bindings_cgal.dll'
+}
+$bindingNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
+foreach ($entry in $windowsPackagingRules.GetEnumerator()) {
+    $project = Join-Path $repository $entry.Key
+    $contents = Get-Content -LiteralPath $project -Raw
+    if ($contents -match '(?i)VcpkgRoot[^\r\n]*installed[^\r\n]*bin[^\r\n]*\*\.dll') {
+        throw "Windows provider packages a vcpkg runtime directory: $($entry.Key)"
+    }
+    if ($contents -notmatch '\$\(GeneratedRoot\)\\native-dependencies\\\*\.dll') {
+        throw "Windows provider does not package its staged dependency closure: $($entry.Key)"
+    }
+    if (-not $bindingNames.Add($entry.Value)) {
+        throw "Windows providers share native binding basename '$($entry.Value)'."
+    }
+}
+
+foreach ($scriptName in @('GenerateWindowsBindings.ps1', 'GenerateCgalWindowsBindings.ps1')) {
+    $contents = Get-Content -LiteralPath (Join-Path $repository "Build/$scriptName") -Raw
+    $parallelCounts = @([regex]::Matches($contents, '--parallel\s+(\d+)') |
+        ForEach-Object { [int]$_.Groups[1].Value })
+    if ($parallelCounts.Count -eq 0 -or @($parallelCounts | Where-Object { $_ -ne 1 }).Count -ne 0) {
+        throw "Native provider generation is not constrained to one compiler worker: Build/$scriptName"
+    }
+}
+$occtPackageVerifier = Get-Content -LiteralPath (Join-Path $repository 'Build/VerifyWindowsPackage.ps1') -Raw
+if (-not $occtPackageVerifier.Contains(
+        "-InputPath (Join-Path `$generated 'csharp/native-layouts.json')",
+        [StringComparison]::Ordinal) `
+    -or $occtPackageVerifier.Contains(
+        'output/generated/csharp/native-layouts.json',
+        [StringComparison]::Ordinal)) {
+    throw 'OCCT package verification does not isolate layout evidence beneath GeneratedRoot.'
+}
+$occtNativeProjectGenerator = Get-Content -LiteralPath (Join-Path $repository `
+    'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/Generators/NativeProjectGenerator.cs') -Raw
+if ($occtNativeProjectGenerator -notmatch '/MP1' `
+    -or $occtNativeProjectGenerator -match '/MP(?:[2-9]|\d{2,})' `
+    -or $occtNativeProjectGenerator -notmatch 'UnityBatchSize = 32' `
+    -or $occtNativeProjectGenerator -notmatch 'UNITY_BUILD_MODE GROUP') {
+    throw 'OCCT generated native compilation is not a bounded single-worker unity build.'
+}
+
 foreach ($legacyRoot in @('src/core', 'src/providers/common')) {
     $path = Join-Path $repository $legacyRoot
     if (Test-Path -LiteralPath $path) {
@@ -215,4 +262,5 @@ foreach ($relativePath in $expectedProjects) {
     ProjectReferences = $referenceCount
     ProviderIdentifiers = $providerIdentifiers
     NegativeCases = 5
+    NativePackagingRules = $windowsPackagingRules.Count
 } | ConvertTo-Json

@@ -7,7 +7,8 @@
 - Applicable product intent: None
 - Governing principles: [Repository design principles](../principles/README.md)
 - Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
-- Related ADR: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md)
+- Related ADRs: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md) and
+  [ADR-005](../adr/ADR-005-provider-native-package-isolation.md)
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26;
   declaration-level alignment admission and cyclic handle field reference projection approved on
   2026-09-04; ordinary overlapping-field reference projection approved on 2026-09-05.
@@ -110,6 +111,14 @@ Runtime owner constructors validate only the pointer and function inputs they re
 authenticate a cleanup function's module origin from its address. The generated loader and factory
 are therefore responsible for supplying cleanup pointers only from the package-owned
 process-lifetime table.
+
+The platform package contains its uniquely named binding module plus exactly the recursively
+reachable non-system DLL imports discovered from that module. Staging resolves imports only from
+the pinned native installation and matching compiler redistributable, records source and staged
+hashes, and invalidates cached packaging when either changes. It never packages a native install
+directory by wildcard. Independent package verification repeats import traversal from the packaged
+binding root, rejects missing or unreachable DLLs, and permits same-name assets across provider
+packages only when their SHA-256 hashes match.
 
 ### Managed object model
 
