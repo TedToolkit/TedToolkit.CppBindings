@@ -198,16 +198,41 @@ foreach ($requiredWorkflowText in @(
         'runs-on: windows-2025-vs2026',
         'ref: 30ef65cad98f08e7197c9a1656fbd871bcb72f2d',
         'cmake==4.4.3',
+        'VCPKG_CACHE_KEY_PREFIX: vcpkg-windows-x64-30ef65cad98f08e7197c9a1656fbd871bcb72f2d',
+        'uses: actions/cache/restore@v4',
+        'key: ${{ env.VCPKG_CACHE_KEY_PREFIX }}-${{ github.run_id }}-${{ github.run_attempt }}',
+        '${{ env.VCPKG_CACHE_KEY_PREFIX }}-',
         'opencascade:x64-windows',
         'cgal:x64-windows',
         'manifold:x64-windows',
         'fcl:x64-windows',
         'New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force',
+        '$cacheUpdated = $cacheBefore -cne $cacheAfter',
+        'if: steps.vcpkg-install.outputs.cache-updated == ''true''',
+        'uses: actions/cache/save@v4',
+        'key: ${{ steps.vcpkg-cache-restore.outputs.cache-primary-key }}',
         'dotnet run --project Build/Build.csproj -c Release',
         'Build/VerifyWindowsGenerationOutputs.ps1')) {
     if (-not $windowsWorkflow.Contains($requiredWorkflowText, [StringComparison]::Ordinal)) {
         throw "The Windows CI workflow is missing '$requiredWorkflowText'."
     }
+}
+$vcpkgRestoreIndex = $windowsWorkflow.IndexOf(
+    'uses: actions/cache/restore@v4',
+    [StringComparison]::Ordinal)
+$vcpkgInstallIndex = $windowsWorkflow.IndexOf(
+    'id: vcpkg-install',
+    [StringComparison]::Ordinal)
+$vcpkgSaveIndex = $windowsWorkflow.IndexOf(
+    'uses: actions/cache/save@v4',
+    [StringComparison]::Ordinal)
+$windowsBuildIndex = $windowsWorkflow.IndexOf(
+    'dotnet run --project Build/Build.csproj -c Release',
+    [StringComparison]::Ordinal)
+if (-not ($vcpkgRestoreIndex -lt $vcpkgInstallIndex -and
+        $vcpkgInstallIndex -lt $vcpkgSaveIndex -and
+        $vcpkgSaveIndex -lt $windowsBuildIndex)) {
+    throw 'The Windows CI workflow must restore, install, and save vcpkg binaries before the build pipeline.'
 }
 $outputVerifier = Join-Path $repository 'Build/VerifyWindowsGenerationOutputs.ps1'
 if (-not (Test-Path -LiteralPath $outputVerifier -PathType Leaf)) {
