@@ -1,4 +1,5 @@
 # FCL Runtime
 
-This package maps copied FCL native diagnostics to provider-specific managed exceptions and clears
-the original carrier exactly once. It contains no dependency on another geometry provider.
+This package exposes the FCL generated-code facade over Shared native-error projection. Shared owns
+the common exception kinds and exact-once carrier cleanup; FCL currently defines no local exception
+kind. The package contains no dependency on another geometry provider.

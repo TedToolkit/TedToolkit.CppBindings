@@ -74,7 +74,8 @@ internal sealed class GenerateAsyncTests
             "extern \"C\" double gp_Pnt2d_X(const gp_Pnt2d* self, NativeError* __error) noexcept");
         await Assert.That(source).Contains("return (self->*static_cast<double (gp_Pnt2d::*)() const>(&gp_Pnt2d::X))();");
         await Assert.That(source).Contains("catch (const Standard_Failure& exception)");
-        await Assert.That(source).Contains("NativeError_Set(__error, 8");
+        await Assert.That(source).Contains("NativeError_Set(__error, 9, \"Standard_Failure\"");
+        await Assert.That(source).Contains("NativeError_Set(__error, 8, \"std::exception\"");
         await Assert.That(source).Contains(
             "extern \"C\" double gp_Pnt2d_NoThrow(gp_Pnt2d* self) noexcept");
         await Assert.That(source).Contains("gp_Pnt2d_Set_1");

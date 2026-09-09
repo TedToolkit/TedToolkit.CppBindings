@@ -14,7 +14,7 @@ using TedToolkit.CppBindings.Occt;
 namespace TedToolkit.CppBindings.Runtime.Tests.OcctExceptionTests;
 
 /// <summary>
-/// Verifies the public managed OCCT exception contract.
+/// Verifies the Shared native and OCCT-local managed exception contracts.
 /// </summary>
 internal sealed class PublicSurfaceTests
 {
@@ -39,23 +39,24 @@ internal sealed class PublicSurfaceTests
     {
         var cases = new (Type ExceptionType, Type BaseType)[]
         {
+            (typeof(NativeException), typeof(Exception)),
+            (typeof(NativeArgumentException), typeof(ArgumentException)),
+            (typeof(NativeArgumentOutOfRangeException), typeof(ArgumentOutOfRangeException)),
+            (typeof(NativeArithmeticException), typeof(ArithmeticException)),
+            (typeof(NativeInvalidOperationException), typeof(InvalidOperationException)),
+            (typeof(NativeNullObjectException), typeof(NativeException)),
+            (typeof(NativeOutOfMemoryException), typeof(OutOfMemoryException)),
+            (typeof(NativeOverflowException), typeof(OverflowException)),
+            (typeof(NativeStandardException), typeof(NativeException)),
+            (typeof(NativeUnknownException), typeof(NativeException)),
             (typeof(OcctException), typeof(Exception)),
-            (typeof(OcctArgumentException), typeof(ArgumentException)),
-            (typeof(OcctArgumentOutOfRangeException), typeof(ArgumentOutOfRangeException)),
-            (typeof(OcctArithmeticException), typeof(ArithmeticException)),
-            (typeof(OcctInvalidOperationException), typeof(InvalidOperationException)),
-            (typeof(OcctNullObjectException), typeof(OcctException)),
-            (typeof(OcctOutOfMemoryException), typeof(OutOfMemoryException)),
-            (typeof(OcctOverflowException), typeof(OverflowException)),
             (typeof(OcctFailureException), typeof(OcctException)),
-            (typeof(OcctStandardException), typeof(OcctException)),
-            (typeof(OcctUnknownException), typeof(OcctException)),
         };
 
         foreach (var testCase in cases)
         {
             await Assert.That(testCase.ExceptionType.BaseType).IsEqualTo(testCase.BaseType);
-            await Assert.That(typeof(IOcctException).IsAssignableFrom(testCase.ExceptionType)).IsTrue();
+            await Assert.That(typeof(INativeException).IsAssignableFrom(testCase.ExceptionType)).IsTrue();
         }
     }
 
@@ -68,17 +69,18 @@ internal sealed class PublicSurfaceTests
     {
         Type[] exceptionTypes =
         {
+            typeof(NativeException),
+            typeof(NativeArgumentException),
+            typeof(NativeArgumentOutOfRangeException),
+            typeof(NativeArithmeticException),
+            typeof(NativeInvalidOperationException),
+            typeof(NativeNullObjectException),
+            typeof(NativeOutOfMemoryException),
+            typeof(NativeOverflowException),
+            typeof(NativeStandardException),
+            typeof(NativeUnknownException),
             typeof(OcctException),
-            typeof(OcctArgumentException),
-            typeof(OcctArgumentOutOfRangeException),
-            typeof(OcctArithmeticException),
-            typeof(OcctInvalidOperationException),
-            typeof(OcctNullObjectException),
-            typeof(OcctOutOfMemoryException),
-            typeof(OcctOverflowException),
             typeof(OcctFailureException),
-            typeof(OcctStandardException),
-            typeof(OcctUnknownException),
         };
 
         foreach (var exceptionType in exceptionTypes)
@@ -100,7 +102,10 @@ internal sealed class PublicSurfaceTests
 
         await Assert.That(typeof(OcctException).IsSealed).IsFalse();
         await Assert.That(typeof(OcctException).IsAbstract).IsTrue();
-        foreach (var leafType in exceptionTypes.Skip(1))
+        await Assert.That(typeof(NativeException).IsSealed).IsFalse();
+        await Assert.That(typeof(NativeException).IsAbstract).IsTrue();
+        foreach (var leafType in exceptionTypes.Where(static type =>
+                     type != typeof(NativeException) && type != typeof(OcctException)))
         {
             await Assert.That(leafType.IsSealed).IsTrue();
         }
@@ -113,13 +118,15 @@ internal sealed class PublicSurfaceTests
     [Test]
     public async Task Should_expose_only_the_approved_diagnostic_properties_Async()
     {
-        var properties = typeof(IOcctException).GetProperties();
+        var properties = typeof(INativeException).GetProperties();
 
         await Assert.That(properties.Select(static property => property.Name))
             .IsEquivalentTo(["NativeTypeName", "NativeStackTrace",]);
         await Assert.That(properties.All(static property => property.CanRead && !property.CanWrite)).IsTrue();
         await Assert.That(properties.Single(static property => property.Name == "NativeTypeName").PropertyType)
             .IsEqualTo(typeof(string));
+
+        await Assert.That(typeof(IOcctException).GetInterfaces()).Contains(typeof(INativeException));
         await Assert.That(properties.Single(static property => property.Name == "NativeStackTrace").PropertyType)
             .IsEqualTo(typeof(string));
     }

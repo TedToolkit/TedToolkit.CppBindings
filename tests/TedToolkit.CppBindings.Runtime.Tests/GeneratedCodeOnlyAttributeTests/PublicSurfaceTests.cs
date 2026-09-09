@@ -33,8 +33,9 @@ internal sealed class PublicSurfaceTests
         await Assert.That(usage!.ValidOn).IsEqualTo(
             AttributeTargets.Constructor
             | AttributeTargets.Class
-            | AttributeTargets.Struct
-            | AttributeTargets.Method
+              | AttributeTargets.Struct
+              | AttributeTargets.Delegate
+              | AttributeTargets.Method
             | AttributeTargets.Property
             | AttributeTargets.Event);
         await Assert.That(usage.AllowMultiple).IsFalse();

@@ -10,7 +10,8 @@
 - Related ADRs: [ADR-002](ADR-002-cpp-bindings-platform.md) and
   [ADR-003](ADR-003-native-function-table-bootstrap.md)
 - Supersedes: None
-- Superseded by: None
+- Superseded by: [ADR-006](ADR-006-shared-native-error-projection.md) for provider-neutral
+  native-error projection ownership only; all other decisions remain in force.
 - Approval source: The maintainer approved the shared/provider folder structure and the default
   EPICK-based finite CGAL profile in the Codex task on 2026-09-05, then explicitly authorized the
   design and delivery work with “你先开始吧”.
@@ -87,7 +88,7 @@ mechanisms accept provider metadata and policies; they never inspect a provider 
 provider declaration.
 
 A provider owns declaration roots, header discovery, finite template profiles, type and lifetime
-classification rules, provider-specific native dependencies, exception/check projection,
+classification rules, provider-specific native dependencies, local exception/check projection,
 unsupported evidence, default namespace and native artifact identity. Provider code depends on the
 shared Generator and Runtime; shared code never depends on a provider. OCCT retains its intrusive
 `Standard_Transient` and `handle<T>` semantics. CGAL does not inherit those semantics.
@@ -97,7 +98,7 @@ Every provider delivers three real package responsibilities:
 - `*.Generator` configures and executes provider-specific discovery and normalization through the
   shared semantic engine.
 - `*.Runtime` owns only handwritten, platform-neutral semantics that are genuinely specific to the
-  provider. For CGAL this includes its managed check/exception and polymorphic-result contracts;
+  provider. For CGAL this includes its managed local check/exception and polymorphic-result contracts;
   declaration-specific layouts and operations remain generated.
 - `*.Windows` contains the exact-match generated managed assembly and native wrapper for the pinned
   Windows toolchain matrix and references the matching shared and provider Runtime packages.

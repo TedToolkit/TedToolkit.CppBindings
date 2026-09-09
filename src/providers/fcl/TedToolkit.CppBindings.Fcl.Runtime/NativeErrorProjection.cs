@@ -6,7 +6,6 @@
 // -----------------------------------------------------------------------
 
 using System.Runtime.InteropServices;
-using System.Text;
 
 namespace TedToolkit.CppBindings.Fcl;
 
@@ -14,62 +13,12 @@ namespace TedToolkit.CppBindings.Fcl;
 [GeneratedCodeOnly]
 public static class NativeErrorProjection
 {
-    private static readonly UTF8Encoding StrictUtf8 = new(false, true);
-
     /// <summary>Returns on success or clears exactly once and throws the mapped failure.</summary>
     [GeneratedCodeOnly]
     public static unsafe void ThrowIfFailed(
         ref NativeError error,
         delegate* unmanaged[Cdecl]<NativeError*, void> clear)
     {
-        if (error.Kind == 0)
-        {
-            return;
-        }
-
-        var kind = error.Kind;
-        string? type = null;
-        string? message = null;
-        string? stack = null;
-        try
-        {
-            type = Copy(error.TypeName);
-            message = Copy(error.Message);
-            stack = Copy(error.StackTrace);
-        }
-        finally
-        {
-            fixed (NativeError* pointer = &error)
-            {
-                clear(pointer);
-            }
-        }
-
-        message ??= $"Native FCL operation failed with error kind {kind}.";
-        throw kind switch
-        {
-            1 => new FclArgumentException(message, type, stack),
-            2 => new FclArgumentOutOfRangeException(message, type, stack),
-            6 => new FclOutOfMemoryException(message, type, stack),
-            9 => new FclException(message, type, stack),
-            _ => new FclUnknownException(message, type, stack),
-        };
-    }
-
-    private static unsafe string? Copy(nint value)
-    {
-        if (value == 0)
-        {
-            return null;
-        }
-
-        try
-        {
-            return StrictUtf8.GetString(MemoryMarshal.CreateReadOnlySpanFromNullTerminated((byte*)value));
-        }
-        catch (Exception exception) when (exception is ArgumentException or OutOfMemoryException or OverflowException)
-        {
-            return null;
-        }
+        global::TedToolkit.CppBindings.NativeErrorProjection.ThrowIfFailed(ref error, clear, "FCL");
     }
 }

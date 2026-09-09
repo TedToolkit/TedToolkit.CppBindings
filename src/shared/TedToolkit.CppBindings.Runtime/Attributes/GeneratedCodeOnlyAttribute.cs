@@ -17,6 +17,7 @@ namespace TedToolkit.CppBindings;
 [AttributeUsage(
     AttributeTargets.Class
     | AttributeTargets.Struct
+    | AttributeTargets.Delegate
     | AttributeTargets.Constructor
     | AttributeTargets.Method
     | AttributeTargets.Property

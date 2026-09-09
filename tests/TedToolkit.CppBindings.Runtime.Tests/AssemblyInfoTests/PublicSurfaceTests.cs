@@ -31,6 +31,19 @@ internal sealed class PublicSurfaceTests
                 "TedToolkit.CppBindings.NativeTypeNameAttribute",
                 "TedToolkit.CppBindings.GeneratedCodeOnlyAttribute",
                 "TedToolkit.CppBindings.NativeError",
+                "TedToolkit.CppBindings.INativeException",
+                "TedToolkit.CppBindings.NativeException",
+                "TedToolkit.CppBindings.NativeArgumentException",
+                "TedToolkit.CppBindings.NativeArgumentOutOfRangeException",
+                "TedToolkit.CppBindings.NativeArithmeticException",
+                "TedToolkit.CppBindings.NativeInvalidOperationException",
+                "TedToolkit.CppBindings.NativeNullObjectException",
+                "TedToolkit.CppBindings.NativeOutOfMemoryException",
+                "TedToolkit.CppBindings.NativeOverflowException",
+                "TedToolkit.CppBindings.NativeStandardException",
+                "TedToolkit.CppBindings.NativeUnknownException",
+                "TedToolkit.CppBindings.NativeErrorExtension",
+                "TedToolkit.CppBindings.NativeErrorProjection",
             ]);
         await Assert.That(assembly.GetReferencedAssemblies().Any(static dependency =>
             dependency.Name?.StartsWith("TedToolkit", StringComparison.Ordinal) == true
@@ -55,16 +68,7 @@ internal sealed class PublicSurfaceTests
                 "TedToolkit.CppBindings.Occt.NativeErrorProjection",
                 "TedToolkit.CppBindings.Occt.IOcctException",
                 "TedToolkit.CppBindings.Occt.OcctException",
-                "TedToolkit.CppBindings.Occt.OcctArgumentException",
-                "TedToolkit.CppBindings.Occt.OcctArgumentOutOfRangeException",
-                "TedToolkit.CppBindings.Occt.OcctArithmeticException",
-                "TedToolkit.CppBindings.Occt.OcctInvalidOperationException",
-                "TedToolkit.CppBindings.Occt.OcctNullObjectException",
-                "TedToolkit.CppBindings.Occt.OcctOutOfMemoryException",
-                "TedToolkit.CppBindings.Occt.OcctOverflowException",
                 "TedToolkit.CppBindings.Occt.OcctFailureException",
-                "TedToolkit.CppBindings.Occt.OcctStandardException",
-                "TedToolkit.CppBindings.Occt.OcctUnknownException",
             ]);
         await Assert.That(assembly.GetReferencedAssemblies().Select(static dependency => dependency.Name))
             .Contains("TedToolkit.CppBindings.Runtime");

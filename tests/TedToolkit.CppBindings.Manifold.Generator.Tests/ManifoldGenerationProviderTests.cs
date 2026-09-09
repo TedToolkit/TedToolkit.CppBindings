@@ -57,6 +57,9 @@ internal sealed class ManifoldGenerationProviderTests
         await Assert.That(native).Contains("static_assert(sizeof(ManifoldAdapter) == 8");
         await Assert.That(native).Contains("Manifold::Error::Cancelled) == 14");
         await Assert.That(native).Contains("NativeApi_GetFunctionTable");
+        await Assert.That(native).Contains("SetError(error, 3, \"std::underflow_error\"");
+        await Assert.That(native).Contains("SetError(error, 8, \"std::exception\"");
+        await Assert.That(native).DoesNotContain("SetError(error, 9, \"std::exception\"");
     }
 
     /// <summary>
@@ -334,14 +337,14 @@ internal sealed class ManifoldGenerationProviderTests
             ["csharp/candidate-inventory.json"] = "28c3acc4f2df029d17d8e262e186bc96f2456ec5f9d4add8fce7b740421591ce",
             ["csharp/layout-inventory.json"] = "10bed8229f54d0adca744c8212fd2cea28b36dc7e137d63c567517dd09abe211",
             ["csharp/managed-inventory.json"] = "ed253a807f5cef558c53ffda92e9d8e5dc22a12175f31cc4156a7040b5a6628c",
-            ["csharp/Manifold.Bindings.g.cs"] = "d839cac9d539f776a6c0b0b043f4e352e6254efca8438c42402a8675593585b9",
+            ["csharp/Manifold.Bindings.g.cs"] = "c452e996e22f3bfdc4b2f1760e7b6bb5c88d4611669c100096d7bd2d828649d0",
             ["csharp/ownership-inventory.json"] = "0d64b61091e096e1ca14a424196adb4eee91b0cf1c293ca78ccb6a12e4477e0b",
             ["csharp/profile-manifest.json"] = "33a74c89a5dd15e82a5ce6f04c0bfb98ec48e41e538ba9182417bf564f4d7cc5",
             ["csharp/source-declaration-inventory.json"] = "28c3acc4f2df029d17d8e262e186bc96f2456ec5f9d4add8fce7b740421591ce",
             ["csharp/toolchain-inventory.json"] = "b71b6de2247af99e79a5f341ee15c277269f63b0d93d4270a042cd2a49e434db",
             ["csharp/unsupported-inventory.json"] = "cad79a0fe5c781a9a1be29283613cce96636972f963ded0d254af06a264fa099",
             ["cpp/CMakeLists.txt"] = "8e714b1521ac5fdcde97158d2b596d249d14ce317b8b7adeec12ab4827d4b27f",
-            ["cpp/ManifoldProfileAdapter.cpp"] = "16c06953062be149c6857607b4b903e210fad60714b36b76abddf7f69ea58b5a",
+            ["cpp/ManifoldProfileAdapter.cpp"] = "5eba66055fd4eea71c4289f6c034d8623a0da4ca919bf87aa9cfd34b7d1b65bd",
             ["cpp/native-inventory.json"] = "164b217105f34e884c48ef77a4af5d2620d36d2287e1bcc50c9ce551a1c522ba",
         };
         var actual = plan.ManagedSources

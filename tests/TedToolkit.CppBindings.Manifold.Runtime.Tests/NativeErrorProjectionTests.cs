@@ -26,12 +26,12 @@ internal sealed class NativeErrorProjectionTests
     {
         var cases = new[]
         {
-            (Kind: 1, ExceptionType: typeof(ManifoldArgumentException)),
-            (Kind: 2, ExceptionType: typeof(ManifoldArgumentOutOfRangeException)),
-            (Kind: 6, ExceptionType: typeof(ManifoldOutOfMemoryException)),
-            (Kind: 7, ExceptionType: typeof(ManifoldOverflowException)),
-            (Kind: 9, ExceptionType: typeof(ManifoldException)),
-            (Kind: 255, ExceptionType: typeof(ManifoldUnknownException)),
+            (Kind: 1, ExceptionType: typeof(NativeArgumentException)),
+            (Kind: 2, ExceptionType: typeof(NativeArgumentOutOfRangeException)),
+            (Kind: 6, ExceptionType: typeof(NativeOutOfMemoryException)),
+            (Kind: 7, ExceptionType: typeof(NativeOverflowException)),
+            (Kind: 8, ExceptionType: typeof(NativeStandardException)),
+            (Kind: 255, ExceptionType: typeof(NativeUnknownException)),
         };
 
         foreach (var testCase in cases)
@@ -39,11 +39,12 @@ internal sealed class NativeErrorProjectionTests
             clearCount = 0;
             var error = CreateError(testCase.Kind, "native.type", "native message", "native stack");
             var exception = Project(ref error);
+            var nativeException = (INativeException)exception;
 
             await Assert.That(exception.GetType()).IsEqualTo(testCase.ExceptionType);
             await Assert.That(exception.Message).IsEqualTo("native message");
-            await Assert.That(exception.NativeTypeName).IsEqualTo("native.type");
-            await Assert.That(exception.NativeStackTrace).IsEqualTo("native stack");
+            await Assert.That(nativeException.NativeTypeName).IsEqualTo("native.type");
+            await Assert.That(nativeException.NativeStackTrace).IsEqualTo("native stack");
             await Assert.That(clearCount).IsEqualTo(1);
             await Assert.That(error.Kind).IsEqualTo(0);
             await Assert.That(error.TypeName).IsEqualTo(0);
@@ -63,7 +64,7 @@ internal sealed class NativeErrorProjectionTests
 
         var exception = Project(ref error);
 
-        await Assert.That(exception).IsTypeOf<ManifoldArgumentException>();
+        await Assert.That(exception).IsTypeOf<NativeArgumentException>();
         await Assert.That(exception.Message).IsEqualTo("Native Manifold operation failed with error kind 1.");
         await Assert.That(clearCount).IsEqualTo(1);
         await Assert.That(error.Kind).IsEqualTo(0);
@@ -90,7 +91,7 @@ internal sealed class NativeErrorProjectionTests
     [Test]
     public async Task Should_have_no_other_provider_dependency_Async()
     {
-        var references = typeof(ManifoldException).Assembly.GetReferencedAssemblies()
+        var references = typeof(NativeErrorProjection).Assembly.GetReferencedAssemblies()
             .Select(static assembly => assembly.Name)
             .Where(static name => name is not null)
             .ToArray();
@@ -100,14 +101,14 @@ internal sealed class NativeErrorProjectionTests
         await Assert.That(references).DoesNotContain("TedToolkit.CppBindings.Fcl.Runtime");
     }
 
-    private static unsafe ManifoldException Project(ref NativeError error)
+    private static unsafe Exception Project(ref NativeError error)
     {
         try
         {
             NativeErrorProjection.ThrowIfFailed(ref error, &ClearError);
             throw new InvalidOperationException("Projection returned for a failed native carrier.");
         }
-        catch (ManifoldException exception)
+        catch (Exception exception) when (exception is INativeException)
         {
             return exception;
         }

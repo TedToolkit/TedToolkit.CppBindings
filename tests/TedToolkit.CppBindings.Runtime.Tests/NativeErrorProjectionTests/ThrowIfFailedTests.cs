@@ -32,16 +32,16 @@ internal sealed class ThrowIfFailedTests
     {
         var cases = new (int Kind, Type ExceptionType)[]
         {
-            (1, typeof(OcctArgumentException)),
-            (2, typeof(OcctArgumentOutOfRangeException)),
-            (3, typeof(OcctArithmeticException)),
-            (4, typeof(OcctInvalidOperationException)),
-            (5, typeof(OcctNullObjectException)),
-            (6, typeof(OcctOutOfMemoryException)),
-            (7, typeof(OcctOverflowException)),
-            (8, typeof(OcctFailureException)),
-            (9, typeof(OcctStandardException)),
-            (255, typeof(OcctUnknownException)),
+            (1, typeof(NativeArgumentException)),
+            (2, typeof(NativeArgumentOutOfRangeException)),
+            (3, typeof(NativeArithmeticException)),
+            (4, typeof(NativeInvalidOperationException)),
+            (5, typeof(NativeNullObjectException)),
+            (6, typeof(NativeOutOfMemoryException)),
+            (7, typeof(NativeOverflowException)),
+            (8, typeof(NativeStandardException)),
+            (9, typeof(OcctFailureException)),
+            (255, typeof(NativeUnknownException)),
         };
 
         foreach (var testCase in cases)
@@ -49,7 +49,7 @@ internal sealed class ThrowIfFailedTests
             var exception = Project(CreateError(testCase.Kind));
 
             await Assert.That(exception.GetType()).IsEqualTo(testCase.ExceptionType);
-            await Assert.That(exception).IsAssignableTo<IOcctException>();
+            await Assert.That(exception).IsAssignableTo<INativeException>();
             await Assert.That(exception.InnerException).IsNull();
         }
     }
@@ -64,14 +64,44 @@ internal sealed class ThrowIfFailedTests
         const int reservedKind = 42;
 
         var exception = Project(CreateError(reservedKind));
-        var occtException = (IOcctException)exception;
+        var nativeException = (INativeException)exception;
 
-        await Assert.That(exception.GetType()).IsEqualTo(typeof(OcctUnknownException));
+        await Assert.That(exception.GetType()).IsEqualTo(typeof(NativeUnknownException));
         await Assert.That(exception.Message)
             .IsEqualTo("Native OCCT operation failed with error kind 42.");
-        await Assert.That(occtException.NativeTypeName).IsNull();
-        await Assert.That(occtException.NativeStackTrace).IsNull();
+        await Assert.That(nativeException.NativeTypeName).IsNull();
+        await Assert.That(nativeException.NativeStackTrace).IsNull();
         await Assert.That(exception.InnerException).IsNull();
+    }
+
+    /// <summary>
+    /// Verifies that the same local number can have independent meanings in different Providers.
+    /// </summary>
+    /// <returns>A task that completes when both local projections finish.</returns>
+    [Test]
+    public async Task Should_allow_provider_extensions_to_reuse_a_local_kind_Async()
+    {
+        var first = ProjectWithExtension(CreateError(9), static (_, _, _, _) => new FirstProviderException());
+        var second = ProjectWithExtension(CreateError(9), static (_, _, _, _) => new SecondProviderException());
+
+        await Assert.That(first).IsTypeOf<FirstProviderException>();
+        await Assert.That(second).IsTypeOf<SecondProviderException>();
+    }
+
+    /// <summary>
+    /// Verifies that a defective Provider extension cannot replace the transported native failure.
+    /// </summary>
+    /// <returns>A task that completes when the fallback assertions finish.</returns>
+    [Test]
+    public async Task Should_preserve_the_native_failure_when_a_provider_extension_throws_Async()
+    {
+        var exception = ProjectWithExtension(
+            CreateError(9),
+            static (_, _, _, _) => throw new InvalidOperationException("Projection failed."));
+
+        await Assert.That(exception).IsTypeOf<NativeUnknownException>();
+        await Assert.That(exception.InnerException).IsTypeOf<InvalidOperationException>();
+        await Assert.That(exception.InnerException!.Message).IsEqualTo("Projection failed.");
     }
 
     /// <summary>
@@ -112,7 +142,7 @@ internal sealed class ThrowIfFailedTests
     public async Task Should_copy_diagnostics_before_clearing_the_native_owner_once_Async()
     {
         var error = CreateError(
-            8,
+            9,
             Marshal.StringToCoTaskMemUTF8("Standard_Failure"),
             Marshal.StringToCoTaskMemUTF8("Native failure"),
             Marshal.StringToCoTaskMemUTF8("native-frame-1"));
@@ -231,26 +261,27 @@ internal sealed class ThrowIfFailedTests
     {
         try
         {
-            NativeErrorProjection.ThrowIfFailed(ref error, clear);
+            global::TedToolkit.CppBindings.Occt.NativeErrorProjection.ThrowIfFailed(ref error, clear);
             return new InvalidOperationException("Projection did not throw for a nonzero error kind.");
         }
-        catch (OcctException exception)
+        catch (Exception exception) when (exception is INativeException)
         {
             return exception;
         }
-        catch (ArgumentException exception)
+    }
+
+    private static unsafe Exception ProjectWithExtension(NativeError error, NativeErrorExtension extension)
+    {
+        try
         {
-            return exception;
+            global::TedToolkit.CppBindings.NativeErrorProjection.ThrowIfFailed(
+                ref error,
+                &ClearNative,
+                "Fixture",
+                extension);
+            return new InvalidOperationException("Projection did not throw for a nonzero error kind.");
         }
-        catch (ArithmeticException exception)
-        {
-            return exception;
-        }
-        catch (InvalidOperationException exception)
-        {
-            return exception;
-        }
-        catch (OutOfMemoryException exception)
+        catch (Exception exception) when (exception is INativeException)
         {
             return exception;
         }
@@ -258,17 +289,17 @@ internal sealed class ThrowIfFailedTests
 
     private static unsafe void ThrowWithCountingFree(ref NativeError error)
     {
-        NativeErrorProjection.ThrowIfFailed(ref error, &CountingFreeNative);
+        global::TedToolkit.CppBindings.Occt.NativeErrorProjection.ThrowIfFailed(ref error, &CountingFreeNative);
     }
 
     private static unsafe void ThrowWithCountingClear(ref NativeError error)
     {
-        NativeErrorProjection.ThrowIfFailed(ref error, &CountingClearNative);
+        global::TedToolkit.CppBindings.Occt.NativeErrorProjection.ThrowIfFailed(ref error, &CountingClearNative);
     }
 
     private static unsafe void ThrowWithNullClear(ref NativeError error)
     {
-        NativeErrorProjection.ThrowIfFailed(
+        global::TedToolkit.CppBindings.Occt.NativeErrorProjection.ThrowIfFailed(
             ref error,
             (delegate* unmanaged[Cdecl]<NativeError*, void>)0);
     }
@@ -341,4 +372,56 @@ internal sealed class ThrowIfFailedTests
 
         *error = default;
     }
+
+#pragma warning disable CA1032, RCS1194
+
+    /// <summary>
+    /// Represents the first Provider's local failure.
+    /// </summary>
+    private sealed class FirstProviderException : Exception, INativeException
+    {
+        /// <inheritdoc/>
+        public string? NativeTypeName
+        {
+            get
+            {
+                return null;
+            }
+        }
+
+        /// <inheritdoc/>
+        public string? NativeStackTrace
+        {
+            get
+            {
+                return null;
+            }
+        }
+    }
+
+    /// <summary>
+    /// Represents the second Provider's local failure.
+    /// </summary>
+    private sealed class SecondProviderException : Exception, INativeException
+    {
+        /// <inheritdoc/>
+        public string? NativeTypeName
+        {
+            get
+            {
+                return null;
+            }
+        }
+
+        /// <inheritdoc/>
+        public string? NativeStackTrace
+        {
+            get
+            {
+                return null;
+            }
+        }
+    }
+
+#pragma warning restore CA1032, RCS1194
 }

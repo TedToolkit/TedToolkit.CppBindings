@@ -50,6 +50,9 @@ internal sealed class FclGenerationProviderTests
         await Assert.That(native).Contains("request.ccd_solver_type = fcl::CCDC_CONSERVATIVE_ADVANCEMENT");
         await Assert.That(native).Contains("fallbackRequest.ccd_motion_type = fcl::CCDM_TRANS");
         await Assert.That(native).Contains("fallbackRequest.ccd_solver_type = fcl::CCDC_POLYNOMIAL_SOLVER");
+        await Assert.That(native).Contains("SetError(error, 3, \"std::underflow_error\"");
+        await Assert.That(native).Contains("SetError(error, 8, \"std::exception\"");
+        await Assert.That(native).DoesNotContain("SetError(error, 9, \"std::exception\"");
     }
 
     /// <summary>Verifies vcpkg is the complete public-header inventory authority.</summary>
@@ -297,7 +300,7 @@ internal sealed class FclGenerationProviderTests
             ["csharp/toolchain-inventory.json"] = "58dbeac44d20fa3ed76650071088edfa63984464a6e871581e211070114eaeb9",
             ["csharp/unsupported-inventory.json"] = "f73435a64d0d9e72d8cabfb834b18bf0d6e90c6df31216c8a4099b34c958b086",
             ["cpp/CMakeLists.txt"] = "0ab605a5cf67153e603981361ca1b985f3681c2d8064b000c2551902a1124bf3",
-            ["cpp/FclProfileAdapter.cpp"] = "40b92424ccabf48da18a6669ccf65a4af761db977a836b5a50e7d6607087edea",
+            ["cpp/FclProfileAdapter.cpp"] = "233184cdebcce6c795f9a10276ac508f00bcd4ea1ceb77df60f28dbf6fdd3a23",
             ["cpp/native-inventory.json"] = "57bbc0fc677e7a049337c6d6382862f8a76f690a059765c61adf6072a108bc09",
         };
         var actual = plan.ManagedSources

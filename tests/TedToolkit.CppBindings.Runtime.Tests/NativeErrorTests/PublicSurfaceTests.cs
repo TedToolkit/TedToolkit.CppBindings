@@ -66,12 +66,16 @@ internal sealed class PublicSurfaceTests
         await Assert.That(method!.GetCustomAttribute<GeneratedCodeOnlyAttribute>()).IsNotNull();
 
         var parameters = method.GetParameters();
-        await Assert.That(parameters.Length).IsEqualTo(2);
+        await Assert.That(parameters.Length).IsEqualTo(4);
         await Assert.That(parameters[0].ParameterType).IsEqualTo(typeof(NativeError).MakeByRefType());
         await Assert.That(parameters[1].ParameterType.IsFunctionPointer).IsTrue();
         await Assert.That(parameters[1].ParameterType.GetFunctionPointerParameterTypes())
             .IsEquivalentTo([typeof(NativeError).MakePointerType(),]);
         await Assert.That(parameters[1].ParameterType.GetFunctionPointerReturnType()).IsEqualTo(typeof(void));
+        await Assert.That(parameters[2].ParameterType).IsEqualTo(typeof(string));
+        await Assert.That(parameters[2].HasDefaultValue).IsTrue();
+        await Assert.That(parameters[3].ParameterType).IsEqualTo(typeof(NativeErrorExtension));
+        await Assert.That(parameters[3].HasDefaultValue).IsTrue();
         await Assert.That(typeof(NativeError).Assembly.GetType("TedToolkit.CppBindings.NativeErrorClear")).IsNull();
     }
 }

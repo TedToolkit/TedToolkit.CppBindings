@@ -41,7 +41,8 @@ public sealed class BindingNativeEmitter(RecordModel record, BindingEmissionProf
         var builder = new StringBuilder(emissionProfile.NativePreamble);
         if (hasThrowingMethods)
         {
-            _ = builder.Append(emissionProfile.NativeErrorPreamble);
+            _ = builder.Append(emissionProfile.NativeErrorPreamble)
+                .Append("#include <exception>\n#include <new>\n#include <stdexcept>\n");
         }
 
         foreach (var header in GetRequiredHeaders(record))
@@ -609,24 +610,28 @@ public sealed class BindingNativeEmitter(RecordModel record, BindingEmissionProf
         _ = builder.Append("    }\n");
         foreach (var projection in emissionProfile.NativeExceptionProjections)
         {
-            _ = builder.Append("    catch (const ").Append(projection.CppType).Append("& exception)\n    {\n")
-                .Append("        ").Append(emissionProfile.NativeErrorSetter).Append("(__error, ")
-                .Append(projection.Code).Append(", ").Append(projection.NativeTypeExpression).Append(", ")
-                .Append(projection.MessageExpression);
-            if (projection.StackExpression is not null)
-            {
-                _ = builder.Append(", ").Append(projection.StackExpression);
-            }
-
-            _ = builder.Append(");\n        ").Append(failureReturn).Append("\n    }\n");
+            AppendCatch(builder, projection, failureReturn);
         }
 
-        _ = builder.Append("    catch (...)\n    {\n        ").Append(emissionProfile.NativeErrorSetter)
-            .Append("(__error, ").Append(emissionProfile.UnknownNativeExceptionCode)
-            .Append(", nullptr, nullptr");
-        if (emissionProfile.UnknownNativeStackExpression is not null)
+        _ = builder.Append(BindingNativeErrorCatchEmitter.Render(
+            emissionProfile.NativeErrorSetter,
+            "__error",
+            failureReturn,
+            stackExpression: emissionProfile.UnknownNativeStackExpression));
+    }
+
+    private void AppendCatch(
+        StringBuilder builder,
+        BindingNativeExceptionProjection projection,
+        string failureReturn)
+    {
+        _ = builder.Append("    catch (const ").Append(projection.CppType).Append("& exception)\n    {\n")
+            .Append("        ").Append(emissionProfile.NativeErrorSetter).Append("(__error, ")
+            .Append(projection.Code).Append(", ").Append(projection.NativeTypeExpression).Append(", ")
+            .Append(projection.MessageExpression);
+        if (projection.StackExpression is not null)
         {
-            _ = builder.Append(", ").Append(emissionProfile.UnknownNativeStackExpression);
+            _ = builder.Append(", ").Append(projection.StackExpression);
         }
 
         _ = builder.Append(");\n        ").Append(failureReturn).Append("\n    }\n");
