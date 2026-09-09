@@ -45,6 +45,9 @@ internal sealed class FclGenerationProviderTests
         await Assert.That(native).Contains("request.ccd_solver_type = fcl::CCDC_CONSERVATIVE_ADVANCEMENT");
         await Assert.That(native).Contains("fallbackRequest.ccd_motion_type = fcl::CCDM_TRANS");
         await Assert.That(native).Contains("fallbackRequest.ccd_solver_type = fcl::CCDC_POLYNOMIAL_SOLVER");
+        await Assert.That(native).Contains("SetError(error, 3, \"std::underflow_error\"");
+        await Assert.That(native).Contains("SetError(error, 8, \"std::exception\"");
+        await Assert.That(native).DoesNotContain("SetError(error, 9, \"std::exception\"");
     }
 
     /// <summary>Verifies every locked BVH status name and value.</summary>

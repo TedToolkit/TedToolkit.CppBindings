@@ -83,11 +83,6 @@ public sealed class BindingEmissionProfile
     public IReadOnlyList<BindingNativeExceptionProjection> NativeExceptionProjections { get; init; } = [];
 
     /// <summary>
-    /// Gets the error code used for an unknown native exception.
-    /// </summary>
-    public int UnknownNativeExceptionCode { get; init; } = 255;
-
-    /// <summary>
     /// Gets the optional stack expression passed when projecting an unknown native exception.
     /// </summary>
     public string? UnknownNativeStackExpression { get; init; }
@@ -129,7 +124,6 @@ public sealed class BindingEmissionProfile
             NativeErrorType = NativeErrorType,
             NativeErrorSetter = NativeErrorSetter,
             NativeExceptionProjections = Array.AsReadOnly(NativeExceptionProjections.ToArray()),
-            UnknownNativeExceptionCode = UnknownNativeExceptionCode,
             UnknownNativeStackExpression = UnknownNativeStackExpression,
             IntrusiveReleaseCondition = IntrusiveReleaseCondition,
             IntrusiveDeleteStatement = IntrusiveDeleteStatement,

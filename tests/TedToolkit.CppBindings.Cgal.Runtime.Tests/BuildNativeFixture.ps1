@@ -12,7 +12,19 @@ $sourcePath = [System.IO.Path]::GetFullPath($Source)
 $outputPath = [System.IO.Path]::GetFullPath($Output)
 $outputDirectory = Split-Path -Parent $outputPath
 $sourceDirectory = Split-Path -Parent $sourcePath
-$buildDirectory = Join-Path $PSScriptRoot 'obj/NativeFixture'
+$hasher = [System.Security.Cryptography.SHA256]::Create()
+try {
+    $sourceBytes = [System.Text.Encoding]::UTF8.GetBytes($sourceDirectory)
+    $sourceHash = -join ($hasher.ComputeHash($sourceBytes)[0..5] | ForEach-Object { $_.ToString('x2') })
+}
+finally {
+    $hasher.Dispose()
+}
+
+# Keep CMake/MSBuild intermediates short enough for native toolchain tasks that still enforce MAX_PATH.
+# Visual C++ rejects build directories beneath TEMP, so use the per-user local application data root.
+$localBuildRoot = Join-Path ([System.Environment]::GetFolderPath('LocalApplicationData')) 'TedToolkit/NativeBuild'
+$buildDirectory = Join-Path $localBuildRoot "CgalRuntimeTests.$sourceHash"
 $vcpkgRoot = if ($env:VCPKG_ROOT) { $env:VCPKG_ROOT } else { 'C:\vcpkg' }
 $toolchain = Join-Path $vcpkgRoot 'scripts/buildsystems/vcpkg.cmake'
 

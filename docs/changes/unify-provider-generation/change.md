@@ -146,9 +146,10 @@ CMake, MSVC, and installed locked provider dependencies.
 <!-- section: delivery-brief -->
 ## Delivery disposition
 
-The shared semantic extension and its first proving provider, the second duplicated provider,
-the existing semantic-provider cleanup, and final cross-provider enforcement are independently
-verifiable outcomes with real supplied inputs. `work-items.md` owns their separately approved map.
+The common native-error boundary, shared semantic extension and its first proving provider, the
+second duplicated provider, existing semantic-provider cleanup, and final cross-provider enforcement
+are independently verifiable outcomes with real supplied inputs. `work-items.md` owns their
+separately approved map.
 
 <!-- section: proof-plan -->
 ## Proof

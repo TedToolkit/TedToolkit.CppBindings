@@ -29,13 +29,13 @@ internal sealed class NativeErrorProjectionTests
             string MessageFragment,
             bool HasNativeStack)[]
         {
-            (1, typeof(CgalArgumentException), "std::invalid_argument", "fixture invalid argument", false),
-            (2, typeof(CgalArgumentOutOfRangeException), "std::out_of_range", "fixture out of range", false),
-            (3, typeof(CgalOutOfMemoryException), "std::bad_alloc", "fixture bad allocation", false),
-            (4, typeof(CgalArithmeticException), "std::overflow_error", "fixture overflow", false),
-            (5, typeof(CgalArithmeticException), "std::underflow_error", "fixture underflow", false),
-            (6, typeof(CgalStandardException), "std::exception", "fixture standard exception", false),
-            (7, typeof(CgalUnknownException), null, "error kind 255", false),
+            (1, typeof(NativeArgumentException), "std::invalid_argument", "fixture invalid argument", false),
+            (2, typeof(NativeArgumentOutOfRangeException), "std::out_of_range", "fixture out of range", false),
+            (3, typeof(NativeOutOfMemoryException), "std::bad_alloc", "fixture bad allocation", false),
+            (4, typeof(NativeOverflowException), "std::overflow_error", "fixture overflow", false),
+            (5, typeof(NativeArithmeticException), "std::underflow_error", "fixture underflow", false),
+            (6, typeof(NativeStandardException), "std::exception", "fixture standard exception", false),
+            (7, typeof(NativeUnknownException), null, "error kind 255", false),
             (10, typeof(CgalErrorException), "CGAL::Error_exception", "fixture error", true),
             (11, typeof(CgalPreconditionException), "CGAL::Precondition_exception", "fixture precondition", true),
             (12, typeof(CgalPostconditionException), "CGAL::Postcondition_exception", "fixture postcondition", true),
@@ -51,17 +51,18 @@ internal sealed class NativeErrorProjectionTests
             var exception = Project(NativeFixture.InvokeFailure(testCase.Scenario));
 
             await Assert.That(exception.GetType()).IsEqualTo(testCase.ExceptionType);
-            await Assert.That(exception).IsAssignableTo<CgalException>();
+            await Assert.That(exception).IsAssignableTo<INativeException>();
             await Assert.That(exception.Message).Contains(testCase.MessageFragment);
-            await Assert.That(exception.NativeTypeName).IsEqualTo(testCase.NativeType);
+            var nativeException = (INativeException)exception;
+            await Assert.That(nativeException.NativeTypeName).IsEqualTo(testCase.NativeType);
             if (testCase.HasNativeStack)
             {
-                await Assert.That(exception.NativeStackTrace).IsNotNull();
-                await Assert.That(exception.NativeStackTrace!).Contains("CgalRuntimeFixture.cpp");
+                await Assert.That(nativeException.NativeStackTrace).IsNotNull();
+                await Assert.That(nativeException.NativeStackTrace!).Contains("CgalRuntimeFixture.cpp");
             }
             else
             {
-                await Assert.That(exception.NativeStackTrace).IsNull();
+                await Assert.That(nativeException.NativeStackTrace).IsNull();
             }
 
             await Assert.That(NativeFixture.DiagnosticClearCount).IsEqualTo(1);
@@ -77,11 +78,12 @@ internal sealed class NativeErrorProjectionTests
     {
         NativeFixture.ResetCounters();
         var exception = Project(NativeFixture.CreateMalformedError());
+        var nativeException = (INativeException)exception;
 
         await Assert.That(exception).IsTypeOf<CgalPreconditionException>();
         await Assert.That(exception.Message).IsEqualTo("Native CGAL operation failed with error kind 11.");
-        await Assert.That(exception.NativeTypeName).IsEqualTo("CGAL::Precondition_exception");
-        await Assert.That(exception.NativeStackTrace).IsEqualTo("fixture.cpp:42");
+        await Assert.That(nativeException.NativeTypeName).IsEqualTo("CGAL::Precondition_exception");
+        await Assert.That(nativeException.NativeStackTrace).IsEqualTo("fixture.cpp:42");
         await Assert.That(NativeFixture.DiagnosticClearCount).IsEqualTo(1);
     }
 
@@ -116,14 +118,14 @@ internal sealed class NativeErrorProjectionTests
         await Assert.That(references).DoesNotContain("TedToolkit.CppBindings.Occt.Windows");
     }
 
-    private static unsafe CgalException Project(NativeError error)
+    private static unsafe Exception Project(NativeError error)
     {
         try
         {
             NativeErrorProjection.ThrowIfFailed(ref error, NativeFixture.GetClearError());
             throw new InvalidOperationException("Projection returned for a nonzero native error.");
         }
-        catch (CgalException exception)
+        catch (Exception exception) when (exception is INativeException)
         {
             return exception;
         }

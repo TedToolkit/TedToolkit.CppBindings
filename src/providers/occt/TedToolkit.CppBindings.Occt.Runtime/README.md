@@ -32,20 +32,16 @@ receiver. The lowercase layout does not implement `ICppOwner<T>`.
 
 ## Native errors
 
-`NativeErrorProjection.ThrowIfFailed` accepts the generic `NativeError` carrier and the producing
-library's unmanaged clear callback. Success returns without cleanup. Failure copies available UTF-8
-diagnostics, consumes the native carrier exactly once, and throws a concrete mapped exception.
+`NativeErrorProjection.ThrowIfFailed` is a thin generated-code facade over Shared projection. Shared
+copies UTF-8 diagnostics, consumes the carrier exactly once, and owns common kinds 1 through 8 and
+255. OCCT extends that contract only for local kind 9, which maps `Standard_Failure` to
+`OcctFailureException`; ordinary `std::exception` remains Shared kind 8 and becomes
+`NativeStandardException`.
 
-`OcctArgumentException`, `OcctArgumentOutOfRangeException`, `OcctArithmeticException`,
-`OcctInvalidOperationException`, `OcctNullObjectException`, `OcctOutOfMemoryException`, and
-`OcctOverflowException` expose the corresponding native categories. `OcctFailureException`,
-`OcctStandardException`, and `OcctUnknownException` distinguish other OCCT, standard C++, and
-unknown failures. The native discriminator is private; unknown nonzero values fail as
-`OcctUnknownException`. Consumers can catch the exceptions, not construct or derive them.
-
-`IOcctException` carries optional native type name and native stack text. Native stack text is
-distinct from managed `Exception.StackTrace`. Generated-only projection/constructors are diagnostic
-hooks, not a security boundary or an alternative handwritten calling convention.
+`IOcctException` extends the common `INativeException` diagnostic contract for OCCT-local failures.
+Native stack text is distinct from managed `Exception.StackTrace`. Generated-only
+projection/constructors are diagnostic hooks, not a security boundary or an alternative handwritten
+calling convention.
 
 ## Verify locally
 

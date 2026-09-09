@@ -14,19 +14,4 @@ namespace TedToolkit.CppBindings.Occt;
 /// This interface identifies a diagnostic shape, not trusted native provenance. The library-provided
 /// <c>Occt*Exception</c> types are constructed only by Runtime.
 /// </remarks>
-public interface IOcctException
-{
-    /// <summary>
-    /// Gets the copied native exception type name, or <see langword="null"/> when unavailable.
-    /// </summary>
-    string? NativeTypeName { get; }
-
-    /// <summary>
-    /// Gets the copied native stack text, or <see langword="null"/> when capture was unavailable.
-    /// </summary>
-    /// <remarks>
-    /// This value is independent of <see cref="Exception.StackTrace"/>, which records the managed
-    /// throw path.
-    /// </remarks>
-    string? NativeStackTrace { get; }
-}
+public interface IOcctException : INativeException;

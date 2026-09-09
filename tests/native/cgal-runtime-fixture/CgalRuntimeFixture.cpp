@@ -316,11 +316,11 @@ CGAL_RUNTIME_EXPORT void CgalRuntime_InvokeFailure(int scenario, NativeError* er
     }
     catch (const std::underflow_error& exception)
     {
-        SetError(error, 7, "std::underflow_error", exception.what(), nullptr);
+        SetError(error, 3, "std::underflow_error", exception.what(), nullptr);
     }
     catch (const std::exception& exception)
     {
-        SetError(error, 9, "std::exception", exception.what(), nullptr);
+        SetError(error, 8, "std::exception", exception.what(), nullptr);
     }
     catch (...)
     {

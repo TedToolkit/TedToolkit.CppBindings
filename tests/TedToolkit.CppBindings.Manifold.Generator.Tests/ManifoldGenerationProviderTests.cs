@@ -52,6 +52,9 @@ internal sealed class ManifoldGenerationProviderTests
         await Assert.That(native).Contains("static_assert(sizeof(ManifoldAdapter) == 8");
         await Assert.That(native).Contains("Manifold::Error::Cancelled) == 14");
         await Assert.That(native).Contains("NativeApi_GetFunctionTable");
+        await Assert.That(native).Contains("SetError(error, 3, \"std::underflow_error\"");
+        await Assert.That(native).Contains("SetError(error, 8, \"std::exception\"");
+        await Assert.That(native).DoesNotContain("SetError(error, 9, \"std::exception\"");
     }
 
     /// <summary>

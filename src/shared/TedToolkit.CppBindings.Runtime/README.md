@@ -26,10 +26,14 @@ directly with `PrivateAssets="all"`; diagnostics do not flow through Runtime.
 - `GeneratedCodeOnlyAttribute` identifies wrapper implementation hooks. It is suppressible
   compiler guidance, not an authorization boundary.
 - `NativeError` is the generated-only sequential carrier: one integer kind and three native
-  diagnostic pointers. Category interpretation and cleanup belong to the producing provider.
+  diagnostic pointers. `NativeErrorProjection` copies and clears that carrier, then projects the
+  fixed common kinds through `INativeException`: argument (1), range (2), arithmetic (3), invalid
+  operation (4), null object (5), allocation (6), overflow (7), standard C++ (8), and unknown
+  native failure (255). Provider runtimes supply only an optional factory for their local kinds.
 
-All public types above use the `TedToolkit.CppBindings` namespace. OCCT intrusive handles and
-exception interpretation belong to [OCCT Runtime](../../providers/occt/TedToolkit.CppBindings.Occt.Runtime/README.md).
+All public types above use the `TedToolkit.CppBindings` namespace. OCCT intrusive handles and its
+local `Standard_Failure` interpretation belong to
+[OCCT Runtime](../../providers/occt/TedToolkit.CppBindings.Occt.Runtime/README.md).
 
 ## Lifetime and compatibility
 

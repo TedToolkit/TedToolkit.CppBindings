@@ -33,6 +33,7 @@ NativeApi/function table, provider-neutral bootstrap implementation, or common R
 | UPG-001 | FCL and the reusable shared generation contract are verified | UPG-001 is Verified on the selected integration baseline |
 | UPG-002 | Manifold is verified on the shared generation contract | UPG-002 is Verified on the selected integration baseline |
 | UPG-003 | CGAL and OCCT residual generic emitters are consolidated | UPG-003 is Verified on the selected integration baseline |
+| UPG-005 | The common native-error boundary and provider-local extensions are verified | UPG-005 is Verified on the selected integration baseline |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility

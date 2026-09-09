@@ -26,21 +26,22 @@ internal sealed class NativeErrorProjectionTests
     {
         var cases = new[]
         {
-            (Kind: 1, Type: typeof(FclArgumentException)),
-            (Kind: 2, Type: typeof(FclArgumentOutOfRangeException)),
-            (Kind: 6, Type: typeof(FclOutOfMemoryException)),
-            (Kind: 9, Type: typeof(FclException)),
-            (Kind: 255, Type: typeof(FclUnknownException)),
+            (Kind: 1, Type: typeof(NativeArgumentException)),
+            (Kind: 2, Type: typeof(NativeArgumentOutOfRangeException)),
+            (Kind: 6, Type: typeof(NativeOutOfMemoryException)),
+            (Kind: 8, Type: typeof(NativeStandardException)),
+            (Kind: 255, Type: typeof(NativeUnknownException)),
         };
         foreach (var testCase in cases)
         {
             clearCount = 0;
             var error = CreateError(testCase.Kind, "native.type", "native message", "native stack");
             var exception = Project(ref error);
+            var nativeException = (INativeException)exception;
             await Assert.That(exception.GetType()).IsEqualTo(testCase.Type);
             await Assert.That(exception.Message).IsEqualTo("native message");
-            await Assert.That(exception.NativeTypeName).IsEqualTo("native.type");
-            await Assert.That(exception.NativeStackTrace).IsEqualTo("native stack");
+            await Assert.That(nativeException.NativeTypeName).IsEqualTo("native.type");
+            await Assert.That(nativeException.NativeStackTrace).IsEqualTo("native stack");
             await Assert.That(clearCount).IsEqualTo(1);
             await Assert.That(error.Kind).IsEqualTo(0);
         }
@@ -79,21 +80,21 @@ internal sealed class NativeErrorProjectionTests
     [Test]
     public async Task Should_have_no_other_provider_dependency_Async()
     {
-        var references = typeof(FclException).Assembly.GetReferencedAssemblies()
+        var references = typeof(NativeErrorProjection).Assembly.GetReferencedAssemblies()
             .Select(static value => value.Name).Where(static value => value is not null).ToArray();
         await Assert.That(references).DoesNotContain("TedToolkit.CppBindings.Occt.Runtime");
         await Assert.That(references).DoesNotContain("TedToolkit.CppBindings.Cgal.Runtime");
         await Assert.That(references).DoesNotContain("TedToolkit.CppBindings.Manifold.Runtime");
     }
 
-    private static unsafe FclException Project(ref NativeError error)
+    private static unsafe Exception Project(ref NativeError error)
     {
         try
         {
             NativeErrorProjection.ThrowIfFailed(ref error, &Clear);
             throw new InvalidOperationException("Projection returned for a failed carrier.");
         }
-        catch (FclException exception)
+        catch (Exception exception) when (exception is INativeException)
         {
             return exception;
         }

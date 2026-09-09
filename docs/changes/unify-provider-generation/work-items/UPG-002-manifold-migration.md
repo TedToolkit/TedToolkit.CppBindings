@@ -8,8 +8,8 @@
 ## Outcome
 
 The locked Manifold Generator expresses its mesh buffers, owned results, status, and operations as
-provider semantic inputs consumed by Shared, with its complete private binding renderer and common
-Runtime projection removed.
+provider semantic inputs consumed by Shared, with its complete private binding renderer removed and
+the verified UPG-005 Runtime projection preserved.
 
 <!-- work-item: scope -->
 ## Scope and non-goals
@@ -18,8 +18,7 @@ Runtime projection removed.
   of the Shared semantic model.
 - In scope: Manifold profile loading, declarations and provider policy, migration to
   `SemanticGenerationProvider`, removal of its private plan/output path and full C#/C++ renderer, and
-  focused generation proof; migration of native common failures to Shared exceptions; and local kind
-  7 projection to the Shared overflow category.
+  focused generation proof; and preservation of the verified Shared native-error consumption.
 - Non-goals: widening Shared beyond semantics already proved by FCL and Manifold, changing Manifold
   provider-specific status/result contracts, or changing the locked public binding profile.
 - Likely touchpoints (non-binding): Manifold Generator sources/resources/tests and any narrowly
@@ -30,7 +29,8 @@ Runtime projection removed.
 
 | Prerequisite or blocker | Concrete input or guarantee | Evidence |
 | --- | --- | --- |
-| UPG-001 | Shared can represent and emit verified provider-neutral buffers, projected results, standard bootstrap/error infrastructure, and plans | UPG-001 is Verified on the selected integration baseline |
+| UPG-001 | Shared can represent and emit verified provider-neutral buffers, projected results, standard bootstrap, and plans | UPG-001 is Verified on the selected integration baseline |
+| UPG-005 | Shared owns common native-error generation and Runtime projection | UPG-005 is Verified on the selected integration baseline |
 
 <!-- work-item: contract-coverage -->
 ## Contract responsibility
@@ -39,7 +39,6 @@ Runtime projection removed.
 | --- | --- | --- |
 | AC-02 | Owns | Completes the Manifold migration without a second renderer authority |
 | AC-04 | Supports | Supplies preserved Manifold generation, package, and native behavior |
-| AC-05 | Supports | Supplies Manifold consumption of the Shared projection while keeping extension numbers local |
 
 <!-- work-item: delivery-constraints -->
 ## Constraints

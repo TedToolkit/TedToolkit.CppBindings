@@ -10,7 +10,7 @@ namespace TedToolkit.CppBindings.Cgal;
 /// <summary>
 /// Represents another native <c>CGAL::Failure_exception</c>.
 /// </summary>
-public class CgalFailureException : CgalException
+public class CgalFailureException : CgalException, INativeException
 {
     /// <summary>
     /// Initializes a new instance of the <see cref="CgalFailureException"/> class.

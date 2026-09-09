@@ -183,7 +183,8 @@ public sealed class BindingSemanticEngine
         if (providerModel.Declarations.Any(static declaration => declaration is null)
             || providerModel.Enums.Any(static declaration => declaration is null)
             || providerModel.ManagedSources.Any(static source => source is null || source.RenderAsync is null)
-            || providerModel.NativeSources.Any(static source => source is null || source.RenderAsync is null))
+            || providerModel.NativeSources.Any(static source => source is null || source.RenderAsync is null)
+            || providerModel.EmissionProfile.NativeExceptionProjections.Any(static projection => projection is null))
         {
             throw new ArgumentException("Provider model collections cannot contain null values.", nameof(providerModel));
         }
@@ -195,6 +196,27 @@ public sealed class BindingSemanticEngine
         ArgumentNullException.ThrowIfNull(providerModel.EmissionProfile.NativeErrorPreamble);
         ArgumentNullException.ThrowIfNull(providerModel.EmissionProfile.NativePreambleHeaders);
         ArgumentNullException.ThrowIfNull(providerModel.EmissionProfile.NativeExceptionProjections);
+
+        foreach (var projection in providerModel.EmissionProfile.NativeExceptionProjections)
+        {
+            ArgumentException.ThrowIfNullOrWhiteSpace(projection.CppType);
+            ArgumentException.ThrowIfNullOrWhiteSpace(projection.NativeTypeExpression);
+            ArgumentException.ThrowIfNullOrWhiteSpace(projection.MessageExpression);
+
+            if (projection.Code is <= 8 or >= 255)
+            {
+                throw new ArgumentException(
+                    $"Provider native exception '{projection.CppType}' must use a code from 9 through 254.",
+                    nameof(providerModel));
+            }
+
+            if (BindingNativeErrorCatchEmitter.IsSharedExceptionType(projection.CppType))
+            {
+                throw new ArgumentException(
+                    $"Provider native exception '{projection.CppType}' is already projected by Shared.",
+                    nameof(providerModel));
+            }
+        }
 
         if (providerModel.NativeProject is null)
         {

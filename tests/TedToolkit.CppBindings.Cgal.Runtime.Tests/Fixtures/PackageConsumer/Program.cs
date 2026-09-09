@@ -34,12 +34,6 @@ var expected = new[]
     typeof(CgalAssertionException),
     typeof(CgalTestException),
     typeof(CgalWarningException),
-    typeof(CgalArgumentException),
-    typeof(CgalArgumentOutOfRangeException),
-    typeof(CgalOutOfMemoryException),
-    typeof(CgalArithmeticException),
-    typeof(CgalStandardException),
-    typeof(CgalUnknownException),
     typeof(CgalUnknownResultException),
     typeof(NativeErrorProjection),
 };

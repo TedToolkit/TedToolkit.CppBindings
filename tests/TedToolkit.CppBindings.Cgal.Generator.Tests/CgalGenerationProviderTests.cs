@@ -182,6 +182,49 @@ internal sealed class CgalGenerationProviderTests
     }
 
     /// <summary>
+    /// Verifies provider-local failures precede the fixed Shared standard catch sequence.
+    /// </summary>
+    /// <returns>A task that completes when native error emission assertions finish.</returns>
+    [Test]
+    public async Task Should_emit_shared_standard_errors_after_cgal_local_errors_without_locked_toolchain_Async()
+    {
+        var provider = CreateProvider(requireLockedToolchain: false);
+        var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+        var native = await RenderAsync(plan.CppSources).ConfigureAwait(false);
+        var source = native["TedToolkit_CppBindings_Cgal_Point_2.cpp"];
+        string[] catches =
+        [
+            "catch (const CGAL::Error_exception& exception)",
+            "catch (const CGAL::Precondition_exception& exception)",
+            "catch (const CGAL::Postcondition_exception& exception)",
+            "catch (const CGAL::Assertion_exception& exception)",
+            "catch (const CGAL::Test_exception& exception)",
+            "catch (const CGAL::Warning_exception& exception)",
+            "catch (const CGAL::Failure_exception& exception)",
+            "catch (const std::bad_alloc& exception)",
+            "catch (const std::out_of_range& exception)",
+            "catch (const std::overflow_error& exception)",
+            "catch (const std::underflow_error& exception)",
+            "catch (const std::invalid_argument& exception)",
+            "catch (const std::domain_error& exception)",
+            "catch (const std::logic_error& exception)",
+            "catch (const std::exception& exception)",
+            "catch (...)",
+        ];
+        var positions = catches.Select(item => source.IndexOf(item, StringComparison.Ordinal)).ToArray();
+
+        await Assert.That(positions.All(static position => position >= 0)).IsTrue();
+        await Assert.That(positions.SequenceEqual(positions.Order())).IsTrue();
+        await Assert.That(source).Contains("Cgal_NativeError_Set(__error, 10, \"CGAL::Error_exception\"");
+        await Assert.That(source).Contains("Cgal_NativeError_Set(__error, 16, \"CGAL::Failure_exception\"");
+        await Assert.That(source).Contains("Cgal_NativeError_Set(__error, 7, \"std::overflow_error\"");
+        await Assert.That(source).Contains("Cgal_NativeError_Set(__error, 3, \"std::underflow_error\"");
+        await Assert.That(source).Contains("Cgal_NativeError_Set(__error, 8, \"std::exception\"");
+        await Assert.That(source).Contains("Cgal_NativeError_Set(__error, 255, nullptr, nullptr");
+        await Assert.That(source).DoesNotContain("Cgal_NativeError_Set(__error, 9, \"std::exception\"");
+    }
+
+    /// <summary>
     /// Verifies an explicit profile document is accepted without mutating the embedded default authority.
     /// </summary>
     /// <returns>A task that completes when assertions finish.</returns>
