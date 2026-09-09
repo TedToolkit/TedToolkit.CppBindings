@@ -7,11 +7,13 @@
 - Applicable product intent: None
 - Governing principles: [Repository design principles](../principles/README.md)
 - Governing platform boundary: [C++ bindings platform architecture](cpp-bindings-platform.md)
-- Related ADRs: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md) and
-  [ADR-005](../adr/ADR-005-provider-native-package-isolation.md)
+- Related ADRs: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md),
+  [ADR-005](../adr/ADR-005-provider-native-package-isolation.md), and
+  [ADR-006](../adr/ADR-006-shared-native-error-projection.md)
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26;
   declaration-level alignment admission and cyclic handle field reference projection approved on
-  2026-09-04; ordinary overlapping-field reference projection approved on 2026-09-05.
+  2026-09-04; ordinary overlapping-field reference projection approved on 2026-09-05; Shared
+  native-error projection and Provider-local extensions approved on 2026-09-09.
 
 ## Current architecture
 
@@ -52,8 +54,9 @@ physically present only as an inactive migration recovery artifact until the gen
 passes, after which current source, build, fixtures, output, and documentation remove it.
 
 `TedToolkit.CppBindings.Runtime` contains only handwritten, declaration-agnostic managed
-mechanisms. Each provider Runtime contains only declaration-agnostic provider semantics: OCCT owns
-intrusive-handle behavior, while CGAL owns failure and finite polymorphic-result contracts. Concrete
+mechanisms, including common native-error diagnostic consumption and exception projection. Each
+provider Runtime contains only declaration-agnostic provider semantics: OCCT owns intrusive-handle
+behavior and its local failures, while CGAL owns local checks and finite polymorphic-result contracts. Concrete
 layouts, imports, exports, function tables, operation bodies, closed-generic registrations, and
 release functions belong to generated wrapper assemblies such as the OCCT and CGAL Windows
 packages. A wrapper uses the runtime packages' ordinary public API.
@@ -339,20 +342,29 @@ itself keep its managed owner reachable, and the JIT may otherwise shorten that 
 ### Managed failures and diagnostics
 
 Native failures are caught before crossing the boundary and projected to stable, concrete managed
-exception types. The private native error discriminator exists only to transport failure identity
-across the C boundary; it is not exposed as a parallel public managed classification. The concrete
-exception type is the managed classification authority. Diagnostic strings remain native-owned
-only until the managed projection copies them; the matching native artifact releases their storage.
-No last-error global or thread-local state is part of the contract.
+exception types. Shared owns `None=0`, `Argument=1`, `ArgumentOutOfRange=2`, `Arithmetic=3`,
+`InvalidOperation=4`, `NullObject=5`, `OutOfMemory=6`, `Overflow=7`, `StandardException=8`, and
+`Unknown=255`. Values 9 through 254 are local to each Provider Generator/Runtime pair and need not
+be unique across Providers. Provider typed catches precede the immutable Shared standard C++ catch
+sequence; an ordinary `std::exception` maps to 8, OCCT `Standard_Failure` maps to local 9, CGAL
+overflow maps to 7, and CGAL underflow maps to 3.
 
-Every generated managed OCCT operation consumes its private native error return. Success continues
-with the projected C++ result; each recognized failure category consumes the matching same-library
-diagnostic owner and throws its approved concrete managed exception type. OCCT failures, standard
-C++ exceptions, and unknown native failures remain distinct managed exception types; an
-unrecognized discriminator is projected as the unknown-native-failure type. The generated public
-API exposes neither the native error carrier nor its discriminator and does not add a parallel
-`Try` or error-returning surface. Release and cleanup remain non-throwing `void` paths and therefore
-never participate in managed error projection.
+The private native error discriminator exists only to transport failure identity across the C
+boundary; it is not exposed as a parallel public managed classification. The concrete exception
+type is the managed classification authority. Shared Runtime copies strict UTF-8 diagnostics,
+projects every Shared kind to its `Native*Exception` family, and invokes the originating native
+artifact's clear export exactly once for every failure. A Provider extension sees copied diagnostics
+only for an otherwise-unrecognized local kind and may create its local exception without owning
+native storage. If it declines the kind, Shared throws the unknown-native-failure type. Diagnostic
+copy or Provider projection failure never suppresses the native failure or skips cleanup. No
+last-error global or thread-local state is part of the contract.
+
+Every generated managed operation consumes its private native error return. Success continues with
+the projected C++ result; each recognized failure category throws its approved Shared or
+Provider-specific concrete exception type. The generated public API exposes neither the native
+error carrier nor its discriminator and does not add a parallel `Try` or error-returning surface.
+Release and cleanup remain non-throwing `void` paths and therefore never participate in managed
+error projection.
 
 Generated wrappers in independent assemblies access the Runtime error carrier and projection entry
 point through public contracts marked `GeneratedCodeOnlyAttribute`. Public visibility provides CLR
@@ -448,6 +460,10 @@ generated and proved platform binding artifact; replacing only the native asset 
   disposal.
 - Keep Runtime declaration-agnostic and wrappers equally capable through public API only.
 - Contain all native exceptions and perform every cleanup through the originating native artifact.
+- Keep Shared kinds fixed at 0 through 8 and 255. Treat 9 through 254 as Provider-local values with
+  no cross-Provider uniqueness requirement, and never let a Provider reinterpret a Shared kind.
+- Keep common diagnostic consumption and `Native*Exception` projection in Shared Runtime. Limit a
+  Provider Runtime extension to constructing its local exceptions from already-copied diagnostics.
 - Use binding analyzers for unavoidable public generated-only hooks and best-effort `Value` lifetime
   diagnostics. Keep layout validation, owner-state checks, native safety, and behavior expressible
   by API shape in their owning compiler or runtime layers; analyzer suppression transfers the
@@ -481,6 +497,8 @@ Reassess this architecture when any of the following occurs:
 - profiling demonstrates a material managed function-table cost or a different table storage form
   produces a sustained representative benefit beyond the ADR threshold;
 - Runtime needs declaration-specific knowledge or a wrapper requests privileged access;
+- a Shared error kind changes, a Provider must override a Shared kind, or a global Provider-extension
+  number registry is proposed;
 - generated output requires handwritten declaration-specific code or a second semantic authority;
 - an emitter needs to reclassify ownership, a declaration cannot fit exactly one existing category,
   or a generated operation lacks complete borrowing, transfer, or cleanup semantics;

@@ -9,7 +9,8 @@
 - Related ADRs: [ADR-002](../adr/ADR-002-cpp-bindings-platform.md),
   [ADR-003](../adr/ADR-003-native-function-table-bootstrap.md),
   [ADR-004](../adr/ADR-004-provider-extension-and-cgal-profile.md),
-  [ADR-005](../adr/ADR-005-provider-native-package-isolation.md), and superseded
+  [ADR-005](../adr/ADR-005-provider-native-package-isolation.md),
+  [ADR-006](../adr/ADR-006-shared-native-error-projection.md), and superseded
   [ADR-001](../adr/ADR-001-native-release-binding/README.md)
 - Approval source: The maintainer explicitly approved this direction in the Codex task on
   2026-08-26 and approved the shared/provider source topology and finite EPICK-based CGAL provider
@@ -40,8 +41,15 @@ normalized semantic model and dependency closure, layout and lifecycle evidence 
 provider-neutral metadata and diagnostics, paired managed/native emission, native-library bootstrap
 and function-table emission, direct-storage `Owned<T>`, and proved Windows generation primitives.
 A provider supplies declaration roots and finite template profiles, header discovery, classification
-and lifetime rules, provider-specific native dependencies and exceptions, generated declarations,
+and lifetime rules, provider-specific native dependencies and local exceptions, generated declarations,
 default artifact identity, and concrete platform packages.
+
+Shared Runtime owns provider-neutral native-error diagnostic consumption and common exception
+projection. Shared Generator fixes common standard C++ catches and error kinds 0 through 8 and 255.
+Each Provider may interpret values 9 through 254 only within its matching Generator/Runtime pair;
+local values may overlap across Providers. Provider Runtime packages therefore own only genuine
+native-library failures, never copies of common argument, arithmetic, allocation, standard, or
+unknown-native exception behavior.
 
 Generated value categories are unmanaged structs rather than owner classes. Borrowing is an
 operation-level fact represented directly by generated signatures, `ref T`, or an approved pointer;
@@ -83,8 +91,9 @@ Generator, Clang, or OCCT packages.
 
 - Migrate repository, solution, project, assembly, package, namespace, diagnostic, documentation,
   CI, source-link, and GitHub identities as one recoverable breaking change.
-- Keep Value, Owned, Handle, native layout, same-library cleanup, exception, and fail-closed OCCT
-  behavior observable across the migration.
+- Keep Value, Owned, Handle, native layout, same-library cleanup, Provider-specific exception, and
+  fail-closed OCCT behavior observable across the migration; common failures use the approved
+  Shared `Native*Exception` family.
 - Publish Analyzers separately and require direct consumer reference with `PrivateAssets="all"`;
   do not depend on transitive analyzer flow or embed the analyzer in Runtime.
 - Keep provider projects dependent on generic contracts and prohibit the reverse dependency with a
@@ -93,8 +102,9 @@ Generator, Clang, or OCCT packages.
   its current physical location.
 - Require deterministic admitted and unsupported inventories for every finite CGAL profile; do not
   claim or attempt an unbounded set of template instantiations.
-- Give CGAL Runtime only real CGAL-specific contracts, including check/exception and polymorphic
-  result semantics; keep concrete generated declarations in the Windows artifact.
+- Give CGAL Runtime only real CGAL-specific contracts, including local check/exception and
+  polymorphic-result semantics; keep common native-error projection in Shared Runtime and concrete
+  generated declarations in the Windows artifact.
 - Give every provider binding module a unique basename, package only its recursive app-local import
   closure, and fail package-set verification on differing same-name native assets.
 - A GitHub rename is an external operational handoff with maintainer ownership, preflight,
@@ -106,12 +116,16 @@ Generator, Clang, or OCCT packages.
 [ADR-003](../adr/ADR-003-native-function-table-bootstrap.md) governs native loading and
 function-table lifetime. [ADR-004](../adr/ADR-004-provider-extension-and-cgal-profile.md) selects
 the shared/provider source topology, semantic provider contract, and finite CGAL Windows profile;
+[ADR-006](../adr/ADR-006-shared-native-error-projection.md) governs the common native-error contract,
+Shared managed projection, and Provider-local extension boundary;
 ADR-001 remains historical evidence for the superseded loader decision.
 
 ## Review triggers
 
 - A generic core project requires provider-specific declaration, symbol, layout, exception, or
   ownership knowledge.
+- A Provider needs to reinterpret a Shared error kind or a global numbering rule is proposed for
+  Provider-local extensions.
 - A second provider cannot reuse the core without modifying a provider-neutral public contract.
 - Shared code branches on a provider name, declaration, namespace, native dependency, or default
   artifact identity.
