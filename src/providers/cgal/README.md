@@ -3,8 +3,9 @@
 The CGAL provider owns finite-profile generation, CGAL-specific runtime semantics, and ready-to-use
 platform packages without adding CGAL policy to Shared.
 
-The first maintained profile is `epick-windows-v1`. Its Generator package embeds the CGAL 6.2
-public-header snapshot and explicitly closes the selected EPICK class and free-function templates.
+The first maintained profile is `epick-windows-v1`. Its Generator discovers CGAL public headers
+from the selected vcpkg installation and explicitly closes the selected EPICK class and
+free-function templates.
 Every installed header and compiler-observed source declaration receives a source disposition.
 Reachable direct non-template declarations and the explicitly closed profile instances form the
 finite candidate set; each is admitted or rejected with a stable proof. Open templates and their

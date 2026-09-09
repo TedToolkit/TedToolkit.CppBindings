@@ -18,9 +18,6 @@ internal static class CgalProfileResources
     private const string ManifestResource =
         "TedToolkit.CppBindings.Cgal.Generator.Resources.epick-windows-v1.json";
 
-    private const string HeadersResourcePrefix =
-        "TedToolkit.CppBindings.Cgal.Generator.Resources.cgal-6.2-x64-windows.headers.";
-
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {
         PropertyNameCaseInsensitive = true,
@@ -58,40 +55,6 @@ internal static class CgalProfileResources
 
         using var stream = file.OpenRead();
         return ReadManifest(stream, file.FullName);
-    }
-
-    /// <summary>
-    /// Loads the complete ordered public-header snapshot.
-    /// </summary>
-    /// <returns>The ordered paths relative to the vcpkg include root.</returns>
-    /// <exception cref="InvalidOperationException">The embedded resource set is missing.</exception>
-    internal static IReadOnlyList<string> LoadLockedHeaders()
-    {
-        var headers = new List<string>();
-        var resources = Assembly.GetExecutingAssembly().GetManifestResourceNames()
-            .Where(static name => name.StartsWith(HeadersResourcePrefix, StringComparison.Ordinal)
-                && name.EndsWith(".txt", StringComparison.Ordinal))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (resources.Length == 0)
-        {
-            throw new InvalidOperationException("The embedded CGAL public-header inventory is missing.");
-        }
-
-        foreach (var resource in resources)
-        {
-            using var stream = Open(resource);
-            using var reader = new StreamReader(stream);
-            while (reader.ReadLine() is { } line)
-            {
-                if (!string.IsNullOrWhiteSpace(line))
-                {
-                    headers.Add(line);
-                }
-            }
-        }
-
-        return Array.AsReadOnly(headers.ToArray());
     }
 
     private static Stream Open(string name)

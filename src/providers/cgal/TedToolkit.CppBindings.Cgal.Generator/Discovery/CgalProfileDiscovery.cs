@@ -37,11 +37,13 @@ internal static partial class CgalProfileDiscovery
             .Select(path => Path.GetRelativePath(includeRoot, path).Replace('\\', '/'))
             .Order(StringComparer.Ordinal)
             .ToArray();
-        var locked = CgalProfileResources.LoadLockedHeaders();
-        if (options.RequireLockedHeaderInventory && !installed.SequenceEqual(locked, StringComparer.Ordinal))
+        if (options.RequireLockedHeaderInventory
+            && !installed.SequenceEqual(
+                ResolveVcpkgPackageHeaders(options.VcpkgRoot, profile.Triplet),
+                StringComparer.Ordinal))
         {
             throw new InvalidOperationException(
-                $"The installed CGAL public-header inventory does not match the locked {profile.CgalVersion} profile.");
+                "The installed CGAL public-header inventory does not match the vcpkg package list.");
         }
 
         var reachable = CloseHeaderIncludes(includeRoot, profile.SelectedHeaders);
@@ -123,6 +125,41 @@ internal static partial class CgalProfileDiscovery
         }
 
         return reachable.Contains(header) ? "reachable-dependency" : "not-reachable-from-finite-profile";
+    }
+
+    private static string[] ResolveVcpkgPackageHeaders(DirectoryInfo vcpkgRoot, string triplet)
+    {
+        var infoRoot = Path.Combine(vcpkgRoot.FullName, "installed", "vcpkg", "info");
+        if (!Directory.Exists(infoRoot))
+        {
+            throw new InvalidOperationException($"The vcpkg installed-package list directory '{infoRoot}' was not found.");
+        }
+
+        var suffix = $"_{triplet}.list";
+        var packageLists = Directory.EnumerateFiles(infoRoot, "cgal_*.list", SearchOption.TopDirectoryOnly)
+            .Where(path => Path.GetFileName(path).EndsWith(suffix, StringComparison.Ordinal))
+            .ToArray();
+        if (packageLists.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Expected one installed CGAL package list for triplet '{triplet}', found {packageLists.Length}.");
+        }
+
+        var includePrefix = $"{triplet}/include/";
+        var headers = File.ReadLines(packageLists[0])
+            .Select(static line => line.Replace('\\', '/'))
+            .Where(line => line.StartsWith(includePrefix + "CGAL/", StringComparison.Ordinal)
+                && !line.EndsWith('/'))
+            .Select(line => line[includePrefix.Length..])
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+        if (headers.Length == 0)
+        {
+            throw new InvalidOperationException(
+                $"The installed CGAL package list for triplet '{triplet}' contains no public headers.");
+        }
+
+        return headers;
     }
 
     private static void ValidateProfile(CgalProfileManifest profile)

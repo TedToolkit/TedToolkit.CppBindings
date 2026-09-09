@@ -18,9 +18,10 @@ var options = new CgalGenerationOptions
 builder.AddCgalGenerators(options);
 ```
 
-The locked header inventory makes CGAL package drift visible. Set
-`RequireLockedHeaderInventory = false` only for an explicitly configured development profile; that
-run does not claim the `epick-windows-v1` package identity. The default also verifies installed
+The Generator discovers public headers directly from the selected vcpkg include tree. By default,
+it also compares that tree with vcpkg's installed CGAL package list so missing, added, or manually
+changed package files fail closed. Set `RequireLockedHeaderInventory = false` only when the selected
+vcpkg installation does not provide package-list metadata. The default separately verifies installed
 CGAL/GMP/MPFR versions and vcpkg ABIs plus the pinned CMake and MSVC versions.
 
 Pass `ProfileManifestFile` and the matching `ProfileId` to select another explicit version-1 finite

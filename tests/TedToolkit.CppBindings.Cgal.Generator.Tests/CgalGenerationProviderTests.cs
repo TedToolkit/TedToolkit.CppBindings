@@ -26,6 +26,51 @@ internal sealed class CgalGenerationProviderTests
     };
 
     /// <summary>
+    /// Verifies the Generator uses vcpkg instead of carrying a second CGAL header inventory authority.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_resolve_header_inventory_from_vcpkg_package_list_Async()
+    {
+        var provider = CreateProvider(requireLockedToolchain: false);
+
+        await Assert.That(provider.Inventory.Sources.Select(static item => item.Header))
+            .IsEquivalentTo(EnumerateVcpkgPackageHeaders());
+        await Assert.That(typeof(CgalGenerationProvider).Assembly.GetManifestResourceNames()
+            .Any(static name => name.Contains(".headers.", StringComparison.Ordinal))).IsFalse();
+    }
+
+    /// <summary>
+    /// Verifies locked inventory validation fails when vcpkg package metadata is unavailable.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_require_vcpkg_package_list_for_locked_inventory_Async()
+    {
+        var root = Path.Combine(Path.GetTempPath(), $"tedtoolkit-cgal-vcpkg-{Guid.NewGuid():N}");
+        Directory.CreateDirectory(Path.Combine(root, "installed", "x64-windows", "include", "CGAL"));
+        InvalidOperationException? failure = null;
+        try
+        {
+            try
+            {
+                _ = CreateProvider(requireLockedToolchain: false, vcpkgRoot: root);
+            }
+            catch (InvalidOperationException exception)
+            {
+                failure = exception;
+            }
+        }
+        finally
+        {
+            Directory.Delete(root, true);
+        }
+
+        await Assert.That(failure).IsNotNull();
+        await Assert.That(failure!.Message).Contains("vcpkg installed-package list directory");
+    }
+
+    /// <summary>
     /// Verifies two real-header runs produce byte-identical discovered inventories and Shared outputs.
     /// </summary>
     /// <returns>A task that completes when assertions finish.</returns>
@@ -42,11 +87,14 @@ internal sealed class CgalGenerationProviderTests
         var firstNative = await RenderAsync(firstPlan.CppSources).ConfigureAwait(false);
         var secondNative = await RenderAsync(secondPlan.CppSources).ConfigureAwait(false);
         var independentlyEnumeratedHeaders = EnumerateInstalledHeaders();
+        var vcpkgPackageHeaders = EnumerateVcpkgPackageHeaders();
 
         await Assert.That(firstProvider.Profile.ProfileId).IsEqualTo("epick-windows-v1");
         await Assert.That(firstProvider.Profile.CgalVersion).IsEqualTo("6.2");
         await Assert.That(firstProvider.Inventory.Sources.Select(static item => item.Header))
             .IsEquivalentTo(independentlyEnumeratedHeaders);
+        await Assert.That(firstProvider.Inventory.Sources.Select(static item => item.Header))
+            .IsEquivalentTo(vcpkgPackageHeaders);
         await Assert.That(firstProvider.Inventory.Sources.Count(static item => item.Disposition == "profile-root"))
             .IsEqualTo(firstProvider.Profile.SelectedHeaders.Count);
         await Assert.That(firstProvider.Inventory.Sources.Count(static item => item.Disposition == "reachable-dependency"))
@@ -286,14 +334,19 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(failure!.Message).Contains("requires missing declaration 'point-2'");
     }
 
-    private static CgalGenerationProvider CreateProvider(FileInfo? profile = null, string? profileId = null)
+    private static CgalGenerationProvider CreateProvider(
+        FileInfo? profile = null,
+        string? profileId = null,
+        bool requireLockedToolchain = true,
+        string? vcpkgRoot = null)
     {
-        var root = GetVcpkgRoot();
+        var root = vcpkgRoot ?? GetVcpkgRoot();
         return new(new()
         {
             VcpkgRoot = new(root),
             ProfileManifestFile = profile,
             ProfileId = profileId ?? CgalGenerationOptions.DefaultProfileId,
+            RequireLockedToolchain = requireLockedToolchain,
             CSharpFolder = new(Path.Combine(Path.GetTempPath(), "tedtoolkit-cgal-managed")),
             CppFolder = new(Path.Combine(Path.GetTempPath(), "tedtoolkit-cgal-native")),
             CSharpNamespace = "TedToolkit.CppBindings.Cgal",
@@ -312,6 +365,30 @@ internal sealed class CgalGenerationProviderTests
         var includeRoot = Path.Combine(GetVcpkgRoot(), "installed", "x64-windows", "include");
         return Directory.EnumerateFiles(Path.Combine(includeRoot, "CGAL"), "*", SearchOption.AllDirectories)
             .Select(path => Path.GetRelativePath(includeRoot, path).Replace('\\', '/'))
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static string[] EnumerateVcpkgPackageHeaders()
+    {
+        const string Triplet = "x64-windows";
+        var files = Directory.EnumerateFiles(
+                Path.Combine(GetVcpkgRoot(), "installed", "vcpkg", "info"),
+                "cgal_*.list",
+                SearchOption.TopDirectoryOnly)
+            .Where(path => Path.GetFileName(path).EndsWith($"_{Triplet}.list", StringComparison.Ordinal))
+            .ToArray();
+        if (files.Length != 1)
+        {
+            throw new InvalidOperationException($"Expected one installed CGAL package list, found {files.Length}.");
+        }
+
+        const string Prefix = $"{Triplet}/include/";
+        return File.ReadLines(files[0])
+            .Select(static line => line.Replace('\\', '/'))
+            .Where(static line => line.StartsWith(Prefix + "CGAL/", StringComparison.Ordinal)
+                && !line.EndsWith('/'))
+            .Select(static line => line[Prefix.Length..])
             .Order(StringComparer.Ordinal)
             .ToArray();
     }

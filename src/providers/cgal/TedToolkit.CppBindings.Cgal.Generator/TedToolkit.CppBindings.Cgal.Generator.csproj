@@ -16,7 +16,6 @@
     <PackageReference Include="libClangSharp.runtime.win-x64" />
     <EmbeddedResource Include="Resources\epick-windows-v1.json"
                       LogicalName="TedToolkit.CppBindings.Cgal.Generator.Resources.epick-windows-v1.json" />
-    <EmbeddedResource Include="Resources\cgal-6.2-x64-windows.headers.*.txt" />
     <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\epick-windows-v1\" />
     <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\epick-windows-v1\" />
   </ItemGroup>

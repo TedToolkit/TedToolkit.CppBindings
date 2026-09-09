@@ -35,7 +35,7 @@ public sealed record CgalGenerationOptions : GenerationOptions
     public FileInfo? ProfileManifestFile { get; init; }
 
     /// <summary>
-    /// Gets a value indicating whether the installed public-header set must equal the locked profile inventory.
+    /// Gets a value indicating whether the installed public-header set must equal the vcpkg package list.
     /// </summary>
     public bool RequireLockedHeaderInventory { get; init; } = true;
 
