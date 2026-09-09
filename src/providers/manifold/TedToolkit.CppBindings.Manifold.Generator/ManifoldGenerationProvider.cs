@@ -33,7 +33,17 @@ public sealed class ManifoldGenerationProvider
     /// <summary>Creates a fresh immutable plan.</summary>
     public ManifoldGenerationPlan CreatePlan()
     {
+        return CreatePlan(ResolveVcpkgRoot());
+    }
+
+    /// <summary>Creates a fresh immutable plan from the selected vcpkg installation.</summary>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
+    /// <returns>The immutable generation plan.</returns>
+    public ManifoldGenerationPlan CreatePlan(DirectoryInfo vcpkgRoot)
+    {
+        ArgumentNullException.ThrowIfNull(vcpkgRoot);
         var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
+        var sourceInventory = ManifoldHeaderDiscovery.Resolve(vcpkgRoot, Profile);
         var managedInventory = new[]
         {
             "Manifold", "Manifold.Create", "Manifold.Status", "Manifold.Boolean",
@@ -72,12 +82,11 @@ public sealed class ManifoldGenerationProvider
             ["ownership-inventory.json"] = JsonSerializer.Serialize(ownershipInventory, jsonOptions) + "\n",
             ["profile-manifest.json"] = JsonSerializer.Serialize(Profile, jsonOptions) + "\n",
             ["source-declaration-inventory.json"] = JsonSerializer.Serialize(sourceDeclarations, jsonOptions) + "\n",
-            ["source-inventory.json"] = JsonSerializer.Serialize(new[]
+            ["source-inventory.json"] = JsonSerializer.Serialize(sourceInventory.Select(static item => new
             {
-                new { header = "manifold/manifold.h", disposition = "profile-root" },
-                new { header = "manifold/mesh.h", disposition = "profile-root" },
-                new { header = "manifold/common.h", disposition = "reachable-dependency" },
-            }, jsonOptions) + "\n",
+                header = item.Header,
+                disposition = item.Disposition,
+            }), jsonOptions) + "\n",
             ["toolchain-inventory.json"] = JsonSerializer.Serialize(new
             {
                 Profile.ManifoldVersion,
@@ -106,8 +115,22 @@ public sealed class ManifoldGenerationProvider
     /// <summary>Writes one plan without retaining inputs or mutable plan state.</summary>
     public async Task GenerateAsync(DirectoryInfo outputRoot, CancellationToken cancellationToken)
     {
+        await GenerateAsync(outputRoot, ResolveVcpkgRoot(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Writes one plan from the selected vcpkg installation without retaining mutable state.</summary>
+    /// <param name="outputRoot">The generated output root.</param>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes after all outputs are written.</returns>
+    public async Task GenerateAsync(
+        DirectoryInfo outputRoot,
+        DirectoryInfo vcpkgRoot,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(outputRoot);
-        var plan = CreatePlan();
+        ArgumentNullException.ThrowIfNull(vcpkgRoot);
+        var plan = CreatePlan(vcpkgRoot);
         await WriteAsync(new DirectoryInfo(Path.Combine(outputRoot.FullName, "csharp")), plan.ManagedSources, cancellationToken)
             .ConfigureAwait(false);
         await WriteAsync(new DirectoryInfo(Path.Combine(outputRoot.FullName, "cpp")), plan.NativeSources, cancellationToken)
@@ -123,6 +146,18 @@ public sealed class ManifoldGenerationProvider
                 Toolchain = new { Profile.CMake, Profile.Msvc, Profile.Triplet },
             }, new JsonSerializerOptions { WriteIndented = true }) + "\n",
             cancellationToken).ConfigureAwait(false);
+    }
+
+    private static DirectoryInfo ResolveVcpkgRoot()
+    {
+        var path = Environment.GetEnvironmentVariable("VCPKG_ROOT");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException(
+                "VCPKG_ROOT is required when a vcpkg root is not supplied explicitly.");
+        }
+
+        return new DirectoryInfo(path);
     }
 
     private static async Task WriteAsync(

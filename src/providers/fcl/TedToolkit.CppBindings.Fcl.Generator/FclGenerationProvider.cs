@@ -29,7 +29,17 @@ public sealed class FclGenerationProvider
     /// <summary>Creates a fresh immutable plan.</summary>
     public FclGenerationPlan CreatePlan()
     {
+        return CreatePlan(ResolveVcpkgRoot());
+    }
+
+    /// <summary>Creates a fresh immutable plan from the selected vcpkg installation.</summary>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked FCL package.</param>
+    /// <returns>The immutable generation plan.</returns>
+    public FclGenerationPlan CreatePlan(DirectoryInfo vcpkgRoot)
+    {
+        ArgumentNullException.ThrowIfNull(vcpkgRoot);
         var options = new JsonSerializerOptions { WriteIndented = true };
+        var sourceInventory = FclHeaderDiscovery.Resolve(vcpkgRoot, Profile);
         var admitted = new[]
         {
             "FclVector3", "FclBvhReturnCode", "FclBvhModel.Create", "FclModelBuildResult",
@@ -62,12 +72,11 @@ public sealed class FclGenerationProvider
                 header = "fcl/fcl.h",
                 disposition = "finite-profile-candidate",
             }), options) + "\n",
-            ["source-inventory.json"] = JsonSerializer.Serialize(new[]
+            ["source-inventory.json"] = JsonSerializer.Serialize(sourceInventory.Select(static item => new
             {
-                new { header = "fcl/fcl.h", disposition = "profile-root" },
-                new { header = "fcl/geometry/bvh/BVH_model.h", disposition = "reachable-dependency" },
-                new { header = "fcl/narrowphase/continuous_collision.h", disposition = "reachable-dependency" },
-            }, options) + "\n",
+                header = item.Header,
+                disposition = item.Disposition,
+            }), options) + "\n",
             ["toolchain-inventory.json"] = JsonSerializer.Serialize(Profile.Versions, options) + "\n",
             ["unsupported-inventory.json"] = JsonSerializer.Serialize(new[]
             {
@@ -95,8 +104,22 @@ public sealed class FclGenerationProvider
     /// <summary>Writes one plan without retaining mutable state.</summary>
     public async Task GenerateAsync(DirectoryInfo outputRoot, CancellationToken cancellationToken)
     {
+        await GenerateAsync(outputRoot, ResolveVcpkgRoot(), cancellationToken).ConfigureAwait(false);
+    }
+
+    /// <summary>Writes one plan from the selected vcpkg installation without retaining mutable state.</summary>
+    /// <param name="outputRoot">The generated output root.</param>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked FCL package.</param>
+    /// <param name="cancellationToken">The cancellation token.</param>
+    /// <returns>A task that completes after all outputs are written.</returns>
+    public async Task GenerateAsync(
+        DirectoryInfo outputRoot,
+        DirectoryInfo vcpkgRoot,
+        CancellationToken cancellationToken)
+    {
         ArgumentNullException.ThrowIfNull(outputRoot);
-        var plan = CreatePlan();
+        ArgumentNullException.ThrowIfNull(vcpkgRoot);
+        var plan = CreatePlan(vcpkgRoot);
         await WriteAsync(new DirectoryInfo(Path.Combine(outputRoot.FullName, "csharp")), plan.ManagedSources, cancellationToken)
             .ConfigureAwait(false);
         await WriteAsync(new DirectoryInfo(Path.Combine(outputRoot.FullName, "cpp")), plan.NativeSources, cancellationToken)
@@ -110,6 +133,18 @@ public sealed class FclGenerationProvider
                 NativeFunctionCount = plan.NativeFunctions.Count,
                 Toolchain = Profile.Versions,
             }, new JsonSerializerOptions { WriteIndented = true }) + "\n", cancellationToken).ConfigureAwait(false);
+    }
+
+    private static DirectoryInfo ResolveVcpkgRoot()
+    {
+        var path = Environment.GetEnvironmentVariable("VCPKG_ROOT");
+        if (string.IsNullOrWhiteSpace(path))
+        {
+            throw new InvalidOperationException(
+                "VCPKG_ROOT is required when a vcpkg root is not supplied explicitly.");
+        }
+
+        return new DirectoryInfo(path);
     }
 
     private static async Task WriteAsync(

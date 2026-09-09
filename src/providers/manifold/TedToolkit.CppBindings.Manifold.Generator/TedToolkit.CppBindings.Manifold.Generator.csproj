@@ -12,7 +12,6 @@
 
   <ItemGroup>
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
-    <EmbeddedResource Include="Resources\manifold-3.5.2-windows-v1.json" />
     <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\manifold-3.5.2-windows-v1\" />
     <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\manifold-3.5.2-windows-v1\" />
   </ItemGroup>
