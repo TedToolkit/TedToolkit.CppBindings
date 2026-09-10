@@ -52,7 +52,7 @@ function New-HostReceiptFixture {
     $arguments = @{
         ReceiptPath = $receiptPath; Variant = $Variant; State = $State
         SourceRepositoryRoot = $SourceRoot; SourceBaseRevision = $BaseRevision
-        HostDirectory = $hostRoot; HostEntryPointRelativePath = 'TedToolkit.CppBindings.Occt.Console.dll'
+        HostDirectory = $hostRoot; HostEntryPointRelativePath = 'TedToolkit.CppBindings.Occt.BenchmarkHost.dll'
         PublishCompletionReceiptPath = $publishReceipt; FixtureOnly = $true
     }
     if ($PatchPath) { $arguments.FrozenPatchPath = $PatchPath }
@@ -87,17 +87,17 @@ try {
     $sourceOriginal = Join-Path $proofRoot 'source-original'
     $null = [IO.Directory]::CreateDirectory($sourceOriginal)
     Write-TextFile (Join-Path $sourceOriginal '.gitignore') "bin/`nobj/`n"
-    $fixtureProjectRelativePath = 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'
+    $fixtureProjectRelativePath = 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/TedToolkit.CppBindings.Occt.BenchmarkHost.csproj'
     Write-TextFile (Join-Path $sourceOriginal $fixtureProjectRelativePath) @'
 <Project Sdk="Microsoft.NET.Sdk">
   <PropertyGroup>
     <OutputType>Exe</OutputType>
     <TargetFramework>net10.0</TargetFramework>
-    <AssemblyName>TedToolkit.CppBindings.Occt.Console</AssemblyName>
+    <AssemblyName>TedToolkit.CppBindings.Occt.BenchmarkHost</AssemblyName>
   </PropertyGroup>
 </Project>
 '@
-    Write-TextFile (Join-Path $sourceOriginal 'tests/TedToolkit.CppBindings.Occt.Console/Program.cs') "System.Console.WriteLine(`"fixture`");`n"
+    Write-TextFile (Join-Path $sourceOriginal 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/Program.cs') "System.Console.WriteLine(`"fixture`");`n"
     $null = Invoke-Git $sourceOriginal @('init', '--quiet')
     $null = Invoke-Git $sourceOriginal @('config', 'user.name', 'OCCT benchmark fixture')
     $null = Invoke-Git $sourceOriginal @('config', 'user.email', 'fixture@example.invalid')
@@ -109,7 +109,7 @@ try {
     $null = Invoke-Git $proofRoot @('clone', '--quiet', $sourceOriginal, $sourceChanged)
     $null = Invoke-Git $sourceChanged @('config', 'user.name', 'OCCT benchmark fixture')
     $null = Invoke-Git $sourceChanged @('config', 'user.email', 'fixture@example.invalid')
-    $changedProgram = 'tests/TedToolkit.CppBindings.Occt.Console/Program.cs'
+    $changedProgram = 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/Program.cs'
     Add-Content -LiteralPath (Join-Path $sourceChanged $changedProgram) -Value '// harmless generator-host delta'
     $null = Invoke-Git $sourceChanged @('add', $changedProgram)
     $null = Invoke-Git $sourceChanged @('commit', '--quiet', '-m', 'fixture change')
@@ -168,7 +168,7 @@ try {
     catch { $staleRejected = $_.Exception.Message -like '*fresh build relationship*' }
     Require $staleRejected 'A stale source revision in a publish receipt was accepted.'
 
-    $runtimeConfig = Join-Path $validReceipt.HostDirectory 'TedToolkit.CppBindings.Occt.Console.runtimeconfig.json'
+    $runtimeConfig = Join-Path $validReceipt.HostDirectory 'TedToolkit.CppBindings.Occt.BenchmarkHost.runtimeconfig.json'
     $runtimeConfigBytes = [IO.File]::ReadAllBytes($runtimeConfig)
     try {
         [IO.File]::AppendAllText($runtimeConfig, "`n", $utf8)
@@ -465,9 +465,9 @@ extern "C" __declspec(dllexport) const std::uintptr_t* NativeApi_GetFunctionTabl
         'Screening must produce ten recorded executions and no warmups.'
 
     $invalidHostRoot = Join-Path $proofRoot 'hosts-invalid'
-    Write-TextFile (Join-Path $invalidHostRoot 'TedToolkit.CppBindings.Occt.Console.dll') 'not a managed PE'
-    Write-TextFile (Join-Path $invalidHostRoot 'TedToolkit.CppBindings.Occt.Console.deps.json') '{}'
-    Write-TextFile (Join-Path $invalidHostRoot 'TedToolkit.CppBindings.Occt.Console.runtimeconfig.json') '{}'
+    Write-TextFile (Join-Path $invalidHostRoot 'TedToolkit.CppBindings.Occt.BenchmarkHost.dll') 'not a managed PE'
+    Write-TextFile (Join-Path $invalidHostRoot 'TedToolkit.CppBindings.Occt.BenchmarkHost.deps.json') '{}'
+    Write-TextFile (Join-Path $invalidHostRoot 'TedToolkit.CppBindings.Occt.BenchmarkHost.runtimeconfig.json') '{}'
     $invalidReceipt = Get-Content -LiteralPath $receipts.baselineOriginal -Raw | ConvertFrom-Json -AsHashtable
     $invalidReceipt.HostDirectory = $invalidHostRoot
     $invalidReceipt.HostFiles = @(Get-ChildItem $invalidHostRoot -File | Sort-Object FullName | ForEach-Object {

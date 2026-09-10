@@ -14,10 +14,10 @@
     <PackageReference Include="ClangSharp" />
     <PackageReference Include="libclang.runtime.win-x64" />
     <PackageReference Include="libClangSharp.runtime.win-x64" />
-    <EmbeddedResource Include="Resources\epick-windows-v1.json"
-                      LogicalName="TedToolkit.CppBindings.Cgal.Generator.Resources.epick-windows-v1.json" />
-    <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\epick-windows-v1\" />
-    <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\epick-windows-v1\" />
+    <EmbeddedResource Include="Resources\epick-windows-v2.json"
+                      LogicalName="TedToolkit.CppBindings.Cgal.Generator.Resources.epick-windows-v2.json" />
+    <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\epick-windows-v2\" />
+    <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\epick-windows-v2\" />
   </ItemGroup>
 
 </Project>

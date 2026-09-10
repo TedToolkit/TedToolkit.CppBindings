@@ -138,8 +138,8 @@ if (-not (Test-Path -LiteralPath $compilerFile -PathType Leaf)) {
     throw 'The native fixture did not retain its resolved compiler identity.'
 }
 $compilerIdentity = (Get-Content -LiteralPath $compilerFile -Raw).Trim()
-if ($compilerIdentity -cne 'MSVC|19.51.36256.0') {
-    throw "Expected MSVC 19.51.36256.0, found '$compilerIdentity'."
+if ($compilerIdentity -cne 'MSVC|19.51.36257.0') {
+    throw "Expected MSVC 19.51.36257.0, found '$compilerIdentity'."
 }
 $compilerVersion = $compilerIdentity.Split('|', 2)[1]
 [ordered]@{

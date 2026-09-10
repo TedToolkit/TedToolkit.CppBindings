@@ -16,7 +16,7 @@ namespace TedToolkit.CppBindings.Cgal.Generator;
 internal static class CgalProfileResources
 {
     private const string ManifestResource =
-        "TedToolkit.CppBindings.Cgal.Generator.Resources.epick-windows-v1.json";
+        "TedToolkit.CppBindings.Cgal.Generator.Resources.epick-windows-v2.json";
 
     private static readonly JsonSerializerOptions SerializerOptions = new()
     {

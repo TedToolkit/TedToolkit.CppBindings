@@ -25,10 +25,15 @@ namespace and provider semantics occupy a provider segment:
 shared: TedToolkit.CppBindings.Generator + Runtime
 ├── OCCT: Generator + Runtime + SourceGenerators (internal)
 │   └── TedToolkit.CppBindings.Occt.Windows
-└── CGAL: Generator + Runtime + Generator.Tool (internal)
-    └── TedToolkit.CppBindings.Cgal.Windows
+├── CGAL: Generator + Runtime
+│   └── TedToolkit.CppBindings.Cgal.Windows
+├── Manifold: Generator + Runtime
+│   └── TedToolkit.CppBindings.Manifold.Windows
+└── FCL: Generator + Runtime
+    └── TedToolkit.CppBindings.Fcl.Windows
 
 consumer tool: TedToolkit.CppBindings.Analyzers
+repository generation tool: TedToolkit.CppBindings.Windows.Generation.Tool
 ```
 
 Source mirrors that dependency boundary: shared Generator and Runtime projects live below
@@ -58,9 +63,9 @@ guidance and are referenced directly as a standalone package. Provider source ge
 tools and do not share an assembly or package responsibility with consumer diagnostics.
 
 Namespaces follow responsibility: generic public APIs use `TedToolkit.CppBindings`; provider APIs
-use `TedToolkit.CppBindings.Occt` or `TedToolkit.CppBindings.Cgal`. `.Windows` identifies a concrete
-package and assembly, not a generated API namespace. The internal CGAL Generator Tool only hosts
-repository builds and is not a package or consumer dependency.
+use a `TedToolkit.CppBindings.<Provider>` namespace. `.Windows` identifies a concrete package and
+assembly, not a generated API namespace. The build-only Windows generation host references each
+provider Generator directly and is not a package or consumer dependency.
 
 ## Current CGAL target
 

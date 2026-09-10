@@ -17,7 +17,7 @@ public sealed record CgalGenerationOptions : GenerationOptions
     /// <summary>
     /// Gets the identifier of the default finite Windows EPICK profile.
     /// </summary>
-    public const string DefaultProfileId = "epick-windows-v1";
+    public const string DefaultProfileId = "epick-windows-v2";
 
     /// <summary>
     /// Gets the vcpkg root that supplies the locked CGAL installation.

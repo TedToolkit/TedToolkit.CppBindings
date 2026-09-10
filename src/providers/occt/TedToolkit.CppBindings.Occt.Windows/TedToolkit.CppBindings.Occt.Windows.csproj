@@ -20,10 +20,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
-    <ProjectReference Include="..\..\..\..\tests\TedToolkit.CppBindings.Occt.Console\TedToolkit.CppBindings.Occt.Console.csproj"
+    <ProjectReference Include="..\..\..\tools\TedToolkit.CppBindings.Windows.Generation.Tool\TedToolkit.CppBindings.Windows.Generation.Tool.csproj"
                       ReferenceOutputAssembly="false"
                       SkipGetTargetFrameworkProperties="true"
-                      OutputItemType="OcctGeneratorHost" />
+                      OutputItemType="WindowsGenerationHost" />
     <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_occt.dll"
           Pack="true" PackagePath="runtimes\win-x64\native" />
     <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
@@ -33,8 +33,8 @@
   <Target Name="GenerateWindowsBindings"
           BeforeTargets="CoreCompile">
     <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Occt.Windows." />
-    <Error Condition="'@(OcctGeneratorHost)' == ''" Text="The OCCT generator host output was not resolved." />
-    <Exec Command="pwsh -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\..\..\Build\GenerateWindowsBindings.ps1&quot; -RepositoryRoot &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; -GeneratorHost &quot;@(OcctGeneratorHost)&quot; -GeneratedRoot &quot;$(GeneratedRoot)&quot; -VcpkgRoot &quot;$(VcpkgRoot)&quot; -Configuration &quot;$(Configuration)&quot;" />
+    <Error Condition="'@(WindowsGenerationHost)' == ''" Text="The Windows generation host output was not resolved." />
+    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider occt --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; --vcpkg-root &quot;$(VcpkgRoot)&quot; --configuration &quot;$(Configuration)&quot;" />
   </Target>
 
   <Target Name="IncludeGeneratedWindowsBindings"

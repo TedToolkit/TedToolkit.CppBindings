@@ -9,7 +9,7 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
-    <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\fcl-0.7.0-obbrss-double-windows-v1\" />
-    <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\fcl-0.7.0-obbrss-double-windows-v1\" />
+    <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\fcl-0.7.0-obbrss-double-windows-v2\" />
+    <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\fcl-0.7.0-obbrss-double-windows-v2\" />
   </ItemGroup>
 </Project>

@@ -1,6 +1,6 @@
 # TedToolkit.CppBindings.Manifold.Generator
 
-Generates the locked `manifold-3.5.2-windows-v1` finite binding profile. The profile covers owned
+Generates the locked `manifold-3.5.2-windows-v2` finite binding profile. The profile covers owned
 triangle meshes, Boolean operations, translation, status, triangle count, and mesh exchange. It
 does not claim coverage of the complete Manifold API.
 

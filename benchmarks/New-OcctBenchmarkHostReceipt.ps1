@@ -35,7 +35,7 @@ function Assert-ManagedConsoleHost {
     param([string] $Path)
     try { $name = [Reflection.AssemblyName]::GetAssemblyName($Path) }
     catch { throw "The host entry point is not a valid managed assembly: $Path" }
-    if ($name.Name -cne 'TedToolkit.CppBindings.Occt.Console') {
+    if ($name.Name -cne 'TedToolkit.CppBindings.Occt.BenchmarkHost') {
         throw "Unexpected host assembly identity: $($name.Name)"
     }
     $stem = [IO.Path]::GetFileNameWithoutExtension($Path)
@@ -84,7 +84,7 @@ else {
 
 $publishReceiptPath = Resolve-BenchmarkPhysicalPath $PublishCompletionReceiptPath
 $publish = Get-Content -LiteralPath $publishReceiptPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
-$expectedProject = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj')
+$expectedProject = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/TedToolkit.CppBindings.Occt.BenchmarkHost.csproj')
 $expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net10.0',
     '--no-restore', '--output', $hostRoot, '--nologo')
 if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-host-publish' -or
@@ -92,7 +92,7 @@ if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-hos
     -not $publish.SourceCleanBeforeAndAfter -or $publish.SourceRevision -cne $sourceRevision -or
     -not (Test-BenchmarkPathEqual $publish.SourceRepositoryRoot $sourceRoot) -or
     -not (Test-BenchmarkPathEqual $publish.ProjectPath $expectedProject) -or
-    $publish.ProjectRelativePath -cne 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj' -or
+    $publish.ProjectRelativePath -cne 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/TedToolkit.CppBindings.Occt.BenchmarkHost.csproj' -or
     (Get-FileHash -LiteralPath $expectedProject -Algorithm SHA256).Hash -cne $publish.ProjectSha256 -or
     -not (Test-BenchmarkPathEqual $publish.HostDirectory $hostRoot) -or
     $publish.HostEntryPointRelativePath -cne $HostEntryPointRelativePath.Replace('\', '/') -or

@@ -22,11 +22,11 @@ the shared generation platform.
 - A ready-to-use Windows package that generates every representable declaration supported by the
   delivered OCCT DLLs.
 - A deterministic CGAL Generator, provider-specific Runtime, and self-contained Windows package
-  for the finite versioned `epick-windows-v1` profile.
+  for the finite versioned `epick-windows-v2` profile.
 - A deterministic Manifold Generator, provider-specific Runtime, and self-contained Windows package
-  for the finite versioned `manifold-3.5.2-windows-v1` profile.
+  for the finite versioned `manifold-3.5.2-windows-v2` profile.
 - A deterministic FCL Generator, provider-specific Runtime, and self-contained Windows package for
-  the finite versioned `fcl-0.7.0-obbrss-double-windows-v1` profile.
+  the finite versioned `fcl-0.7.0-obbrss-double-windows-v2` profile.
 
 ## Start here
 
@@ -99,7 +99,7 @@ convenience policy in generated bindings.
 | Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows`, `TedToolkit.CppBindings.Manifold.Windows`, `TedToolkit.CppBindings.Fcl.Windows` |
 | Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal`, `TedToolkit.CppBindings.Manifold`, `TedToolkit.CppBindings.Fcl` |
 | Runtime identifier | `win-x64` |
-| Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v1`; Manifold 3.5.2 `manifold-3.5.2-windows-v1`; FCL 0.7.0 `fcl-0.7.0-obbrss-double-windows-v1` |
+| Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v2`; Manifold 3.5.2 `manifold-3.5.2-windows-v2`; FCL 0.7.0 `fcl-0.7.0-obbrss-double-windows-v2` |
 | Binding target framework | `net8.0` |
 | Generator and development host | .NET 10 |
 | Native toolchain | Visual C++; C++17 for OCCT/CGAL and C++20 for Manifold/FCL; CMake 3.28 or later |
@@ -137,10 +137,10 @@ dotnet restore TedToolkit.CppBindings.slnx
 dotnet build TedToolkit.CppBindings.slnx -c Release --no-restore
 ```
 
-Run the development host to generate the public OCCT surface under `output/generated`:
+Run the shared Windows generation host to generate the public OCCT surface under `output/generated`:
 
 ```powershell
-dotnet run --project tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj -c Release
+dotnet run --project src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj -c Release -- --provider occt --repository-root . --output-root output/generated --vcpkg-root $env:VCPKG_ROOT --configuration Release
 ```
 
 The generated tree contains managed sources under `output/generated/csharp` and native sources,
@@ -190,19 +190,16 @@ MSVC object-path limits.
 | `TedToolkit.CppBindings.Occt.Generator` | OCCT discovery, classification, finite provider policy, build metadata, and pipeline integration |
 | `TedToolkit.CppBindings.Occt.SourceGenerators` | Build-time generation of the selectable OCCT header inventory |
 | `TedToolkit.CppBindings.Occt.Windows` | Ready-to-use Windows binding artifact for the proved profile |
-| `TedToolkit.CppBindings.Occt.Console` | Development host for generating the public OCCT surface |
 | `TedToolkit.CppBindings.Cgal.Generator` | Locked finite-profile CGAL discovery, admission, and paired generation |
 | `TedToolkit.CppBindings.Cgal.Runtime` | CGAL exception, diagnostic, and finite polymorphic-result contracts |
 | `TedToolkit.CppBindings.Cgal.Windows` | Self-contained `win-x64` artifact for the admitted EPICK profile |
-| `TedToolkit.CppBindings.Cgal.Generator.Tool` | Repository-local, non-package generation host |
 | `TedToolkit.CppBindings.Manifold.Generator` | Locked Manifold profile and deterministic paired-source generation |
 | `TedToolkit.CppBindings.Manifold.Runtime` | Manifold diagnostic ownership and exception taxonomy |
 | `TedToolkit.CppBindings.Manifold.Windows` | Self-contained `win-x64` Manifold binding and exact native closure |
-| `TedToolkit.CppBindings.Manifold.Generator.Tool` | Repository-local, non-package Manifold generation host |
 | `TedToolkit.CppBindings.Fcl.Generator` | Locked FCL OBBRSS profile and deterministic paired-source generation |
 | `TedToolkit.CppBindings.Fcl.Runtime` | FCL diagnostic ownership and exception taxonomy |
 | `TedToolkit.CppBindings.Fcl.Windows` | Self-contained `win-x64` FCL binding and exact native closure |
-| `TedToolkit.CppBindings.Fcl.Generator.Tool` | Repository-local, non-package FCL generation host |
+| `TedToolkit.CppBindings.Windows.Generation.Tool` | The only non-packable repository tool that runs each provider Generator and owns Windows generation, native build, caching, staging, and notices |
 | `Build` | Repository build, test, native fixture, and integration gates |
 
 ## Test and verification

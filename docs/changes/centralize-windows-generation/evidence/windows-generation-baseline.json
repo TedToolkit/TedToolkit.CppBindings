@@ -1,0 +1,27 @@
+{
+  "schemaVersion": 1,
+  "sourceRevision": "c44a72aa98d44b03440a359ce4bb4bc2de080f49",
+  "configuration": "Release",
+  "providers": [
+    {
+      "name": "Occt",
+      "managedSourceCount": 7340,
+      "managedSourceFingerprint": "C04A34FB4679BCEFA86145E177A51703A36333B39E7D177558BEFE92C5F32C20"
+    },
+    {
+      "name": "Cgal",
+      "managedSourceCount": 7,
+      "managedSourceFingerprint": "B1A38A09421C978B7CD2DBE0650B0BCD7742902BA5C96B6D5189B963FCECF4FE"
+    },
+    {
+      "name": "Manifold",
+      "managedSourceCount": 1,
+      "managedSourceFingerprint": "701EE5F94CCFDBA147C03D730BCE8ABFDA8091EF4393D247E63570B2153D2D2D"
+    },
+    {
+      "name": "Fcl",
+      "managedSourceCount": 1,
+      "managedSourceFingerprint": "282F0EB8AEBFE0D1417297EB34FA8960075C708B2E5B3A63ADDC5004599DF7B2"
+    }
+  ]
+}

@@ -1,6 +1,6 @@
 {
   "name": "tedtoolkit-cppbindings-cgal-profile",
-  "version-string": "epick-windows-v1",
+  "version-string": "epick-windows-v2",
   "dependencies": [
     "cgal",
     "gmp",

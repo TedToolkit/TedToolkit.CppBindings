@@ -74,7 +74,7 @@ $requiredManagedInventories = @(
     'source-inventory.json',
     'toolchain-inventory.json',
     'unsupported-inventory.json')
-if ($generation.ProfileId -cne 'fcl-0.7.0-obbrss-double-windows-v1' `
+if ($generation.ProfileId -cne 'fcl-0.7.0-obbrss-double-windows-v2' `
     -or $generation.NativeFunctionCount -ne 7 `
     -or $profile.Versions.Fcl -cne '0.7.0#5' `
     -or $profile.Versions.Ccd -cne '2.1#4' `

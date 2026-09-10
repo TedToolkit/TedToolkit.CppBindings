@@ -1,7 +1,7 @@
 # FCL Windows bindings
 
 `TedToolkit.CppBindings.Fcl.Windows` supports `net8.0` and `win-x64` for the locked
-`fcl-0.7.0-obbrss-double-windows-v1` profile. Build models with copied xyz doubles and native-width
+`fcl-0.7.0-obbrss-double-windows-v2` profile. Build models with copied xyz doubles and native-width
 indices, check `FclModelBuildResult.Code`, and dispose every successful `Owned<FclBvhModel>`.
 
 Continuous collision keeps the first model fixed and linearly translates the second. The primary

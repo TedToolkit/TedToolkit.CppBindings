@@ -13,7 +13,7 @@ namespace TedToolkit.CppBindings.Fcl.Generator;
 public sealed record FclProfile
 {
     /// <summary>Gets the stable profile identity.</summary>
-    public string ProfileId { get; init; } = "fcl-0.7.0-obbrss-double-windows-v1";
+    public string ProfileId { get; init; } = "fcl-0.7.0-obbrss-double-windows-v2";
 
     /// <summary>Gets the locked native and toolchain identities.</summary>
     public IReadOnlyDictionary<string, string> Versions { get; init; } = ReadOnly(new Dictionary<string, string>()
@@ -24,7 +24,7 @@ public sealed record FclProfile
         ["Octomap"] = "1.10.0",
         ["VcpkgBuiltinBaseline"] = "30ef65cad98f08e7197c9a1656fbd871bcb72f2d",
         ["CMake"] = "4.4.3",
-        ["Msvc"] = "19.51.36256",
+        ["Msvc"] = "19.51.36257",
         ["Triplet"] = "x64-windows",
     });
 

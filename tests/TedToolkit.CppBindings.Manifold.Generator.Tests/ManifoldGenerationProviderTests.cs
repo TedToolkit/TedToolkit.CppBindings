@@ -29,7 +29,7 @@ internal sealed class ManifoldGenerationProviderTests
         var first = new ManifoldGenerationProvider().CreatePlan(vcpkgRoot);
         var second = new ManifoldGenerationProvider().CreatePlan(vcpkgRoot);
 
-        await Assert.That(first.ProfileId).IsEqualTo("manifold-3.5.2-windows-v1");
+        await Assert.That(first.ProfileId).IsEqualTo("manifold-3.5.2-windows-v2");
         await Assert.That(first.NativeExports.Count).IsEqualTo(9);
         await Assert.That(first.NativeExports).IsEquivalentTo(second.NativeExports);
         await Assert.That(first.ManagedSources.Keys).IsEquivalentTo(second.ManagedSources.Keys);
@@ -339,9 +339,9 @@ internal sealed class ManifoldGenerationProviderTests
             ["csharp/managed-inventory.json"] = "ed253a807f5cef558c53ffda92e9d8e5dc22a12175f31cc4156a7040b5a6628c",
             ["csharp/Manifold.Bindings.g.cs"] = "c452e996e22f3bfdc4b2f1760e7b6bb5c88d4611669c100096d7bd2d828649d0",
             ["csharp/ownership-inventory.json"] = "0d64b61091e096e1ca14a424196adb4eee91b0cf1c293ca78ccb6a12e4477e0b",
-            ["csharp/profile-manifest.json"] = "33a74c89a5dd15e82a5ce6f04c0bfb98ec48e41e538ba9182417bf564f4d7cc5",
+            ["csharp/profile-manifest.json"] = "eaca47e037238a10a0c3cce3c19a7ba96a7f4b8052eff914153d3e484f58dfc9",
             ["csharp/source-declaration-inventory.json"] = "28c3acc4f2df029d17d8e262e186bc96f2456ec5f9d4add8fce7b740421591ce",
-            ["csharp/toolchain-inventory.json"] = "b71b6de2247af99e79a5f341ee15c277269f63b0d93d4270a042cd2a49e434db",
+            ["csharp/toolchain-inventory.json"] = "fe8ef398cd6ce22b122f0fc865dc0a4dbb8906de2bd2db2a1806e5af34b7f85a",
             ["csharp/unsupported-inventory.json"] = "cad79a0fe5c781a9a1be29283613cce96636972f963ded0d254af06a264fa099",
             ["cpp/CMakeLists.txt"] = "8e714b1521ac5fdcde97158d2b596d249d14ce317b8b7adeec12ab4827d4b27f",
             ["cpp/ManifoldProfileAdapter.cpp"] = "5eba66055fd4eea71c4289f6c034d8623a0da4ca919bf87aa9cfd34b7d1b65bd",

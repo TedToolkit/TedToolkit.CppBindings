@@ -13,7 +13,8 @@
 - Last approved revision: Uncommitted working tree approved by the maintainer on 2026-08-26;
   declaration-level alignment admission and cyclic handle field reference projection approved on
   2026-09-04; ordinary overlapping-field reference projection approved on 2026-09-05; Shared
-  native-error projection and Provider-local extensions approved on 2026-09-09.
+  native-error projection and Provider-local extensions, plus centralized Windows generation
+  orchestration, approved in the Codex task on 2026-09-09.
 
 ## Current architecture
 
@@ -38,6 +39,22 @@ generated C# binding --> TedToolkit.CppBindings.Runtime
 generated provider binding --> matching provider Runtime
 consumer compilation --> TedToolkit.CppBindings.Analyzers
 ```
+
+Repository Windows generation is owned by the non-packable
+`src/tools/TedToolkit.CppBindings.Windows.Generation.Tool` application.
+That application may depend on every provider Generator because its responsibility is composition,
+not reusable generation semantics. It selects one provider per invocation and owns source
+materialization, native configuration and compilation, cache validation, dependency-closure
+staging, and required third-party notices. Provider Generator projects remain the authorities for
+their declaration profiles and emitted source.
+
+Each provider `.Windows` project references the compiled generation application only as a build
+tool and invokes it before compiling generated managed sources. The reference never becomes a
+managed assembly, package, or consumer dependency. A provider `.Windows` project must remain
+independently buildable; the repository `Build.csproj` remains the top-level CI pipeline and may
+build those projects, but provider projects never reference or invoke that pipeline. Verification
+scripts independently exercise generated outputs, caches, packages, and native dependency closure;
+they do not implement the canonical generation path.
 
 The normalized Model is the only declaration authority. C# and C++ emitters consume it
 independently; neither emitter reads or repairs the other's output. Generated source is never
@@ -459,6 +476,15 @@ generated and proved platform binding artifact; replacing only the native asset 
   a substitute for owner liveness or claim either mechanism protects against explicit concurrent
   disposal.
 - Keep Runtime declaration-agnostic and wrappers equally capable through public API only.
+- Keep one canonical C# Windows generation application. Do not duplicate provider generation,
+  native compilation, cache, or staging orchestration in provider-specific shell scripts or
+  executable host projects.
+- Preserve standalone provider `.Windows` builds, output layouts, input-sensitive cache
+  invalidation, per-output mutual exclusion, bounded output roots, pinned toolchain checks, exact
+  recursive native dependency staging, and required notice staging when changing build tooling.
+- Keep verification independent from generation: verification may use PowerShell and shared
+  verification modules, but it must consume or inspect the generation result rather than become the
+  implementation invoked by provider builds.
 - Contain all native exceptions and perform every cleanup through the originating native artifact.
 - Keep Shared kinds fixed at 0 through 8 and 255. Treat 9 through 254 as Provider-local values with
   no cross-Provider uniqueness requirement, and never let a Provider reinterpret a Shared kind.
@@ -496,6 +522,11 @@ Reassess this architecture when any of the following occurs:
   finalizable owner can still retain one of its addresses;
 - profiling demonstrates a material managed function-table cost or a different table storage form
   produces a sustained representative benefit beyond the ADR threshold;
+- another operating system or architecture cannot reuse the generation application's composition
+  boundary without introducing platform conditionals into provider Generator semantics;
+- a provider requires generation, native-build, cache, staging, or notice behavior that cannot be
+  expressed by the shared build-time application without provider-specific policy leaking into the
+  shared Generator;
 - Runtime needs declaration-specific knowledge or a wrapper requests privileged access;
 - a Shared error kind changes, a Provider must override a Shared kind, or a global Provider-extension
   number registry is proposed;

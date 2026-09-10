@@ -155,7 +155,7 @@ internal sealed class AnalyzeTests
                 {
                     error.Kind = 0;
                     _ = error.Message;
-                    NativeErrorProjection.ThrowIfFailed(ref error, &Clear);
+                    TedToolkit.CppBindings.NativeErrorProjection.ThrowIfFailed(ref error, &Clear);
                 }
             }
             """;

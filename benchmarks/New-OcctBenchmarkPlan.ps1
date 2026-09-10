@@ -193,7 +193,7 @@ function Read-HostReceipt {
     }
     try { $assembly = [Reflection.AssemblyName]::GetAssemblyName($entryPoint) }
     catch { throw "A host receipt does not reference a valid managed assembly: $entryPoint" }
-    if ($assembly.Name -cne 'TedToolkit.CppBindings.Occt.Console' -or
+    if ($assembly.Name -cne 'TedToolkit.CppBindings.Occt.BenchmarkHost' -or
         $assembly.FullName -cne $receipt.HostAssemblyIdentity) {
         throw 'A host receipt has the wrong managed assembly identity.'
     }
@@ -213,7 +213,7 @@ function Read-HostReceipt {
     }
     $publish = Get-Content -LiteralPath $publishPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
     $sourceRoot = Resolve-ExistingPath $receipt.SourceRepositoryRoot directory
-    $expectedProject = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj')
+    $expectedProject = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/TedToolkit.CppBindings.Occt.BenchmarkHost.csproj')
     $expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net10.0',
         '--no-restore', '--output', $hostRoot, '--nologo')
     if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-host-publish' -or

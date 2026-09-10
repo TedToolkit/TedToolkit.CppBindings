@@ -1,7 +1,7 @@
 # TedToolkit.CppBindings.Cgal.Generator
 
 This package supplies configurable finite CGAL generation through the provider-neutral Shared
-pipeline. The default `epick-windows-v1` profile targets CGAL 6.2 from vcpkg `x64-windows` and emits
+pipeline. The default `epick-windows-v2` profile targets CGAL 6.2 from vcpkg `x64-windows` and emits
 matched managed/native sources plus deterministic coverage inventories.
 
 ```csharp
@@ -26,7 +26,7 @@ CGAL/GMP/MPFR versions and vcpkg ABIs plus the pinned CMake and MSVC versions.
 
 Pass `ProfileManifestFile` and the matching `ProfileId` to select another explicit version-1 finite
 profile. Its selected headers, closed signatures, source evidence, roots, and declaration
-dependencies are snapshotted before generation. The bundled `profiles/epick-windows-v1` vcpkg
+dependencies are snapshotted before generation. The bundled `profiles/epick-windows-v2` vcpkg
 manifest and registry configuration reproduce the default package inputs.
 
 Generated inventory files distinguish all installed public headers and compiler-observed source

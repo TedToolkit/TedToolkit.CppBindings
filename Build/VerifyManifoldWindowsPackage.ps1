@@ -76,7 +76,7 @@ $requiredManagedInventories = @(
     'source-inventory.json',
     'toolchain-inventory.json',
     'unsupported-inventory.json')
-if ($generation.ProfileId -cne 'manifold-3.5.2-windows-v1' `
+if ($generation.ProfileId -cne 'manifold-3.5.2-windows-v2' `
     -or $generation.NativeExportCount -ne 9 `
     -or $profile.ManifoldVersion -cne '3.5.2' `
     -or $profile.Triplet -cne 'x64-windows' `

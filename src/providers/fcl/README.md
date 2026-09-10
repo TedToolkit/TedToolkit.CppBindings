@@ -7,3 +7,6 @@ referencing or converting OCCT, CGAL, or Manifold types.
 - `TedToolkit.CppBindings.Fcl.Generator` owns the locked profile and deterministic inventories.
 - `TedToolkit.CppBindings.Fcl.Runtime` owns native diagnostic projection.
 - `TedToolkit.CppBindings.Fcl.Windows` packages the matched managed/native binding and exact DLL closure.
+
+Repository builds materialize this provider through the shared
+`src/tools/TedToolkit.CppBindings.Windows.Generation.Tool` host.

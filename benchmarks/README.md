@@ -211,11 +211,11 @@ binding, so a template plan cannot accidentally become a performance run.
 
 Create each host with `Publish-OcctBenchmarkHost.ps1`, giving it an absent unique host directory
 and absent completion-receipt path. It runs the exact Release/net10.0 `dotnet publish` for the
-repository Console project and writes a non-overwriting completion receipt only after a successful
+repository benchmark-host project and writes a non-overwriting completion receipt only after a successful
 publish from the exact clean source revision. The receipt binds the exact command, captured output,
 publisher, dotnet and project hashes, and every file in the newly produced host. Then create the
 provenance receipt with `New-OcctBenchmarkHostReceipt.ps1`; it independently rechecks that fresh-build
-relationship, the real managed `TedToolkit.CppBindings.Occt.Console` assembly, and runtime metadata.
+relationship, the real managed `TedToolkit.CppBindings.Occt.BenchmarkHost` assembly, and runtime metadata.
 Original hosts must use the exact
 variant revision. Changed hosts must use clean commits whose complete `git diff --binary
 --full-index` is byte-identical to the same frozen harmless patch. Fixture-only receipts can test
@@ -257,11 +257,11 @@ timeout or failure terminates the live validation tree and identity-checked obse
 and refuses to start the measured child. Validation emits a single-use receipt scoped to the plan,
 variant, workload, generator host, driver trace, and resource inventory; timed Generate consumes only
 a matching receipt no more than 30 seconds old. The timed action therefore contains only negligible
-receipt/environment setup plus the exact Console invocation
-`dotnet <Console.dll> --output-root <isolated-root>`, and restores both `PATH` and `VCPKG_ROOT` after
+receipt/environment setup plus the exact benchmark-host invocation
+`dotnet <TedToolkit.CppBindings.Occt.BenchmarkHost.dll> --output-root <isolated-root>`, and restores both `PATH` and `VCPKG_ROOT` after
 success or failure. Prepare and verify stages also validate the complete live private-triplet
-inventory. No PATH-only tool identity is accepted. Generator stages never call
-`Build/GenerateWindowsBindings.ps1` and therefore cannot be hidden by its generation cache.
+inventory. No PATH-only tool identity is accepted. The benchmark host calls the OCCT Generator
+directly and therefore cannot be hidden by the repository generation tool's cache.
 The full compiler/version probes remain in preparation; configure/build only recheck the already
 bound vcvars environment immediately before launching the pinned native tool, with the same check
 on both variants.

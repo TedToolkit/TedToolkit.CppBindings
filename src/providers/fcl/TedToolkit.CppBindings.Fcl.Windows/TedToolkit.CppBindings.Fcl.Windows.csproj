@@ -17,9 +17,9 @@
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\TedToolkit.CppBindings.Fcl.Runtime\TedToolkit.CppBindings.Fcl.Runtime.csproj" />
-    <ProjectReference Include="..\TedToolkit.CppBindings.Fcl.Generator.Tool\TedToolkit.CppBindings.Fcl.Generator.Tool.csproj"
+    <ProjectReference Include="..\..\..\tools\TedToolkit.CppBindings.Windows.Generation.Tool\TedToolkit.CppBindings.Windows.Generation.Tool.csproj"
                       ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true"
-                      OutputItemType="FclGeneratorHost" />
+                      OutputItemType="WindowsGenerationHost" />
     <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_cpp_bindings_fcl.dll"
           Pack="true" PackagePath="runtimes\win-x64\native" />
     <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
@@ -29,8 +29,8 @@
   </ItemGroup>
   <Target Name="GenerateFclWindowsBindings" BeforeTargets="CoreCompile">
     <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Fcl.Windows." />
-    <Error Condition="'@(FclGeneratorHost)' == ''" Text="The FCL generator host output was not resolved." />
-    <Exec Command="pwsh -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\..\..\Build\GenerateFclWindowsBindings.ps1&quot; -RepositoryRoot &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; -GeneratorHost &quot;@(FclGeneratorHost)&quot; -GeneratedRoot &quot;$(GeneratedRoot)&quot; -VcpkgRoot &quot;$(VcpkgRoot)&quot; -Configuration &quot;$(Configuration)&quot;" />
+    <Error Condition="'@(WindowsGenerationHost)' == ''" Text="The Windows generation host output was not resolved." />
+    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider fcl --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; --vcpkg-root &quot;$(VcpkgRoot)&quot; --configuration &quot;$(Configuration)&quot;" />
   </Target>
   <Target Name="IncludeGeneratedFclWindowsBindings" BeforeTargets="CoreCompile" DependsOnTargets="GenerateFclWindowsBindings">
     <ItemGroup>

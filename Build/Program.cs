@@ -8,14 +8,18 @@ using TedToolkit.ModularPipelines;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
+var repositoryDirectory = Projects.Build.Directory?.Parent
+    ?? throw new InvalidOperationException("Unable to resolve the repository directory from the Build project.");
+var solution = new FileInfo(Path.Combine(repositoryDirectory.FullName, "TedToolkit.CppBindings.slnx"));
+
 var pipeline = new TedPipeline(
     new()
     {
         BuildFiles =
         [
-            Solutions.TedToolkit_CppBindings,
+            solution,
         ],
-        Solution = Solutions.TedToolkit_CppBindings,
+        Solution = solution,
         TestFiles = [],
     },
     new FileInfo(Path.Combine(Projects.Build.Directory!.FullName, "appsettings.json")));

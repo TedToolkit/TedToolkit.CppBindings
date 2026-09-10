@@ -100,7 +100,7 @@ $managedInventory = @(Get-Content -LiteralPath (Join-Path $generated 'csharp/man
     -Raw | ConvertFrom-Json)
 $nativeInventory = @(Get-Content -LiteralPath (Join-Path $generated 'cpp/native-inventory.json') `
     -Raw | ConvertFrom-Json)
-if ($generationResult.ProfileId -cne 'epick-windows-v1' `
+if ($generationResult.ProfileId -cne 'epick-windows-v2' `
     -or $generationResult.AdmittedCount -ne 19 `
     -or $generationResult.NativeExportCount -ne 17 `
     -or $managedInventory.Count -ne 19 `

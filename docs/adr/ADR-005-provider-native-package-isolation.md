@@ -74,7 +74,7 @@ release boundaries without imposing a common native package.
 ## Evidence and links
 
 - [OCCT Windows project](../../src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj)
-- [CGAL Windows generation](../../Build/GenerateCgalWindowsBindings.ps1)
+- [Shared Windows generation tool](../../src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj)
 - [C++ bindings platform architecture](../architecture/cpp-bindings-platform.md)
 - [Native function-table decision](ADR-003-native-function-table-bootstrap.md)
 

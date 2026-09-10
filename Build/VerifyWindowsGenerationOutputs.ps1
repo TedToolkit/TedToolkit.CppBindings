@@ -2,7 +2,8 @@
 param(
     [string] $RepositoryRoot,
     [string] $Configuration = 'Release',
-    [string] $OutputPath
+    [string] $OutputPath,
+    [string] $BaselinePath
 )
 
 $ErrorActionPreference = 'Stop'
@@ -90,6 +91,30 @@ $results = @($providers | ForEach-Object {
         ManifestHash = (Get-FileHash -LiteralPath $manifest -Algorithm SHA256).Hash
     }
 })
+
+if ($BaselinePath) {
+    $resolvedBaseline = [IO.Path]::GetFullPath($BaselinePath)
+    if (-not (Test-Path -LiteralPath $resolvedBaseline -PathType Leaf)) {
+        throw "Generation baseline is missing: $resolvedBaseline"
+    }
+
+    $baseline = Get-Content -LiteralPath $resolvedBaseline -Raw | ConvertFrom-Json
+    foreach ($result in $results) {
+        $expected = @($baseline.providers | Where-Object {
+                $_.name -eq $result.Name
+            })
+        if ($expected.Count -ne 1) {
+            throw "Generation baseline must contain exactly one $($result.Name) entry."
+        }
+
+        if ($result.ManagedSourceCount -ne $expected[0].managedSourceCount `
+            -or $result.ManagedSourceFingerprint -cne $expected[0].managedSourceFingerprint) {
+            throw "$($result.Name) managed output differs from the approved baseline: " +
+                "count=$($result.ManagedSourceCount)/$($expected[0].managedSourceCount), " +
+                "fingerprint=$($result.ManagedSourceFingerprint)/$($expected[0].managedSourceFingerprint)."
+        }
+    }
+}
 
 $null = New-Item -ItemType Directory -Path (Split-Path $summaryPath -Parent) -Force
 [ordered]@{

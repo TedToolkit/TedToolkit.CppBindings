@@ -74,10 +74,10 @@ src/
 │   │   └── TedToolkit.CppBindings.Occt.Windows
 │   └── cgal/
 │       ├── TedToolkit.CppBindings.Cgal.Generator
-│       ├── TedToolkit.CppBindings.Cgal.Generator.Tool (internal host)
 │       ├── TedToolkit.CppBindings.Cgal.Runtime
 │       └── TedToolkit.CppBindings.Cgal.Windows
 └── tools/
+    ├── TedToolkit.CppBindings.Windows.Generation.Tool
     └── provider-neutral development tools
 ```
 

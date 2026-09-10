@@ -55,6 +55,7 @@ public sealed class ManagedTestGateModule(
             "tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj",
             "tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBindings.Runtime.Tests.csproj",
             "tests/TedToolkit.CppBindings.Analyzers.Tests/TedToolkit.CppBindings.Analyzers.Tests.csproj",
+            "tests/TedToolkit.CppBindings.Windows.Generation.Tool.Tests/TedToolkit.CppBindings.Windows.Generation.Tool.Tests.csproj",
         }.Select(path => new FileInfo(Path.Combine(root.FullName, path))).ToArray();
         var reports = new List<FileInfo>();
         foreach (var project in projects)

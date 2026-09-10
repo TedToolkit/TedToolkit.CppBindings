@@ -20,10 +20,10 @@
 
   <ItemGroup>
     <ProjectReference Include="..\TedToolkit.CppBindings.Cgal.Runtime\TedToolkit.CppBindings.Cgal.Runtime.csproj" />
-    <ProjectReference Include="..\TedToolkit.CppBindings.Cgal.Generator.Tool\TedToolkit.CppBindings.Cgal.Generator.Tool.csproj"
+    <ProjectReference Include="..\..\..\tools\TedToolkit.CppBindings.Windows.Generation.Tool\TedToolkit.CppBindings.Windows.Generation.Tool.csproj"
                       ReferenceOutputAssembly="false"
                       SkipGetTargetFrameworkProperties="true"
-                      OutputItemType="CgalGeneratorHost" />
+                      OutputItemType="WindowsGenerationHost" />
     <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_cpp_bindings_cgal.dll"
           Pack="true" PackagePath="runtimes\win-x64\native" />
     <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
@@ -34,8 +34,8 @@
 
   <Target Name="GenerateCgalWindowsBindings" BeforeTargets="CoreCompile">
     <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Cgal.Windows." />
-    <Error Condition="'@(CgalGeneratorHost)' == ''" Text="The CGAL generator host output was not resolved." />
-    <Exec Command="pwsh -NoProfile -ExecutionPolicy Bypass -File &quot;$(MSBuildProjectDirectory)\..\..\..\..\Build\GenerateCgalWindowsBindings.ps1&quot; -RepositoryRoot &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; -GeneratorHost &quot;@(CgalGeneratorHost)&quot; -GeneratedRoot &quot;$(GeneratedRoot)&quot; -VcpkgRoot &quot;$(VcpkgRoot)&quot; -Configuration &quot;$(Configuration)&quot;" />
+    <Error Condition="'@(WindowsGenerationHost)' == ''" Text="The Windows generation host output was not resolved." />
+    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider cgal --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; --vcpkg-root &quot;$(VcpkgRoot)&quot; --configuration &quot;$(Configuration)&quot;" />
   </Target>
 
   <Target Name="IncludeGeneratedCgalWindowsBindings"

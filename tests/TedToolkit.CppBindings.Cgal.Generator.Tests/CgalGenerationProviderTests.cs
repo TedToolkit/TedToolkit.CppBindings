@@ -89,7 +89,7 @@ internal sealed class CgalGenerationProviderTests
         var independentlyEnumeratedHeaders = EnumerateInstalledHeaders();
         var vcpkgPackageHeaders = EnumerateVcpkgPackageHeaders();
 
-        await Assert.That(firstProvider.Profile.ProfileId).IsEqualTo("epick-windows-v1");
+        await Assert.That(firstProvider.Profile.ProfileId).IsEqualTo("epick-windows-v2");
         await Assert.That(firstProvider.Profile.CgalVersion).IsEqualTo("6.2");
         await Assert.That(firstProvider.Inventory.Sources.Select(static item => item.Header))
             .IsEquivalentTo(independentlyEnumeratedHeaders);
@@ -125,7 +125,7 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(firstProvider.Inventory.Toolchain.Cgal).IsEqualTo("6.2");
         await Assert.That(firstProvider.Inventory.Toolchain.CgalAbi).IsNotEmpty();
         await Assert.That(firstProvider.Inventory.Toolchain.CMake).IsEqualTo("4.4.3");
-        await Assert.That(firstProvider.Inventory.Toolchain.Msvc).IsEqualTo("19.51.36256");
+        await Assert.That(firstProvider.Inventory.Toolchain.Msvc).IsEqualTo("19.51.36257");
         await Assert.That(Hash(firstManaged)).IsEqualTo(Hash(secondManaged));
         await Assert.That(Hash(firstNative)).IsEqualTo(Hash(secondNative));
         await Assert.That(firstPlan.NativeExports.SequenceEqual(secondPlan.NativeExports, StringComparer.Ordinal)).IsTrue();
@@ -261,12 +261,49 @@ internal sealed class CgalGenerationProviderTests
                 .IsEqualTo(defaultProfile.Declarations.Count - 1);
             await Assert.That(plan.NativeExports).DoesNotContain("Cgal_Point2_Cartesian");
             await Assert.That(mutationFailure).IsNotNull();
-            await Assert.That(CgalProfileManifest.LoadDefault().ProfileId).IsEqualTo("epick-windows-v1");
+            await Assert.That(CgalProfileManifest.LoadDefault().ProfileId).IsEqualTo("epick-windows-v2");
         }
         finally
         {
             File.Delete(file.FullName);
         }
+    }
+
+    /// <summary>
+    /// Verifies the former profile identity retains its original compiler lock and is not aliased to v2.
+    /// </summary>
+    /// <returns>A task that completes when assertions finish.</returns>
+    [Test]
+    public async Task Should_reject_an_explicit_v1_profile_on_the_v2_compiler_Async()
+    {
+        var current = CgalProfileManifest.LoadDefault();
+        var legacy = current with
+        {
+            ProfileId = "epick-windows-v1",
+            Toolchain = current.Toolchain with { Msvc = "19.51.36256", },
+        };
+        var file = WriteProfile(legacy);
+        InvalidOperationException? failure = null;
+        try
+        {
+            _ = CreateProvider(file, legacy.ProfileId);
+        }
+        catch (InvalidOperationException exception)
+        {
+            failure = exception;
+        }
+        finally
+        {
+            File.Delete(file.FullName);
+        }
+
+        await Assert.That(current.ProfileId).IsEqualTo("epick-windows-v2");
+        await Assert.That(current.Toolchain.Msvc).IsEqualTo("19.51.36257");
+        await Assert.That(legacy.ProfileId).IsEqualTo("epick-windows-v1");
+        await Assert.That(legacy.Toolchain.Msvc).IsEqualTo("19.51.36256");
+        await Assert.That(failure).IsNotNull();
+        await Assert.That(failure!.Message)
+            .Contains("Installed CGAL toolchain does not match finite profile 'epick-windows-v1'");
     }
 
     /// <summary>

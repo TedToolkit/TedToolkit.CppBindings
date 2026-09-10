@@ -11,7 +11,7 @@ param(
 $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 $utf8 = [Text.UTF8Encoding]::new($false)
-$consoleProjectRelativePath = 'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'
+$consoleProjectRelativePath = 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/TedToolkit.CppBindings.Occt.BenchmarkHost.csproj'
 . (Join-Path $PSScriptRoot 'BenchmarkPath.ps1')
 
 function Invoke-Git {
@@ -64,7 +64,7 @@ if ((Test-BenchmarkPathWithin $receipt $hostRoot -OrEqual) -or
 $project = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot $consoleProjectRelativePath)
 if (-not (Test-BenchmarkPathWithin $project $sourceRoot) -or
     -not (Test-Path -LiteralPath $project -PathType Leaf)) {
-    throw 'The exact OCCT Console project is missing from the source repository.'
+    throw 'The exact OCCT benchmark host project is missing from the source repository.'
 }
 Assert-ExactCleanSource
 
@@ -113,10 +113,10 @@ if ($exitCode -ne 0) {
 Assert-ExactCleanSource
 $hostFiles = @(Get-HostManifest)
 if ($hostFiles.Count -lt 3) { throw 'The fresh publish did not produce a complete Console host.' }
-$entryPoint = Join-Path $hostRoot 'TedToolkit.CppBindings.Occt.Console.dll'
+$entryPoint = Join-Path $hostRoot 'TedToolkit.CppBindings.Occt.BenchmarkHost.dll'
 try { $assembly = [Reflection.AssemblyName]::GetAssemblyName($entryPoint) }
 catch { throw 'The fresh publish did not produce a valid OCCT Console assembly.' }
-if ($assembly.Name -cne 'TedToolkit.CppBindings.Occt.Console') {
+if ($assembly.Name -cne 'TedToolkit.CppBindings.Occt.BenchmarkHost') {
     throw 'The fresh publish produced the wrong managed assembly.'
 }
 
@@ -143,7 +143,7 @@ $document = [ordered]@{
     Command = [ordered]@{ Executable = $dotnet; Arguments = $arguments; WorkingDirectory = $sourceRoot }
     Output = [ordered]@{ StandardOutput = $standardOutput; StandardError = $standardError }
     HostDirectory = $hostRoot
-    HostEntryPointRelativePath = 'TedToolkit.CppBindings.Occt.Console.dll'
+    HostEntryPointRelativePath = 'TedToolkit.CppBindings.Occt.BenchmarkHost.dll'
     HostAssemblyIdentity = $assembly.FullName
     HostFiles = $hostFiles
 }

@@ -15,15 +15,16 @@ if ($providerIdentifiers.Count -eq 0) {
 }
 $providerTermPattern = '(?i)(?:' + (($providerIdentifiers | ForEach-Object { [Regex]::Escape($_) }) -join '|') + ')'
 $expectedProjects = @(
+    'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj',
     'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj',
     'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj',
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj',
+    'src/providers/cgal/TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj',
+    'src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj',
     'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/TedToolkit.CppBindings.Fcl.Generator.csproj',
-    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator.Tool/TedToolkit.CppBindings.Fcl.Generator.Tool.csproj',
     'src/providers/fcl/TedToolkit.CppBindings.Fcl.Runtime/TedToolkit.CppBindings.Fcl.Runtime.csproj',
     'src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/TedToolkit.CppBindings.Fcl.Windows.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj',
-    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator.Tool/TedToolkit.CppBindings.Manifold.Generator.Tool.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Runtime/TedToolkit.CppBindings.Manifold.Runtime.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj',
@@ -57,6 +58,15 @@ function Assert-ProjectReferenceAllowed {
         [Parameter(Mandatory)] $Target,
         [Parameter(Mandatory)][bool] $BuildOnly
     )
+
+    $generationTool = 'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj'
+    if ($BuildOnly -and $Source.Kind -eq 'provider' -and $Target.Path -eq $generationTool) {
+        return
+    }
+    if ($Source.Path -eq $generationTool -and $Target.Kind -eq 'provider' `
+        -and $Target.Path -match '\.Generator/[^/]+\.Generator\.csproj$') {
+        return
+    }
 
     if ($Target.Kind -eq 'outside') {
         if ($BuildOnly -and $Target.Path.StartsWith('tests/', [StringComparison]::Ordinal)) {
@@ -161,19 +171,68 @@ foreach ($entry in $windowsPackagingRules.GetEnumerator()) {
     if (-not $bindingNames.Add($entry.Value)) {
         throw "Windows providers share native binding basename '$($entry.Value)'."
     }
+    if ($contents -notmatch 'tools\\TedToolkit\.CppBindings\.Windows\.Generation\.Tool\\TedToolkit\.CppBindings\.Windows\.Generation\.Tool\.csproj' `
+        -or $contents -notmatch 'ReferenceOutputAssembly="false"' `
+        -or $contents -notmatch 'OutputItemType="WindowsGenerationHost"') {
+        throw "Windows provider does not use the shared build-only generation host: $($entry.Key)"
+    }
 }
 
-foreach ($scriptName in @(
+$legacyGenerationScripts = @(
         'GenerateWindowsBindings.ps1',
         'GenerateCgalWindowsBindings.ps1',
         'GenerateManifoldWindowsBindings.ps1',
-        'GenerateFclWindowsBindings.ps1')) {
-    $contents = Get-Content -LiteralPath (Join-Path $repository "Build/$scriptName") -Raw
-    $parallelCounts = @([regex]::Matches($contents, '--parallel\s+(\d+)') |
-        ForEach-Object { [int]$_.Groups[1].Value })
-    if ($parallelCounts.Count -eq 0 -or @($parallelCounts | Where-Object { $_ -ne 1 }).Count -ne 0) {
-        throw "Native provider generation is not constrained to one compiler worker: Build/$scriptName"
+        'GenerateFclWindowsBindings.ps1')
+foreach ($scriptName in $legacyGenerationScripts) {
+    if (Test-Path -LiteralPath (Join-Path $repository "Build/$scriptName")) {
+        throw "Legacy provider generation script still exists: Build/$scriptName"
     }
+}
+$legacyGeneratorTools = @(Get-ChildItem -LiteralPath $providersRoot -Recurse -Filter '*.Generator.Tool.csproj' -File)
+if ($legacyGeneratorTools.Count -ne 0) {
+    throw "Provider-local generator hosts still exist: $($legacyGeneratorTools.FullName -join ', ')"
+}
+$legacyOcctHost = Join-Path $repository `
+    'tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj'
+if (Test-Path -LiteralPath $legacyOcctHost) {
+    throw 'The superseded OCCT Console generation host still exists.'
+}
+$benchmarkHost = Join-Path $repository `
+    'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/TedToolkit.CppBindings.Occt.BenchmarkHost.csproj'
+if (-not (Test-Path -LiteralPath $benchmarkHost -PathType Leaf)) {
+    throw 'The generation benchmark requires its dedicated OCCT benchmark host.'
+}
+$benchmarkSources = @(Get-ChildItem -LiteralPath (Join-Path $repository 'benchmarks') -Recurse -File |
+    Where-Object { $_.Extension -in @('.md', '.ps1') })
+foreach ($source in $benchmarkSources) {
+    $contents = Get-Content -LiteralPath $source.FullName -Raw
+    if ($contents -match 'TedToolkit\.CppBindings\.Occt\.Console' `
+        -or $contents -match 'tests[/\\]TedToolkit\.CppBindings\.Occt\.Console' `
+        -or $contents -match 'Build[/\\]GenerateWindowsBindings\.ps1') {
+        throw "Benchmark source still references a superseded generation host: $($source.FullName)"
+    }
+}
+$legacyCentralHost = Join-Path $repository `
+    'Build/TedToolkit.CppBindings.Windows.Generation/TedToolkit.CppBindings.Windows.Generation.csproj'
+if (Test-Path -LiteralPath $legacyCentralHost) {
+    throw 'The Windows generation host still exists outside src/tools.'
+}
+$generationHostPath = Join-Path $repository `
+    'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj'
+[xml] $generationHost = Get-Content -LiteralPath $generationHostPath -Raw
+$generationReferences = @($generationHost.SelectNodes('/Project/ItemGroup/ProjectReference') |
+    ForEach-Object { $_.GetAttribute('Include').Replace('\', '/') })
+foreach ($provider in @('Occt', 'Cgal', 'Manifold', 'Fcl')) {
+    if (@($generationReferences | Where-Object { $_ -match "CppBindings\.$provider\.Generator\.csproj`$" }).Count -ne 1) {
+        throw "The shared Windows generation host must directly reference the $provider generator once."
+    }
+}
+$generationCoordinator = Get-Content -LiteralPath (Join-Path $repository `
+    'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/WindowsGenerationCoordinator.cs') -Raw
+$parallelCounts = @([regex]::Matches($generationCoordinator, '"--parallel",\s*"(\d+)"') |
+    ForEach-Object { [int]$_.Groups[1].Value })
+if ($parallelCounts.Count -lt 2 -or @($parallelCounts | Where-Object { $_ -ne 1 }).Count -ne 0) {
+    throw 'Native provider generation is not constrained to one compiler worker.'
 }
 
 $windowsBindingsModule = Get-Content -LiteralPath (Join-Path $repository 'Build/WindowsBindingsModule.cs') -Raw

@@ -15,7 +15,7 @@ namespace TedToolkit.CppBindings.Manifold.Generator;
 public sealed record ManifoldProfile
 {
     /// <summary>The stable profile identity.</summary>
-    public const string DefaultProfileId = "manifold-3.5.2-windows-v1";
+    public const string DefaultProfileId = "manifold-3.5.2-windows-v2";
 
     /// <summary>Gets the profile identity.</summary>
     public string ProfileId { get; init; } = DefaultProfileId;
@@ -33,7 +33,7 @@ public sealed record ManifoldProfile
     public string CMake { get; init; } = "4.4.3";
 
     /// <summary>Gets the locked MSVC version.</summary>
-    public string Msvc { get; init; } = "19.51.36256";
+    public string Msvc { get; init; } = "19.51.36257";
 
     /// <summary>Gets the unique binding module basename.</summary>
     public string NativeLibraryBaseName { get; init; } = "ted_toolkit_cpp_bindings_manifold";

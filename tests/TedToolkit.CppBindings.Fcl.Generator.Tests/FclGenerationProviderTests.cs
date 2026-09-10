@@ -25,7 +25,7 @@ internal sealed class FclGenerationProviderTests
         var first = new FclGenerationProvider().CreatePlan(vcpkgRoot);
         var second = new FclGenerationProvider().CreatePlan(vcpkgRoot);
 
-        await Assert.That(first.ProfileId).IsEqualTo("fcl-0.7.0-obbrss-double-windows-v1");
+        await Assert.That(first.ProfileId).IsEqualTo("fcl-0.7.0-obbrss-double-windows-v2");
         await Assert.That(first.NativeFunctions.Count).IsEqualTo(7);
         await Assert.That(first.NativeFunctions).IsEquivalentTo(second.NativeFunctions);
         await Assert.That(first.ManagedSources.Keys).IsEquivalentTo(second.ManagedSources.Keys);
@@ -295,9 +295,9 @@ internal sealed class FclGenerationProviderTests
             ["csharp/layout-inventory.json"] = "6e7e7f700b22c01434a27e526242fa4831fdf88b3d53539b31e0c2ae237ad704",
             ["csharp/managed-inventory.json"] = "012371a71f17fea2e4cf29eda24c1a2e0b1aab5bda6ca3533fd7d25e8b65f19b",
             ["csharp/ownership-inventory.json"] = "4bfa174f8f83ad5ff9cf18e396e29ca00b73ad147d666f3ee004e6827d4f6b5b",
-            ["csharp/profile-manifest.json"] = "ee7a1f99a227df39dc1d1db3f3b15d274b59237255845b111762a8a074fda729",
+            ["csharp/profile-manifest.json"] = "b7149563521117cf5c99fd4a5b9c19fd9d05ffe8a8512af685c5320fe789ffa3",
             ["csharp/source-declaration-inventory.json"] = "dd132b5847af036b14054570975f719241e3f6c5a675735b8d551f0cde9cca70",
-            ["csharp/toolchain-inventory.json"] = "58dbeac44d20fa3ed76650071088edfa63984464a6e871581e211070114eaeb9",
+            ["csharp/toolchain-inventory.json"] = "3180ef9efc10f6c3aa7083113dd476fc8c2c64427cd66413edfb24f31b7b44ee",
             ["csharp/unsupported-inventory.json"] = "f73435a64d0d9e72d8cabfb834b18bf0d6e90c6df31216c8a4099b34c958b086",
             ["cpp/CMakeLists.txt"] = "0ab605a5cf67153e603981361ca1b985f3681c2d8064b000c2551902a1124bf3",
             ["cpp/FclProfileAdapter.cpp"] = "233184cdebcce6c795f9a10276ac508f00bcd4ea1ceb77df60f28dbf6fdd3a23",

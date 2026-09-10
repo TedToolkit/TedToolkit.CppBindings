@@ -120,7 +120,7 @@ From the repository root, run all-header source generation:
 
 ```powershell
 $env:VCPKG_ROOT = 'C:\vcpkg'
-dotnet run --project tests/TedToolkit.CppBindings.Occt.Console -c Release
+dotnet run --project src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj -c Release -- --provider occt --repository-root . --output-root output/generated --vcpkg-root $env:VCPKG_ROOT --configuration Release
 ```
 
 `dotnet build TedToolkit.CppBindings.slnx -c Release` additionally builds the Windows project's

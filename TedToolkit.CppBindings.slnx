@@ -18,19 +18,16 @@
   </Folder>
   <Folder Name="/src/providers/cgal/">
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj" />
-    <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator.Tool/TedToolkit.CppBindings.Cgal.Generator.Tool.csproj" />
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj" />
     <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj" />
   </Folder>
   <Folder Name="/src/providers/fcl/">
     <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/TedToolkit.CppBindings.Fcl.Generator.csproj" />
-    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator.Tool/TedToolkit.CppBindings.Fcl.Generator.Tool.csproj" />
     <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Runtime/TedToolkit.CppBindings.Fcl.Runtime.csproj" />
     <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/TedToolkit.CppBindings.Fcl.Windows.csproj" />
   </Folder>
   <Folder Name="/src/providers/manifold/">
     <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj" />
-    <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator.Tool/TedToolkit.CppBindings.Manifold.Generator.Tool.csproj" />
     <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Runtime/TedToolkit.CppBindings.Manifold.Runtime.csproj" />
     <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj" />
   </Folder>
@@ -42,6 +39,7 @@
   </Folder>
   <Folder Name="/src/tools/">
     <Project Path="src/tools/TedToolkit.CppBindings.Analyzers/TedToolkit.CppBindings.Analyzers.csproj" />
+    <Project Path="src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj" />
   </Folder>
   <Folder Name="/tests/">
     <Project Path="tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj" />
@@ -56,7 +54,7 @@
     <Project Path="tests/TedToolkit.CppBindings.Runtime.NativeIntegration/TedToolkit.CppBindings.Runtime.NativeIntegration.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Runtime.SecondWrapper/TedToolkit.CppBindings.Runtime.SecondWrapper.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBindings.Runtime.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Windows.Generation.Tool.Tests/TedToolkit.CppBindings.Windows.Generation.Tool.Tests.csproj" />
     <Project Path="tests/TedToolkit.CppBindings.Analyzers.Tests/TedToolkit.CppBindings.Analyzers.Tests.csproj" />
-    <Project Path="tests/TedToolkit.CppBindings.Occt.Console/TedToolkit.CppBindings.Occt.Console.csproj" />
   </Folder>
 </Solution>

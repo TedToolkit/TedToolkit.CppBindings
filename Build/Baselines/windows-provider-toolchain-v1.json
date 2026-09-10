@@ -1,0 +1,182 @@
+{
+  "SchemaVersion": 1,
+  "SourceRevision": "c44a72aa98d44b03440a359ce4bb4bc2de080f49",
+  "CaptureMode": "source-only v1 plans plus profile-neutral shared function-table emission",
+  "ExpectedMigration": {
+    "Msvc": {
+      "From": "19.51.36256",
+      "To": "19.51.36257"
+    },
+    "Profiles": {
+      "Cgal": {
+        "From": "epick-windows-v1",
+        "To": "epick-windows-v2"
+      },
+      "Fcl": {
+        "From": "fcl-0.7.0-obbrss-double-windows-v1",
+        "To": "fcl-0.7.0-obbrss-double-windows-v2"
+      },
+      "Manifold": {
+        "From": "manifold-3.5.2-windows-v1",
+        "To": "manifold-3.5.2-windows-v2"
+      }
+    }
+  },
+  "Providers": {
+    "Cgal": {
+      "ProfileId": "epick-windows-v1",
+      "DeclaredMsvc": "19.51.36256",
+      "ResolvedMsvc": "19.51.36257",
+      "DependencyVersions": {
+        "Cgal": "6.2",
+        "Gmp": "6.3.0#5",
+        "Mpfr": "4.2.2#1",
+        "CMake": "4.4.3",
+        "Triplet": "x64-windows",
+        "VcpkgBuiltinBaseline": "30ef65cad98f08e7197c9a1656fbd871bcb72f2d"
+      },
+      "ManagedArtifactCount": 15,
+      "NativeArtifactCount": 11,
+      "NormalizedManagedHashes": {
+        "Cgal.ResultProjection.g.cs": "7c72d669e3c28221366203d1198370c3e12688a4127e4bf96040d77ccc4d28c4",
+        "Kernel_API.g.cs": "2725c073ba84b0e56fd5643a37907d00de204ff41156f6b59cdd5706a8ab3165",
+        "NativeApi.g.cs": "40966d02f7fadb14bdb8ba1ceb5e5d0141d1be7bab440f1f8b6fc6c251b447e0",
+        "Point_2.g.cs": "8fd812e329a71ac1c718aedd913d134c7d1e72aaadd5be9f1f22df1a34ef67d9",
+        "Point_3.g.cs": "7e0b0d8a58a552b8307205f60a9c9e7040c472ed6080713d49d3e39e667c22ba",
+        "Segment_2.g.cs": "0d64a629470c8c3f4d49ec49a390f50571e933760cc643398fe87a4c276ff259",
+        "Segment_2_Intersection_Transport.g.cs": "10c84784376c11ce9abb528abe0a4e82e125fb6f5821c4d82e72e555552f5733",
+        "admitted-inventory.json": "52546bb63d8ba07c10193e463663bf06e9435262ddfbc74eab7772663b4e5665",
+        "candidate-inventory.json": "40dc2b43775e5cbd5c7c247e382d5485f39482e04f26c95a86a88d74b1dd4f57",
+        "managed-inventory.json": "c3e36716b956b33eb96cfbe8816b786e96ea9122f8c389ce9e8d02699fca90c7",
+        "profile-manifest.json": "9fd7ef1f47d1830c051d8018fb13c28551a6a146debac70568148dd9c40a1e26",
+        "source-declaration-inventory.json": "f5d98c595dee8c74d5bd60e496136aca9844a05d83998b9c979e97ef76174a64",
+        "source-inventory.json": "0049181e35a8aac888a74f3dd0bea906970fef6572600a877cb9c5ee11dbf215",
+        "toolchain-inventory.json": "d93e6616fd8e9017ce99148ffda3daa8269dfe9f2c8b6106723179830417bc28",
+        "unsupported-inventory.json": "d1ab7fc2c522c4cdcdae28a22ca3ab151ae39d67e98e53d25c80fe3b06df131b"
+      },
+      "NormalizedNativeHashes": {
+        "CMakeLists.txt": "9d0c7aeed0a3a79e5664fcc8fe00b748b8ce155844c3e24dd69f7945890841e3",
+        "CgalNativeError.cpp": "0082855cb3f7dd3a790ecb9502b7ec3f9ff8cf744747a8e87e098fb182b9df6a",
+        "CgalNativeError.hpp": "11933022121bf577dfd795d4b09afb94eb7913ecb61dcc950ec159c2e86a9e37",
+        "CgalProfileAdapter.hpp": "be3002b745900da9517109c394cbe83173ca4a8b9e15002be500180c7143154e",
+        "TedToolkit_CppBindings_Cgal_Kernel_API.cpp": "51bf22cf1f46ff8e6709123d0386d289b1c9e3b82ce10a16bf5a26e02a38074a",
+        "TedToolkit_CppBindings_Cgal_Point_2.cpp": "137f7a35972840d5951be9795d2ef68af0adfbe5152dd9187ce435423ccdc95d",
+        "TedToolkit_CppBindings_Cgal_Point_3.cpp": "284ca396611986ef9a3b8cf85f7e2ab6ba32644a01208bd439a58c30df4f88fe",
+        "TedToolkit_CppBindings_Cgal_Segment_2.cpp": "bd3e61a1ac68a1caf93e47763b90073c87b95d68f653567492c5117cd04d9c8f",
+        "TedToolkit_CppBindings_Cgal_Segment_2_Intersection_Transport.cpp": "5b43a555a3d1191d914f193e63c84d7f364b6921b4144850e2ead24ba2df2125",
+        "native-inventory.json": "947e709b48fee7da7fe86c23302fc76d5d2769ef864d189ffd5d21c50f523251",
+        "NativeFunctionTable.cpp": "4301e9ee4784eead3cd1073f4475d8f8f304a758da690ad4eaf613db28ff2397"
+      },
+      "NativeExports": [
+        "Cgal_NativeError_Clear",
+        "Cgal_Point2_Cartesian",
+        "Cgal_Point2_Create",
+        "Cgal_Point2_SquaredDistance",
+        "Cgal_Point2_X",
+        "Cgal_Point2_Y",
+        "Cgal_Point3_Cartesian",
+        "Cgal_Point3_Create",
+        "Cgal_Point3_SquaredDistance",
+        "Cgal_Point3_X",
+        "Cgal_Point3_Y",
+        "Cgal_Point3_Z",
+        "Cgal_Segment2_Create",
+        "Cgal_Segment2_Intersection",
+        "Cgal_Segment2_Source",
+        "Cgal_Segment2_SquaredLength",
+        "Cgal_Segment2_Target"
+      ]
+    },
+    "Fcl": {
+      "ProfileId": "fcl-0.7.0-obbrss-double-windows-v1",
+      "DeclaredMsvc": "19.51.36256",
+      "ResolvedMsvc": "19.51.36256",
+      "DependencyVersions": {
+        "Fcl": "0.7.0#5",
+        "Ccd": "2.1#4",
+        "Eigen": "5.0.1",
+        "Octomap": "1.10.0",
+        "VcpkgBuiltinBaseline": "30ef65cad98f08e7197c9a1656fbd871bcb72f2d",
+        "CMake": "4.4.3",
+        "Triplet": "x64-windows"
+      },
+      "ManagedArtifactCount": 11,
+      "NativeArtifactCount": 3,
+      "NormalizedManagedHashes": {
+        "Fcl.Bindings.g.cs": "aea95a13ff9150c8a42528c995e255f51d01de8dbf5852e8867b3f43322e89ec",
+        "admitted-inventory.json": "012371a71f17fea2e4cf29eda24c1a2e0b1aab5bda6ca3533fd7d25e8b65f19b",
+        "candidate-inventory.json": "92f9c5332583877641c79938ab91c7634d8a8ba26e2c5082a8b80e51deaf45a3",
+        "layout-inventory.json": "6e7e7f700b22c01434a27e526242fa4831fdf88b3d53539b31e0c2ae237ad704",
+        "managed-inventory.json": "012371a71f17fea2e4cf29eda24c1a2e0b1aab5bda6ca3533fd7d25e8b65f19b",
+        "ownership-inventory.json": "4bfa174f8f83ad5ff9cf18e396e29ca00b73ad147d666f3ee004e6827d4f6b5b",
+        "profile-manifest.json": "5b1eec9d3e856d33ccde8ea4ecdfa62bbbe455f51ba56b6277912624ffbb74ac",
+        "source-declaration-inventory.json": "dd132b5847af036b14054570975f719241e3f6c5a675735b8d551f0cde9cca70",
+        "source-inventory.json": "430a9bf8aa3bd40ce1688d6d69751c68ea0ae65ab358a9bc794632f2a22e6847",
+        "toolchain-inventory.json": "e94e9819ecafff5bf4ca7e6f032ab1b969ad5dca8932ec2ace785981dd23fef4",
+        "unsupported-inventory.json": "f73435a64d0d9e72d8cabfb834b18bf0d6e90c6df31216c8a4099b34c958b086"
+      },
+      "NormalizedNativeHashes": {
+        "CMakeLists.txt": "0ab605a5cf67153e603981361ca1b985f3681c2d8064b000c2551902a1124bf3",
+        "FclProfileAdapter.cpp": "233184cdebcce6c795f9a10276ac508f00bcd4ea1ceb77df60f28dbf6fdd3a23",
+        "native-inventory.json": "57bbc0fc677e7a049337c6d6382862f8a76f690a059765c61adf6072a108bc09"
+      },
+      "NativeExports": [
+        "Fcl_NativeError_Clear",
+        "Fcl_Model_Destroy",
+        "Fcl_Model_Create",
+        "Fcl_ContinuousCollision_Query",
+        "Fcl_Lifetime_Reset",
+        "Fcl_Lifetime_CreateCount",
+        "Fcl_Lifetime_DestroyCount"
+      ]
+    },
+    "Manifold": {
+      "ProfileId": "manifold-3.5.2-windows-v1",
+      "DeclaredMsvc": "19.51.36256",
+      "ResolvedMsvc": "19.51.36256",
+      "DependencyVersions": {
+        "Manifold": "3.5.2",
+        "CMake": "4.4.3",
+        "Triplet": "x64-windows",
+        "VcpkgBuiltinBaseline": "30ef65cad98f08e7197c9a1656fbd871bcb72f2d"
+      },
+      "ManagedArtifactCount": 11,
+      "NativeArtifactCount": 3,
+      "NormalizedManagedHashes": {
+        "Manifold.Bindings.g.cs": "c452e996e22f3bfdc4b2f1760e7b6bb5c88d4611669c100096d7bd2d828649d0",
+        "admitted-inventory.json": "a1f47b87310993aa7d8e592298f43c75b693f78ce9fc145841fdf5aae0312516",
+        "candidate-inventory.json": "28c3acc4f2df029d17d8e262e186bc96f2456ec5f9d4add8fce7b740421591ce",
+        "layout-inventory.json": "10bed8229f54d0adca744c8212fd2cea28b36dc7e137d63c567517dd09abe211",
+        "managed-inventory.json": "ed253a807f5cef558c53ffda92e9d8e5dc22a12175f31cc4156a7040b5a6628c",
+        "ownership-inventory.json": "0d64b61091e096e1ca14a424196adb4eee91b0cf1c293ca78ccb6a12e4477e0b",
+        "profile-manifest.json": "53d3952a353eaa81cabedd1e113ac0106f41eebd0d39ac245eee3b045578a874",
+        "source-declaration-inventory.json": "28c3acc4f2df029d17d8e262e186bc96f2456ec5f9d4add8fce7b740421591ce",
+        "source-inventory.json": "c0386dca7a5ad0344d761d0ca9fb6f35faa8e846c7e809cb13950a2159b77bc3",
+        "toolchain-inventory.json": "9f3686c59f0edeca2dd6b9a8f203ff639e2f1c1b0af380f7fe3be30cc1ba25e0",
+        "unsupported-inventory.json": "cad79a0fe5c781a9a1be29283613cce96636972f963ded0d254af06a264fa099"
+      },
+      "NormalizedNativeHashes": {
+        "CMakeLists.txt": "8e714b1521ac5fdcde97158d2b596d249d14ce317b8b7adeec12ab4827d4b27f",
+        "ManifoldProfileAdapter.cpp": "5eba66055fd4eea71c4289f6c034d8623a0da4ca919bf87aa9cfd34b7d1b65bd",
+        "native-inventory.json": "164b217105f34e884c48ef77a4af5d2620d36d2287e1bcc50c9ce551a1c522ba"
+      },
+      "NativeExports": [
+        "Manifold_NativeError_Clear",
+        "Manifold_Destroy",
+        "Manifold_Create",
+        "Manifold_Status",
+        "Manifold_Boolean",
+        "Manifold_Translate",
+        "Manifold_NumTri",
+        "Manifold_GetMeshCounts",
+        "Manifold_CopyMesh"
+      ]
+    },
+    "Occt": {
+      "ManagedArtifactCount": 7342,
+      "ManagedFingerprint": "21185f594a6c8a20d4fed2eb97f4bf45818a3c7c907085a5874809ce54540425",
+      "NativeArtifactCount": 6990,
+      "NativeFingerprint": "82cf23e4e43bb92a3540e8cb38620a4b6aba092b69870810b3078d2316e8e78e"
+    }
+  }
+}

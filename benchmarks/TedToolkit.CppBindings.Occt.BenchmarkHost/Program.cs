@@ -47,5 +47,4 @@ var pipeline = await Pipeline.CreateBuilder()
             CommandLineArgs = ["-w",],
         }).BuildAsync().ConfigureAwait(false);
 
-await pipeline
-    .RunAsync().ConfigureAwait(false);
+await pipeline.RunAsync().ConfigureAwait(false);

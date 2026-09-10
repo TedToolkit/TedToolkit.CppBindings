@@ -1,6 +1,6 @@
 # TedToolkit.CppBindings.Cgal.Windows
 
-Ready-to-use `win-x64` bindings for the finite CGAL 6.2 `epick-windows-v1` profile. Public APIs use
+Ready-to-use `win-x64` bindings for the finite CGAL 6.2 `epick-windows-v2` profile. Public APIs use
 the `TedToolkit.CppBindings.Cgal` namespace and reference
 `TedToolkit.CppBindings.Cgal.Runtime` for exception and result semantics.
 
@@ -29,7 +29,7 @@ package. Undeclared nonempty intersection alternatives throw `CgalUnknownResultE
 
 ## Supported surface
 
-The package contains every declaration admitted by the versioned `epick-windows-v1` profile:
+The package contains every declaration admitted by the versioned `epick-windows-v2` profile:
 `Point_2`, `Point_3`, `Segment_2`, squared-distance operations, segment intersection, coordinate
 access, and the associated result projection. It does not claim CGAL's unbounded template surface.
 
