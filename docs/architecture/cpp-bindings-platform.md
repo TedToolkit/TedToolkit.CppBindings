@@ -67,6 +67,13 @@ use a `TedToolkit.CppBindings.<Provider>` namespace. `.Windows` identifies a con
 assembly, not a generated API namespace. The build-only Windows generation host references each
 provider Generator directly and is not a package or consumer dependency.
 
+All four Provider Generator entry points derive from Shared `SemanticGenerationProvider` and publish
+the same `GenerationPlan` contract. The Windows host runs the common `AddCppGenerators` pipeline for
+finite-profile Providers; OCCT's host extension exists only to perform compiler-backed discovery
+before its `OcctGenerationProvider` submits the same normalized model. Provider code may render an
+unavoidable library-specific facade or native adapter body, but it cannot own a second plan, output
+writer, complete managed/native renderer, function-table bootstrap, or generic CMake renderer.
+
 ## Current CGAL target
 
 The CGAL provider delivers real `TedToolkit.CppBindings.Cgal.Generator`, `.Runtime`, and `.Windows`

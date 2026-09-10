@@ -6,7 +6,7 @@ Boolean operations, translation, triangle count, and mesh output for the maintai
 
 | Project | Responsibility |
 | --- | --- |
-| `TedToolkit.CppBindings.Manifold.Generator` | Emit deterministic matched C# and C++ sources plus admitted and unsupported inventories |
+| `TedToolkit.CppBindings.Manifold.Generator` | Supply the locked profile and semantic facts to Shared plan construction and paired emission |
 | `TedToolkit.CppBindings.Manifold.Runtime` | Copy and clear native diagnostics and map provider-specific exceptions |
 | `TedToolkit.CppBindings.Manifold.Windows` | Carry the generated assembly, unique native module, exact DLL closure, and notices |
 

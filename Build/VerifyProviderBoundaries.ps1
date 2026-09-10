@@ -141,6 +141,68 @@ function Assert-ForbiddenSourceFixture {
     throw "Negative source fixture was accepted: $Name"
 }
 
+function Assert-ProviderGeneratorSourceAllowed {
+    param(
+        [Parameter(Mandatory)][string] $Path,
+        [Parameter(Mandatory)][string] $Contents
+    )
+
+    if ($Contents -match 'NativeApi\.g\.cs|NativeFunctionTable\.cpp|NativeApi_GetFunctionTable') {
+        throw "Provider Generator owns shared bootstrap source: $Path"
+    }
+}
+
+function Assert-ForbiddenProviderGeneratorFixture {
+    param(
+        [Parameter(Mandatory)][string] $Name,
+        [Parameter(Mandatory)][string] $Contents
+    )
+
+    try {
+        Assert-ProviderGeneratorSourceAllowed -Path "negative-fixture/$Name.cs" -Contents $Contents
+    }
+    catch {
+        if ($_.Exception.Message.StartsWith('Provider Generator owns shared bootstrap source', [StringComparison]::Ordinal)) {
+            return
+        }
+
+        throw
+    }
+
+    throw "Negative Provider Generator fixture was accepted: $Name"
+}
+
+function Assert-ProviderExtensionKindAllowed {
+    param(
+        [Parameter(Mandatory)][string] $Provider,
+        [Parameter(Mandatory)][int] $Kind
+    )
+
+    if ($Kind -lt 9 -or $Kind -gt 254) {
+        throw "Provider '$Provider' overrides reserved Shared native-error kind $Kind."
+    }
+}
+
+function Assert-ForbiddenProviderExtensionFixture {
+    param(
+        [Parameter(Mandatory)][string] $Provider,
+        [Parameter(Mandatory)][int] $Kind
+    )
+
+    try {
+        Assert-ProviderExtensionKindAllowed -Provider $Provider -Kind $Kind
+    }
+    catch {
+        if ($_.Exception.Message.StartsWith("Provider '$Provider' overrides reserved Shared native-error kind", [StringComparison]::Ordinal)) {
+            return
+        }
+
+        throw
+    }
+
+    throw "Negative Provider extension fixture was accepted: $Provider kind $Kind"
+}
+
 foreach ($relativePath in $expectedProjects) {
     $path = Join-Path $repository $relativePath
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -226,6 +288,61 @@ foreach ($provider in @('Occt', 'Cgal', 'Manifold', 'Fcl')) {
     if (@($generationReferences | Where-Object { $_ -match "CppBindings\.$provider\.Generator\.csproj`$" }).Count -ne 1) {
         throw "The shared Windows generation host must directly reference the $provider generator once."
     }
+}
+$generationContracts = [ordered]@{
+    cgal = @(
+        'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/CgalGenerationProvider.cs',
+        'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj')
+    fcl = @(
+        'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/FclGenerationProvider.cs',
+        'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/TedToolkit.CppBindings.Fcl.Generator.csproj')
+    manifold = @(
+        'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/ManifoldGenerationProvider.cs',
+        'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj')
+    occt = @(
+        'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/Services/OcctGenerationProvider.cs',
+        'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj')
+}
+$sharedGeneratorProject = [IO.Path]::GetFullPath((Join-Path $repository `
+    'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj'))
+foreach ($entry in $generationContracts.GetEnumerator()) {
+    $providerSourcePath = Join-Path $repository $entry.Value[0]
+    $providerSource = Get-Content -LiteralPath $providerSourcePath -Raw
+    if ($providerSource -notmatch ':\s*SemanticGenerationProvider') {
+        throw "Provider '$($entry.Key)' does not use the Shared semantic generation contract."
+    }
+
+    [xml] $providerProject = Get-Content -LiteralPath (Join-Path $repository $entry.Value[1]) -Raw
+    $sharedReferences = @($providerProject.SelectNodes('/Project/ItemGroup/ProjectReference') |
+        Where-Object {
+            [IO.Path]::GetFullPath((Join-Path (Split-Path (Join-Path $repository $entry.Value[1]) -Parent) `
+                $_.GetAttribute('Include'))) -eq $sharedGeneratorProject
+        })
+    if ($sharedReferences.Count -ne 1) {
+        throw "Provider '$($entry.Key)' must reference the Shared Generator exactly once."
+    }
+}
+$legacyCompleteGenerators = @(
+    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/FclGenerationPlan.cs',
+    'src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/FclSourceRenderer.cs',
+    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/ManifoldGenerationPlan.cs',
+    'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/ManifoldSourceRenderer.cs')
+foreach ($relativePath in $legacyCompleteGenerators) {
+    if (Test-Path -LiteralPath (Join-Path $repository $relativePath)) {
+        throw "Provider-private complete generation authority was reintroduced: $relativePath"
+    }
+}
+$providerGeneratorSources = @(Get-ChildItem -LiteralPath $providersRoot -Recurse -Filter '*.cs' -File |
+    Where-Object { $_.FullName -match '\.Generator[\\/]' })
+foreach ($source in $providerGeneratorSources) {
+    Assert-ProviderGeneratorSourceAllowed -Path $source.FullName `
+        -Contents (Get-Content -LiteralPath $source.FullName -Raw)
+}
+$generationDispatcher = Get-Content -LiteralPath (Join-Path $repository `
+    'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/ProviderGenerators.cs') -Raw
+if ([regex]::Matches($generationDispatcher, '\.AddCppGenerators\(').Count -ne 3 `
+    -or $generationDispatcher -match '\.Add(?:Fcl|Manifold|Cgal)Generators\(') {
+    throw 'The Windows generation host does not route finite Providers through the common AddCppGenerators pipeline.'
 }
 $generationCoordinator = Get-Content -LiteralPath (Join-Path $repository `
     'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/WindowsGenerationCoordinator.cs') -Raw
@@ -378,6 +495,16 @@ foreach ($project in $providerProjects) {
     }
 }
 
+$providerProjectionFiles = @(Get-ChildItem -LiteralPath $providersRoot -Recurse `
+    -Filter 'NativeErrorProjection.cs' -File)
+foreach ($projection in $providerProjectionFiles) {
+    $owner = Get-ProjectOwner -Path $projection.FullName
+    $contents = Get-Content -LiteralPath $projection.FullName -Raw
+    foreach ($match in [regex]::Matches($contents, '(?m)^\s*(\d+)\s*=>')) {
+        Assert-ProviderExtensionKindAllowed -Provider $owner.Provider -Kind ([int] $match.Groups[1].Value)
+    }
+}
+
 $toolProjects = @(Get-ChildItem -LiteralPath $toolsRoot -Recurse -Filter '*.csproj' -File)
 $sourceProjects = @($sharedProjectFiles) + @($providerProjects) + @($toolProjects)
 $referenceCount = 0
@@ -413,6 +540,12 @@ Assert-ForbiddenFixture -Source $fixtureOcct -Target $fixtureCgal
 Assert-ForbiddenFixture -Source $fixtureOcct -Target $fixtureTool
 Assert-ForbiddenSourceFixture -Name 'ConcretePolicy' -Contents 'internal sealed class CgalPolicy { }'
 Assert-ForbiddenSourceFixture -Name 'ProviderBranch' -Contents 'if (providerName == "Occt") { return; }'
+Assert-ForbiddenProviderGeneratorFixture -Name 'BootstrapCopy' `
+    -Contents 'private const string Output = "NativeFunctionTable.cpp";'
+Assert-ProviderExtensionKindAllowed -Provider 'first' -Kind 9
+Assert-ProviderExtensionKindAllowed -Provider 'second' -Kind 9
+Assert-ForbiddenProviderExtensionFixture -Provider 'fixture' -Kind 8
+Assert-ForbiddenProviderExtensionFixture -Provider 'fixture' -Kind 255
 
 $solution = Get-Content -LiteralPath (Join-Path $repository 'TedToolkit.CppBindings.slnx') -Raw
 foreach ($relativePath in $expectedProjects) {
@@ -429,7 +562,7 @@ foreach ($relativePath in $expectedProjects) {
     VerifiedProjects = $expectedProjects.Count
     ProjectReferences = $referenceCount
     ProviderIdentifiers = $providerIdentifiers
-    NegativeCases = 5
+    NegativeCases = 8
     NativePackagingRules = $windowsPackagingRules.Count
     WindowsCiGenerationProviders = $windowsPackagingRules.Count
 } | ConvertTo-Json
