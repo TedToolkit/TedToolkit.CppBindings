@@ -798,29 +798,19 @@ public static class BindingFiniteProfileEmitter
         BindingEmissionProfile profile,
         string unknownExceptionMessage)
     {
+        var transport = BindingNativeErrorTransportEmitter.RenderInline(
+            profile.NativeErrorClearExport,
+            profile.NativeErrorSetter,
+            "CopyText");
         var catches = BindingNativeErrorCatchEmitter.Render(
             profile.NativeErrorSetter,
             "error",
             unknownMessageExpression: "\"" + Escape(unknownExceptionMessage) + "\"");
-        _ = builder.Append("struct NativeError\n{\n    int Kind;\n    char* TypeName;\n    char* Message;\n")
-            .Append("    char* StackTrace;\n};\n\n")
-            .Append("static char* CopyText(const char* value) noexcept\n{\n")
-            .Append("    if (value == nullptr) return nullptr;\n    const auto length = std::strlen(value) + 1;\n")
-            .Append("    auto* copy = static_cast<char*>(std::malloc(length));\n")
-            .Append("    if (copy != nullptr) std::memcpy(copy, value, length);\n    return copy;\n}\n\n")
-            .Append("static void ").Append(profile.NativeErrorSetter)
-            .Append("(NativeError* error, int kind, const char* type, const char* message) noexcept\n{\n")
-            .Append("    if (error == nullptr) return;\n    error->Kind = kind;\n")
-            .Append("    error->TypeName = CopyText(type);\n")
-            .Append("    error->Message = CopyText(message);\n    error->StackTrace = nullptr;\n}\n\n")
+        _ = builder.Append(transport).Append('\n')
             .Append("template<typename T, typename Callback>\n")
             .Append("static T Guard(NativeError* error, T fallback, Callback&& callback) noexcept\n")
             .Append("{\n    try { return callback(); }\n").Append(catches).Append("    return fallback;\n}\n\n")
-            .Append("extern \"C\" void ").Append(profile.NativeErrorClearExport)
-            .Append("(NativeError* error) noexcept\n{\n    if (error == nullptr) return;\n")
-            .Append("    std::free(error->TypeName);\n    std::free(error->Message);\n")
-            .Append("    std::free(error->StackTrace);\n")
-            .Append("    *error = {};\n}\n\n");
+            .Append('\n');
     }
 
     private static void AppendNativeDestroy(StringBuilder builder, BindingOwnerDefinition owner)

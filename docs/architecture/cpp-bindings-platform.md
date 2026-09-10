@@ -50,7 +50,9 @@ and lifetime rules, provider-specific native dependencies and local exceptions, 
 default artifact identity, and concrete platform packages.
 
 Shared Runtime owns provider-neutral native-error diagnostic consumption and common exception
-projection. Shared Generator fixes common standard C++ catches and error kinds 0 through 8 and 255.
+projection. Shared Generator owns the carrier, copy, set, and clear emission, fixes common standard
+C++ catches, and fixes error kinds 0 through 8 and 255. Providers supply only symbol names and
+genuine native-library inputs such as CGAL failure stack extraction.
 Each Provider may interpret values 9 through 254 only within its matching Generator/Runtime pair;
 local values may overlap across Providers. Provider Runtime packages therefore own only genuine
 native-library failures, never copies of common argument, arithmetic, allocation, standard, or

@@ -163,6 +163,7 @@ internal static class Program
             "TedToolkit.CppBindings.Generator.Semantics.BindingNativeProject",
             "TedToolkit.CppBindings.Generator.Semantics.BindingNativeExceptionProjection",
             "TedToolkit.CppBindings.Generator.Semantics.BindingNativeErrorCatchEmitter",
+            "TedToolkit.CppBindings.Generator.Semantics.BindingNativeErrorTransportEmitter",
             "TedToolkit.CppBindings.Generator.Semantics.BindingManagedEmitter",
             "TedToolkit.CppBindings.Generator.Semantics.BindingNativeEmitter",
             "TedToolkit.CppBindings.Generator.Semantics.BindingProviderModel",

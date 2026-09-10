@@ -10,7 +10,6 @@ using System.Text.Json;
 using Microsoft.Extensions.Options;
 
 using TedToolkit.CppBindings.Generator.Semantics;
-using TedToolkit.CppBindings.Occt.Generator.Generators;
 using TedToolkit.CppBindings.Occt.Generator.Services.Rules;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Services;
@@ -103,11 +102,21 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
         BindingSourceDefinition[] native =
         [
             new(
-            NativeErrorSupportGenerator.HeaderFileName,
-            static (writer, token) => writer.WriteAsync(NativeErrorSupportGenerator.GenerateHeader().AsMemory(), token)),
+            "NativeError.h",
+            static (writer, token) => writer.WriteAsync(
+                BindingNativeErrorTransportEmitter.RenderHeader(
+                    "NativeError_Clear",
+                    "NativeError_Set").AsMemory(),
+                token)),
             new(
-            NativeErrorSupportGenerator.SourceFileName,
-            static (writer, token) => writer.WriteAsync(NativeErrorSupportGenerator.GenerateSource().AsMemory(), token)),
+            "NativeError.cpp",
+            static (writer, token) => writer.WriteAsync(
+                BindingNativeErrorTransportEmitter.RenderSource(
+                    "NativeError.h",
+                    "NativeError_Clear",
+                    "NativeError_Set",
+                    "NativeError_Copy").AsMemory(),
+                token)),
         ];
         var nativeProject = BindingCMakeProjectEmitter.CreateNativeProject(
             CreateNativeProjectDefinition(_options.Value));

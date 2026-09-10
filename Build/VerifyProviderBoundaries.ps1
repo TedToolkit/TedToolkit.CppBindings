@@ -150,6 +150,9 @@ function Assert-ProviderGeneratorSourceAllowed {
     if ($Contents -match 'NativeApi\.g\.cs|NativeFunctionTable\.cpp|NativeApi_GetFunctionTable') {
         throw "Provider Generator owns shared bootstrap source: $Path"
     }
+    if ($Contents -match 'struct\s+NativeError|std::malloc\s*\(|std::free\s*\(error->') {
+        throw "Provider Generator owns shared native-error transport: $Path"
+    }
 }
 
 function Assert-ForbiddenProviderGeneratorFixture {
@@ -162,7 +165,7 @@ function Assert-ForbiddenProviderGeneratorFixture {
         Assert-ProviderGeneratorSourceAllowed -Path "negative-fixture/$Name.cs" -Contents $Contents
     }
     catch {
-        if ($_.Exception.Message.StartsWith('Provider Generator owns shared bootstrap source', [StringComparison]::Ordinal)) {
+        if ($_.Exception.Message.StartsWith('Provider Generator owns shared ', [StringComparison]::Ordinal)) {
             return
         }
 
@@ -501,6 +504,8 @@ Assert-ForbiddenSourceFixture -Name 'ConcretePolicy' -Contents 'internal sealed 
 Assert-ForbiddenSourceFixture -Name 'ProviderBranch' -Contents 'if (providerName == "Occt") { return; }'
 Assert-ForbiddenProviderGeneratorFixture -Name 'BootstrapCopy' `
     -Contents 'private const string Output = "NativeFunctionTable.cpp";'
+Assert-ForbiddenProviderGeneratorFixture -Name 'NativeErrorTransportCopy' `
+    -Contents 'struct NativeError { int Kind; };'
 
 $solution = Get-Content -LiteralPath (Join-Path $repository 'TedToolkit.CppBindings.slnx') -Raw
 foreach ($relativePath in $expectedProjects) {
@@ -517,7 +522,7 @@ foreach ($relativePath in $expectedProjects) {
     VerifiedProjects = $expectedProjects.Count
     ProjectReferences = $referenceCount
     ProviderIdentifiers = $providerIdentifiers
-    NegativeCases = 6
+    NegativeCases = 7
     NativePackagingRules = $windowsPackagingRules.Count
     WindowsCiGenerationProviders = $windowsPackagingRules.Count
 } | ConvertTo-Json

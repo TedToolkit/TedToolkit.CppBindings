@@ -78,8 +78,21 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
         BindingSourceDefinition[] nativeSources =
         {
             TextSource("CgalProfileAdapter.hpp", CgalSourceRenderer.RenderAdapter(Profile)),
-            TextSource("CgalNativeError.hpp", CgalSourceRenderer.RenderNativeErrorHeader()),
-            TextSource("CgalNativeError.cpp", CgalSourceRenderer.RenderNativeErrorSource()),
+            TextSource(
+                "CgalNativeError.hpp",
+                BindingNativeErrorTransportEmitter.RenderHeader(
+                    "Cgal_NativeError_Clear",
+                    "Cgal_NativeError_Set",
+                    includeStackTrace: true,
+                    providerPreamble: CgalSourceRenderer.RenderNativeErrorPreamble())),
+            TextSource(
+                "CgalNativeError.cpp",
+                BindingNativeErrorTransportEmitter.RenderSource(
+                    "CgalNativeError.hpp",
+                    "Cgal_NativeError_Clear",
+                    "Cgal_NativeError_Set",
+                    "CgalCopyText",
+                    includeStackTrace: true)),
             JsonSource("native-inventory.json", Inventory.NativeArtifacts),
         };
         var nativeProject = BindingCMakeProjectEmitter.CreateNativeProject(new(
