@@ -17,6 +17,7 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// <param name="LengthError">The validation message for an incomplete group.</param>
 /// <param name="RequiresIndicesBelowFirstBufferItemCount">Whether every value indexes the first buffer's grouped items.</param>
 /// <param name="IndexError">The validation message for an out-of-range index.</param>
+/// <param name="PointerName">The managed fixed-pointer local name, or a name derived from <paramref name="Name"/>.</param>
 public sealed record BindingBufferDefinition(
     string Name,
     string ElementType,
@@ -24,4 +25,5 @@ public sealed record BindingBufferDefinition(
     int ElementsPerItem,
     string LengthError,
     bool RequiresIndicesBelowFirstBufferItemCount = false,
-    string IndexError = "An index must be less than the item count.");
+    string IndexError = "An index must be less than the item count.",
+    string? PointerName = null);

@@ -477,6 +477,221 @@ internal sealed class BindingSemanticEngineTests
         await Assert.That(action).Throws<ArgumentException>();
     }
 
+    /// <summary>
+    /// Verifies the finite profile grammar represents the downstream Manifold operation shape without provider renderers.
+    /// </summary>
+    /// <returns>A task that completes when both generated languages are checked.</returns>
+    [Test]
+    public async Task Should_emit_a_composable_second_finite_profile_shape_Async()
+    {
+        var engine = CreateEngine([new TypeRule(true, "Projected"),]);
+        var api = CreateManifoldShapedFiniteApi();
+        var providerModel = new BindingProviderModel(
+            [],
+            [],
+            CreateEmissionProfile(),
+            [],
+            [],
+            [],
+            "source-stem",
+            "source-stem",
+            nativeProject: null,
+            [api,]);
+
+        var plan = engine.CreatePlan(providerModel);
+        var managed = await RenderAsync(plan.CSharpSources.Single()).ConfigureAwait(false);
+        var native = await RenderAsync(plan.CppSources.Single()).ConfigureAwait(false);
+
+        await Assert.That(plan.NativeExports).IsEquivalentTo(api.NativeExportOrder);
+        await Assert.That(managed).Contains("public sealed class ManifoldMeshData");
+        await Assert.That(managed).Contains("Owned<Manifold> Create(");
+        await Assert.That(managed).Contains("Owned<Manifold> Boolean(");
+        await Assert.That(managed).Contains("Owned<Manifold> Translate(");
+        await Assert.That(managed).Contains("ManifoldError Status(");
+        await Assert.That(managed).Contains("nuint NumTri(");
+        await Assert.That(managed).Contains("ManifoldMeshData GetMesh(");
+        await Assert.That(managed).Contains("vertexCoordinateCount > int.MaxValue");
+        await Assert.That(native).Contains("extern \"C\" void Manifold_Create(");
+        await Assert.That(native).Contains("extern \"C\" void Manifold_GetMeshCounts(");
+        await Assert.That(native).Contains("extern \"C\" void Manifold_CopyMesh(");
+    }
+
+    /// <summary>
+    /// Verifies finite profile graphs are snapshotted and invalid buffer groupings fail before plan publication.
+    /// </summary>
+    /// <returns>A task that completes when snapshot and validation behavior are checked.</returns>
+    [Test]
+    public async Task Should_snapshot_and_validate_complete_finite_profiles_Async()
+    {
+        var engine = CreateEngine([new TypeRule(true, "Projected"),]);
+        var api = CreateManifoldShapedFiniteApi();
+        var operations = api.Operations.ToList();
+        var providerModel = new BindingProviderModel(
+            [],
+            [],
+            CreateEmissionProfile(),
+            [],
+            [],
+            [],
+            "source-stem",
+            "source-stem",
+            nativeProject: null,
+            [api with { Operations = operations, },]);
+
+        operations.Clear();
+        var plan = engine.CreatePlan(providerModel);
+
+        await Assert.That(plan.NativeExports).IsEquivalentTo(api.NativeExportOrder);
+
+        var factory = (BindingBufferOwnerOperationDefinition)api.Operations[0];
+        var invalidApi = api with
+        {
+            Operations =
+            [
+                factory with
+                {
+                    Buffers = [factory.Buffers[0] with { ElementsPerItem = 0, },],
+                },
+                .. api.Operations.Skip(1),
+            ],
+        };
+        var invalidProvider = new BindingProviderModel(
+            [],
+            [],
+            CreateEmissionProfile(),
+            [],
+            [],
+            [],
+            "source-stem",
+            "source-stem",
+            nativeProject: null,
+            [invalidApi,]);
+
+        ArgumentOutOfRangeException? failure = null;
+        try
+        {
+            _ = engine.CreateModel(invalidProvider);
+        }
+        catch (ArgumentOutOfRangeException exception)
+        {
+            failure = exception;
+        }
+
+        await Assert.That(failure).IsNotNull();
+        await Assert.That(failure!.ParamName).IsEqualTo("ElementsPerItem");
+    }
+
+    private static BindingFiniteProfileApi CreateManifoldShapedFiniteApi()
+    {
+        var owner = new BindingOwnerDefinition("Manifold", "ManifoldAdapter", 8, 8, "Manifold_Destroy");
+        var self = new BindingOwnerParameterDefinition("self", owner.Name, true);
+        return new(
+            "Manifold.Bindings.g.cs",
+            "ManifoldProfileAdapter.cpp",
+            [new("ManifoldError", [new("NoError", 0), new("InvalidConstruction", 11),]),],
+            [],
+            [owner,],
+            [],
+            [
+                new(
+                    "ManifoldMeshData",
+                    [
+                        new("double[]", "double[]", "VertexCoordinates", "[]", "$value"),
+                        new("ulong[]", "ulong[]", "TriangleIndices", "[]", "$value"),
+                    ],
+                    BindingCompositeResultKind.SealedClass,
+                    [new("int", "PositionPropertyCount", "3"),]),
+            ],
+            [
+                new BindingBufferOwnerOperationDefinition(
+                    "Create",
+                    owner.Name,
+                    null,
+                    null,
+                    null,
+                    "void",
+                    "0",
+                    [
+                        new("vertexCoordinates", "double", "double", 3, "Invalid vertices.", PointerName: "vertexPointer"),
+                        new("triangleIndices", "ulong", "std::uint64_t", 3, "Invalid triangles.", PointerName: "indexPointer"),
+                    ],
+                    "Manifold_Create",
+                    "new (result) ManifoldAdapter(vertexCoordinates, triangleIndices);"),
+                new BindingScalarOperationDefinition(
+                    "ManifoldExtensions",
+                    "Status",
+                    "ManifoldError",
+                    "int",
+                    "0",
+                    [self,],
+                    [],
+                    "Manifold_Status",
+                    "return static_cast<int>(self->Value->Status());"),
+                new BindingOwnedOperationDefinition(
+                    "ManifoldExtensions",
+                    "Boolean",
+                    owner.Name,
+                    [self, new("second", owner.Name),],
+                    [
+                        new(
+                            "operation",
+                            "ManifoldOp",
+                            "std::int8_t",
+                            RequireDefinedEnum: true,
+                            ManagedTransportType: "sbyte",
+                            ManagedArgumentExpression: "(sbyte)$value"),
+                    ],
+                    "Manifold_Boolean",
+                    "new (result) ManifoldAdapter(self->Value->Boolean(*second->Value, operation));"),
+                new BindingOwnedOperationDefinition(
+                    "ManifoldExtensions",
+                    "Translate",
+                    owner.Name,
+                    [self,],
+                    [new("x", "double", "double"), new("y", "double", "double"), new("z", "double", "double"),],
+                    "Manifold_Translate",
+                    "new (result) ManifoldAdapter(self->Value->Translate({x, y, z}));"),
+                new BindingScalarOperationDefinition(
+                    "ManifoldExtensions",
+                    "NumTri",
+                    "nuint",
+                    "nuint",
+                    "0",
+                    [self,],
+                    [],
+                    "Manifold_NumTri",
+                    "return self->Value->NumTri();"),
+                new BindingTwoPhaseOperationDefinition(
+                    "ManifoldExtensions",
+                    "GetMesh",
+                    "ManifoldMeshData",
+                    self,
+                    [
+                        new("VertexCoordinates", "double", "double", "vertexCoordinateCount", "vertexPointer"),
+                        new("TriangleIndices", "ulong", "std::uint64_t", "triangleIndexCount", "indexPointer"),
+                    ],
+                    "Native mesh exceeds the maximum managed array length.",
+                    "Manifold_GetMeshCounts",
+                    "*vertexCoordinateCount = 3; *triangleIndexCount = 3;",
+                    "Manifold_CopyMesh",
+                    "std::copy_n(self->Vertices(), vertexCoordinateCount, vertexPointer);"),
+            ],
+            "#include <cstdint>\n#include <cstdlib>\n#include <cstring>\n#include <new>",
+            "Unknown native Manifold exception.",
+            [
+                "NativeError_Clear",
+                "Manifold_Destroy",
+                "Manifold_Create",
+                "Manifold_Status",
+                "Manifold_Boolean",
+                "Manifold_Translate",
+                "Manifold_NumTri",
+                "Manifold_GetMeshCounts",
+                "Manifold_CopyMesh",
+            ],
+            []);
+    }
+
     private static BindingDeclaration CreateDeclaration(
         string nativeName,
         string managedName,

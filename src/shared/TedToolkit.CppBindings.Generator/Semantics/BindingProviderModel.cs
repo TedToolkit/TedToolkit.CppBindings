@@ -115,21 +115,59 @@ public sealed class BindingProviderModel
         return new(
             source.ManagedRelativePath,
             source.NativeRelativePath,
-            source.Status with { Members = Array.AsReadOnly(source.Status.Members.ToArray()), },
-            source.ValueType with { Fields = Array.AsReadOnly(source.ValueType.Fields.ToArray()), },
-            source.Owner,
-            source.OwnedResult,
-            source.CompositeResult with
+            Array.AsReadOnly(source.Statuses.Select(static value => value with
             {
-                Fields = Array.AsReadOnly(source.CompositeResult.Fields.ToArray()),
-            },
-            source.Factory with { Buffers = Array.AsReadOnly(source.Factory.Buffers.ToArray()), },
-            source.CompositeOperation,
+                Members = Array.AsReadOnly(value.Members.ToArray()),
+            }).ToArray()),
+            Array.AsReadOnly(source.ValueTypes.Select(static value => value with
+            {
+                Fields = Array.AsReadOnly(value.Fields.ToArray()),
+            }).ToArray()),
+            Array.AsReadOnly(source.Owners.ToArray()),
+            Array.AsReadOnly(source.OwnedResults.ToArray()),
+            Array.AsReadOnly(source.CompositeResults.Select(static value => value with
+            {
+                Fields = Array.AsReadOnly(value.Fields.ToArray()),
+                ComputedProperties = value.ComputedProperties is null
+                    ? null
+                    : Array.AsReadOnly(value.ComputedProperties.ToArray()),
+            }).ToArray()),
+            Array.AsReadOnly(source.Operations.Select(SnapshotOperation).ToArray()),
             source.NativePreamble,
-            source.FactoryBody,
-            source.CompositeOperationBody,
             source.NativeUnknownExceptionMessage,
             Array.AsReadOnly(source.NativeExportOrder.ToArray()),
             Array.AsReadOnly(source.AdditionalNativeExports.ToArray()));
+    }
+
+    private static BindingFiniteOperationDefinition SnapshotOperation(BindingFiniteOperationDefinition source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return source switch
+        {
+            BindingBufferOwnerOperationDefinition value => value with
+            {
+                Buffers = Array.AsReadOnly(value.Buffers.ToArray()),
+            },
+            BindingCompositeOperationDefinition value => value with
+            {
+                Owners = Array.AsReadOnly(value.Owners.ToArray()),
+                Values = Array.AsReadOnly(value.Values.ToArray()),
+            },
+            BindingOwnedOperationDefinition value => value with
+            {
+                Owners = Array.AsReadOnly(value.Owners.ToArray()),
+                Values = Array.AsReadOnly(value.Values.ToArray()),
+            },
+            BindingScalarOperationDefinition value => value with
+            {
+                Owners = Array.AsReadOnly(value.Owners.ToArray()),
+                Values = Array.AsReadOnly(value.Values.ToArray()),
+            },
+            BindingTwoPhaseOperationDefinition value => value with
+            {
+                Buffers = Array.AsReadOnly(value.Buffers.ToArray()),
+            },
+            _ => throw new ArgumentException($"Unsupported finite operation '{source.GetType().Name}'.", nameof(source)),
+        };
     }
 }

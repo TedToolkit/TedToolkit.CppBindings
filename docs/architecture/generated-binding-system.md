@@ -71,12 +71,15 @@ physically present only as an inactive migration recovery artifact until the gen
 passes, after which current source, build, fixtures, output, and documentation remove it.
 
 Finite adapters that do not map directly to C++ member declarations remain part of that same Model.
-They describe span pointer/length correlations, validation groups, conditional owned construction,
-composite output projection, and exact export order explicitly. Shared emits their managed/native
-transport and common bootstrap/error mechanics; a Provider supplies only its native algorithm body,
-profile facts, header inventory, and dependency-specific native project policy. A Provider-private
-plan, output writer, complete source renderer, or hard-coded copy of the function table is not an
-alternative generation path.
+They supply collections of types and composable operations rather than one fixed provider topology.
+Those operations describe span pointer/length correlations, validation groups, conditional and
+direct owned construction, independent owned results, scalar and composite projection, counted
+two-phase buffer copying, and exact export order explicitly. Public managed, managed ABI, and native
+transport types are separate facts. Shared validates the complete cross-reference graph before plan
+publication and emits the managed/native transport plus common bootstrap/error mechanics; a Provider
+supplies only its native algorithm body, profile facts, header inventory, and dependency-specific
+native project policy. A Provider-private plan, output writer, complete source renderer, or hard-coded
+copy of the function table is not an alternative generation path.
 
 `TedToolkit.CppBindings.Runtime` contains only handwritten, declaration-agnostic managed
 mechanisms, including common native-error diagnostic consumption and exception projection. Each

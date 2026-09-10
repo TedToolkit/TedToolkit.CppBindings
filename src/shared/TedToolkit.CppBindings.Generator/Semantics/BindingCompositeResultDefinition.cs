@@ -12,6 +12,10 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// </summary>
 /// <param name="Name">The managed result type.</param>
 /// <param name="Fields">The ordered result fields.</param>
+/// <param name="Kind">The managed result representation.</param>
+/// <param name="ComputedProperties">Additional expression-bodied managed properties.</param>
 public sealed record BindingCompositeResultDefinition(
     string Name,
-    IReadOnlyList<BindingCompositeFieldDefinition> Fields);
+    IReadOnlyList<BindingCompositeFieldDefinition> Fields,
+    BindingCompositeResultKind Kind = BindingCompositeResultKind.RecordStruct,
+    IReadOnlyList<BindingComputedPropertyDefinition>? ComputedProperties = null);

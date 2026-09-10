@@ -218,6 +218,11 @@ public sealed class BindingSemanticEngine
             }
         }
 
+        foreach (var api in providerModel.FiniteProfileApis)
+        {
+            BindingFiniteProfileValidator.Validate(api, providerModel.EmissionProfile);
+        }
+
         if (providerModel.NativeProject is null)
         {
             return;

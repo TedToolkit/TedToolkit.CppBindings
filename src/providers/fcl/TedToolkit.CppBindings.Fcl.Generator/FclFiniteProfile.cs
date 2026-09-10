@@ -29,10 +29,13 @@ internal static class FclFiniteProfile
             8,
             8,
             "Fcl_Model_Destroy");
-        var factory = new BindingOwnedFactoryDefinition(
+        var factory = new BindingBufferOwnerOperationDefinition(
             "Create",
-            "Fcl_Model_Create",
+            owner.Name,
+            "FclModelBuildResult",
+            status.Name,
             "BVH_OK",
+            "int",
             "fcl::BVH_ERR_UNKNOWN",
             [
                 new(
@@ -49,7 +52,9 @@ internal static class FclFiniteProfile
                     "Triangle index length must be a multiple of three.",
                     true,
                     "A triangle index must be less than the vertex count."),
-            ]);
+            ],
+            "Fcl_Model_Create",
+            FactoryBody);
         var compositeResult = new BindingCompositeResultDefinition(
             "FclContinuousCollisionResult",
             [
@@ -59,22 +64,23 @@ internal static class FclFiniteProfile
         return new(
             "Fcl.Bindings.g.cs",
             "FclProfileAdapter.cpp",
-            status,
-            value,
-            owner,
-            new("FclModelBuildResult", "Code", "Model"),
-            compositeResult,
-            factory,
-            new(
-                "FclContinuousCollision",
-                "Query",
-                "Fcl_ContinuousCollision_Query",
-                "first",
-                "second",
-                "secondTranslation"),
+            [status],
+            [value],
+            [owner],
+            [new("FclModelBuildResult", status.Name, owner.Name, "Code", "Model")],
+            [compositeResult],
+            [
+                factory,
+                new BindingCompositeOperationDefinition(
+                    "FclContinuousCollision",
+                    "Query",
+                    compositeResult.Name,
+                    [new("first", owner.Name), new("second", owner.Name)],
+                    [new("secondTranslation", value.Name, value.NativeName, true)],
+                    "Fcl_ContinuousCollision_Query",
+                    CompositeOperationBody),
+            ],
             NativePreamble,
-            FactoryBody,
-            CompositeOperationBody,
             "Unknown native FCL exception.",
             [
                 "Fcl_NativeError_Clear",

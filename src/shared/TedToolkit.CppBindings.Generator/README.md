@@ -57,12 +57,15 @@ delegates or reconstruct a second model for either language. Supplemental provid
 limited to genuinely library-specific support files such as native error storage and build metadata.
 
 Finite handwritten native profiles use `BindingFiniteProfileApi` when their ABI is not a direct set
-of C++ member declarations. Its explicit buffer definitions drive span validation and pointer/length
-transport; owned-factory definitions make the native success condition responsible for constructing
-`Owned<T>`; composite definitions assemble one managed result from native output parameters; and its
-explicit export order drives both managed slots and `NativeFunctionTable.cpp`. Providers retain only
-their native algorithm bodies and dependency-specific build policy. Shared contains no provider-name
-branch or provider assembly dependency.
+of C++ member declarations. The API contains collections of named status, value, owner, and result
+types plus an ordered set of composable operations; it does not prescribe one provider's operation
+topology. Explicit buffer definitions drive span validation and pointer/length transport. Operations
+select conditional or direct owner construction, scalar or composite projection, and counted
+two-phase buffer copying. Public managed types, managed ABI transports, and native transports remain
+distinct inputs. The explicit export order drives both managed slots and
+`NativeFunctionTable.cpp`. Providers retain only their native algorithm bodies and
+dependency-specific build policy. Shared contains no provider-name branch or provider assembly
+dependency, and validates the complete graph before publishing a plan.
 
 Type rules are evaluated in registration order and the first match wins. Layout and template
 policies must return `BindingAdmission.Admitted` or a rejected result with a stable reason. Emitter
