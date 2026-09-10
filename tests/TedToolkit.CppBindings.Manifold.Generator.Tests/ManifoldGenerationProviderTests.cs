@@ -5,16 +5,16 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
+using TedToolkit.CppBindings.Generator;
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Manifold.Generator;
 
 namespace TedToolkit.CppBindings.Manifold.Generator.Tests;
 
 /// <summary>
-/// Verifies the locked finite Manifold profile and paired source renderer.
+/// Verifies the locked finite Manifold profile and shared semantic generation contract.
 /// </summary>
 internal sealed class ManifoldGenerationProviderTests
 {
@@ -26,40 +26,83 @@ internal sealed class ManifoldGenerationProviderTests
     public async Task Should_create_byte_identical_complete_plans_Async()
     {
         var vcpkgRoot = GetVcpkgRoot();
-        var first = new ManifoldGenerationProvider().CreatePlan(vcpkgRoot);
-        var second = new ManifoldGenerationProvider().CreatePlan(vcpkgRoot);
+        var firstProvider = new ManifoldGenerationProvider(vcpkgRoot);
+        var secondProvider = new ManifoldGenerationProvider(vcpkgRoot);
+        var first = await firstProvider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+        var second = await secondProvider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+        var firstManaged = await RenderAsync(first.CSharpSources).ConfigureAwait(false);
+        var secondManaged = await RenderAsync(second.CSharpSources).ConfigureAwait(false);
+        var firstNative = await RenderAsync(first.CppSources).ConfigureAwait(false);
+        var secondNative = await RenderAsync(second.CppSources).ConfigureAwait(false);
 
-        await Assert.That(first.ProfileId).IsEqualTo("manifold-3.5.2-windows-v2");
+        await Assert.That(firstProvider.Profile.ProfileId).IsEqualTo("manifold-3.5.2-windows-v2");
+        await Assert.That(firstProvider).IsAssignableTo<SemanticGenerationProvider>();
         await Assert.That(first.NativeExports.Count).IsEqualTo(9);
-        await Assert.That(first.NativeExports).IsEquivalentTo(second.NativeExports);
-        await Assert.That(first.ManagedSources.Keys).IsEquivalentTo(second.ManagedSources.Keys);
-        await Assert.That(first.NativeSources.Keys).IsEquivalentTo(second.NativeSources.Keys);
-        await Assert.That(first.ManagedSources.Keys).Contains("layout-inventory.json");
-        await Assert.That(first.ManagedSources.Keys).Contains("ownership-inventory.json");
-        await Assert.That(first.ManagedSources.Keys).Contains("source-declaration-inventory.json");
-        await Assert.That(first.ManagedSources.Keys).Contains("toolchain-inventory.json");
-        foreach (var source in first.ManagedSources)
+        string[] expectedExports =
+        [
+            "Manifold_NativeError_Clear",
+            "Manifold_Destroy",
+            "Manifold_Create",
+            "Manifold_Status",
+            "Manifold_Boolean",
+            "Manifold_Translate",
+            "Manifold_NumTri",
+            "Manifold_GetMeshCounts",
+            "Manifold_CopyMesh",
+        ];
+        await Assert.That(first.NativeExports.SequenceEqual(expectedExports, StringComparer.Ordinal)).IsTrue();
+        await Assert.That(first.NativeExports.SequenceEqual(second.NativeExports, StringComparer.Ordinal)).IsTrue();
+        await Assert.That(firstManaged.Keys).IsEquivalentTo(secondManaged.Keys);
+        await Assert.That(firstNative.Keys).IsEquivalentTo(secondNative.Keys);
+        await Assert.That(firstManaged.Keys).Contains("layout-inventory.json");
+        await Assert.That(firstManaged.Keys).Contains("ownership-inventory.json");
+        await Assert.That(firstManaged.Keys).Contains("source-declaration-inventory.json");
+        await Assert.That(firstManaged.Keys).Contains("toolchain-inventory.json");
+        foreach (var source in firstManaged)
         {
-            await Assert.That(source.Value).IsEqualTo(second.ManagedSources[source.Key]);
+            await Assert.That(source.Value).IsEqualTo(secondManaged[source.Key]);
         }
 
-        foreach (var source in first.NativeSources)
+        foreach (var source in firstNative)
         {
-            await Assert.That(source.Value).IsEqualTo(second.NativeSources[source.Key]);
+            await Assert.That(source.Value).IsEqualTo(secondNative[source.Key]);
         }
 
-        var managed = first.ManagedSources["Manifold.Bindings.g.cs"];
-        var native = first.NativeSources["ManifoldProfileAdapter.cpp"];
-        await Assert.That(managed).Contains("public enum ManifoldOp : sbyte");
+        var managed = firstManaged["Manifold.Bindings.g.cs"];
+        var operation = firstManaged["ManifoldOp.g.cs"];
+        var native = firstNative["ManifoldProfileAdapter.cpp"];
+        await Assert.That(operation).Contains("public enum ManifoldOp : sbyte");
+        await Assert.That(operation).Contains("Add = 0");
+        await Assert.That(operation).Contains("Subtract = 1");
+        await Assert.That(operation).Contains("Intersect = 2");
         await Assert.That(managed).Contains("public static global::TedToolkit.CppBindings.Owned<Manifold> Create");
         await Assert.That(managed).Contains("ReadOnlySpan<double> vertexCoordinates");
-        await Assert.That(managed).Contains("GC.SuppressFinalize(result);");
+        await Assert.That(managed).Contains("ReadOnlySpan<ulong> triangleIndices");
+        await Assert.That(managed).Contains("GC.SuppressFinalize(owner);");
+        await Assert.That(managed).Contains("ManifoldError Status(");
+        await Assert.That(managed).Contains("Owned<Manifold> Boolean(");
+        await Assert.That(managed).Contains("Owned<Manifold> Translate(");
+        await Assert.That(managed).Contains("nuint NumTri(");
+        await Assert.That(managed).Contains("ManifoldMeshData GetMesh(");
+        await Assert.That(managed).Contains("vertexCoordinateCount > int.MaxValue");
         await Assert.That(native).Contains("static_assert(sizeof(ManifoldAdapter) == 8");
         await Assert.That(native).Contains("Manifold::Error::Cancelled) == 14");
-        await Assert.That(native).Contains("NativeApi_GetFunctionTable");
+        await Assert.That(native).Contains("extern \"C\" std::size_t Manifold_NumTri(");
+        foreach (var export in expectedExports)
+        {
+            await Assert.That(native).Contains(export + "(");
+        }
+
         await Assert.That(native).Contains("SetError(error, 3, \"std::underflow_error\"");
         await Assert.That(native).Contains("SetError(error, 8, \"std::exception\"");
         await Assert.That(native).DoesNotContain("SetError(error, 9, \"std::exception\"");
+        await Assert.That(managed).DoesNotContain("class NativeApi");
+        await Assert.That(native).DoesNotContain("NativeApi_GetFunctionTable");
+        await Assert.That(typeof(ManifoldGenerationProvider).GetMethod("GenerateAsync")).IsNull();
+        await Assert.That(typeof(ManifoldGenerationProvider).Assembly.GetType(
+            "TedToolkit.CppBindings.Manifold.Generator.ManifoldGenerationPlan")).IsNull();
+        await Assert.That(typeof(ManifoldGenerationProvider).Assembly.GetType(
+            "TedToolkit.CppBindings.Manifold.Generator.ManifoldSourceRenderer")).IsNull();
     }
 
     /// <summary>
@@ -70,8 +113,10 @@ internal sealed class ManifoldGenerationProviderTests
     public async Task Should_resolve_complete_header_inventory_from_vcpkg_Async()
     {
         var vcpkgRoot = GetVcpkgRoot();
-        var plan = new ManifoldGenerationProvider().CreatePlan(vcpkgRoot);
-        using var document = JsonDocument.Parse(plan.ManagedSources["source-inventory.json"]);
+        var plan = await new ManifoldGenerationProvider(vcpkgRoot).CreatePlanAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        var managed = await RenderAsync(plan.CSharpSources).ConfigureAwait(false);
+        using var document = JsonDocument.Parse(managed["source-inventory.json"]);
         var actual = document.RootElement.EnumerateArray()
             .Select(static item => (
                 Header: item.GetProperty("header").GetString()!,
@@ -104,8 +149,10 @@ internal sealed class ManifoldGenerationProviderTests
         var root = CreateClassificationVcpkg();
         try
         {
-            var plan = new ManifoldGenerationProvider().CreatePlan(root);
-            using var document = JsonDocument.Parse(plan.ManagedSources["source-inventory.json"]);
+            var plan = await new ManifoldGenerationProvider(root).CreatePlanAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var managed = await RenderAsync(plan.CSharpSources).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(managed["source-inventory.json"]);
             var actual = document.RootElement.EnumerateArray()
                 .Select(static item => (
                     Header: item.GetProperty("header").GetString()!,
@@ -163,10 +210,8 @@ internal sealed class ManifoldGenerationProviderTests
             {
                 try
                 {
-                    await new ManifoldGenerationProvider().GenerateAsync(
-                        output,
-                        root,
-                        CancellationToken.None).ConfigureAwait(false);
+                    _ = await new ManifoldGenerationProvider(root).CreatePlanAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
                 catch (InvalidOperationException exception)
                 {
@@ -201,56 +246,31 @@ internal sealed class ManifoldGenerationProviderTests
         {
             var vcpkgRoot = GetVcpkgRoot();
             Environment.SetEnvironmentVariable("VCPKG_ROOT", vcpkgRoot.FullName);
-            var ambient = new ManifoldGenerationProvider().CreatePlan();
-            var explicitPlan = new ManifoldGenerationProvider().CreatePlan(vcpkgRoot);
+            var ambient = await new ManifoldGenerationProvider().CreatePlanAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var explicitPlan = await new ManifoldGenerationProvider(vcpkgRoot).CreatePlanAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var ambientManaged = await RenderAsync(ambient.CSharpSources).ConfigureAwait(false);
+            var explicitManaged = await RenderAsync(explicitPlan.CSharpSources).ConfigureAwait(false);
+            var ambientNative = await RenderAsync(ambient.CppSources).ConfigureAwait(false);
+            var explicitNative = await RenderAsync(explicitPlan.CppSources).ConfigureAwait(false);
 
-            await Assert.That(ambient.ManagedSources.Keys).IsEquivalentTo(explicitPlan.ManagedSources.Keys);
-            await Assert.That(ambient.ManagedSources["source-inventory.json"])
-                .IsEqualTo(explicitPlan.ManagedSources["source-inventory.json"]);
-            await AssertPreservedArtifactHashesAsync(explicitPlan).ConfigureAwait(false);
-            foreach (var source in ambient.ManagedSources.Where(static item => item.Key != "source-inventory.json"))
+            await Assert.That(ambientManaged.Keys).IsEquivalentTo(explicitManaged.Keys);
+            await Assert.That(ambientManaged["source-inventory.json"])
+                .IsEqualTo(explicitManaged["source-inventory.json"]);
+            foreach (var source in ambientManaged.Where(static item => item.Key != "source-inventory.json"))
             {
-                await Assert.That(source.Value).IsEqualTo(explicitPlan.ManagedSources[source.Key]);
+                await Assert.That(source.Value).IsEqualTo(explicitManaged[source.Key]);
             }
 
-            foreach (var source in ambient.NativeSources)
+            foreach (var source in ambientNative)
             {
-                await Assert.That(source.Value).IsEqualTo(explicitPlan.NativeSources[source.Key]);
-            }
-
-            var outputRoot = new DirectoryInfo(Path.Combine(
-                Path.GetTempPath(),
-                $"tedtoolkit-manifold-compatibility-{Guid.NewGuid():N}"));
-            try
-            {
-                var ambientOutput = new DirectoryInfo(Path.Combine(outputRoot.FullName, "ambient"));
-                var explicitOutput = new DirectoryInfo(Path.Combine(outputRoot.FullName, "explicit"));
-                await new ManifoldGenerationProvider().GenerateAsync(ambientOutput, CancellationToken.None)
-                    .ConfigureAwait(false);
-                await new ManifoldGenerationProvider().GenerateAsync(
-                    explicitOutput,
-                    vcpkgRoot,
-                    CancellationToken.None).ConfigureAwait(false);
-                await AssertDirectoriesEqualAsync(ambientOutput, explicitOutput).ConfigureAwait(false);
-            }
-            finally
-            {
-                if (Directory.Exists(outputRoot.FullName))
-                {
-                    outputRoot.Delete(true);
-                }
+                await Assert.That(source.Value).IsEqualTo(explicitNative[source.Key]);
             }
 
             Environment.SetEnvironmentVariable("VCPKG_ROOT", null);
-            await Assert.That(() => new ManifoldGenerationProvider().CreatePlan())
+            await Assert.That(() => new ManifoldGenerationProvider())
                 .Throws<InvalidOperationException>();
-            var missingOutput = new DirectoryInfo(Path.Combine(
-                Path.GetTempPath(),
-                $"tedtoolkit-manifold-missing-root-{Guid.NewGuid():N}"));
-            await Assert.That(() => new ManifoldGenerationProvider().GenerateAsync(
-                missingOutput,
-                CancellationToken.None)).Throws<InvalidOperationException>();
-            await Assert.That(missingOutput.Exists).IsFalse();
         }
         finally
         {
@@ -329,62 +349,21 @@ internal sealed class ManifoldGenerationProviderTests
             .ToArray();
     }
 
-    private static async Task AssertPreservedArtifactHashesAsync(ManifoldGenerationPlan plan)
+    private static async Task<IReadOnlyDictionary<string, string>> RenderAsync(
+        IReadOnlyList<GeneratedSource> sources)
     {
-        var expected = new Dictionary<string, string>(StringComparer.Ordinal)
+        var rendered = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var source in sources)
         {
-            ["csharp/admitted-inventory.json"] = "a1f47b87310993aa7d8e592298f43c75b693f78ce9fc145841fdf5aae0312516",
-            ["csharp/candidate-inventory.json"] = "28c3acc4f2df029d17d8e262e186bc96f2456ec5f9d4add8fce7b740421591ce",
-            ["csharp/layout-inventory.json"] = "10bed8229f54d0adca744c8212fd2cea28b36dc7e137d63c567517dd09abe211",
-            ["csharp/managed-inventory.json"] = "ed253a807f5cef558c53ffda92e9d8e5dc22a12175f31cc4156a7040b5a6628c",
-            ["csharp/Manifold.Bindings.g.cs"] = "c452e996e22f3bfdc4b2f1760e7b6bb5c88d4611669c100096d7bd2d828649d0",
-            ["csharp/ownership-inventory.json"] = "0d64b61091e096e1ca14a424196adb4eee91b0cf1c293ca78ccb6a12e4477e0b",
-            ["csharp/profile-manifest.json"] = "eaca47e037238a10a0c3cce3c19a7ba96a7f4b8052eff914153d3e484f58dfc9",
-            ["csharp/source-declaration-inventory.json"] = "28c3acc4f2df029d17d8e262e186bc96f2456ec5f9d4add8fce7b740421591ce",
-            ["csharp/toolchain-inventory.json"] = "fe8ef398cd6ce22b122f0fc865dc0a4dbb8906de2bd2db2a1806e5af34b7f85a",
-            ["csharp/unsupported-inventory.json"] = "cad79a0fe5c781a9a1be29283613cce96636972f963ded0d254af06a264fa099",
-            ["cpp/CMakeLists.txt"] = "8e714b1521ac5fdcde97158d2b596d249d14ce317b8b7adeec12ab4827d4b27f",
-            ["cpp/ManifoldProfileAdapter.cpp"] = "5eba66055fd4eea71c4289f6c034d8623a0da4ca919bf87aa9cfd34b7d1b65bd",
-            ["cpp/native-inventory.json"] = "164b217105f34e884c48ef77a4af5d2620d36d2287e1bcc50c9ce551a1c522ba",
-        };
-        var actual = plan.ManagedSources
-            .Where(static item => item.Key != "source-inventory.json")
-            .ToDictionary(static item => "csharp/" + item.Key, static item => Hash(item.Value), StringComparer.Ordinal);
-        foreach (var source in plan.NativeSources)
-        {
-            actual.Add("cpp/" + source.Key, Hash(source.Value));
+            var writer = new StringWriter();
+            await using (writer.ConfigureAwait(false))
+            {
+                await source.RenderAsync(writer, CancellationToken.None).ConfigureAwait(false);
+                rendered.Add(source.RelativePath, writer.ToString());
+            }
         }
 
-        await Assert.That(actual.Count).IsEqualTo(expected.Count);
-        foreach (var artifact in expected)
-        {
-            await Assert.That(actual[artifact.Key]).IsEqualTo(artifact.Value.ToUpperInvariant());
-        }
-    }
-
-    private static async Task AssertDirectoriesEqualAsync(DirectoryInfo first, DirectoryInfo second)
-    {
-        var firstFiles = first.EnumerateFiles("*", SearchOption.AllDirectories)
-            .ToDictionary(
-                file => Path.GetRelativePath(first.FullName, file.FullName),
-                static file => File.ReadAllBytes(file.FullName),
-                StringComparer.Ordinal);
-        var secondFiles = second.EnumerateFiles("*", SearchOption.AllDirectories)
-            .ToDictionary(
-                file => Path.GetRelativePath(second.FullName, file.FullName),
-                static file => File.ReadAllBytes(file.FullName),
-                StringComparer.Ordinal);
-
-        await Assert.That(firstFiles.Keys).IsEquivalentTo(secondFiles.Keys);
-        foreach (var file in firstFiles)
-        {
-            await Assert.That(file.Value.SequenceEqual(secondFiles[file.Key])).IsTrue();
-        }
-    }
-
-    private static string Hash(string value)
-    {
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+        return rendered;
     }
 
     private static DirectoryInfo CreateClassificationVcpkg()

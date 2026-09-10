@@ -54,8 +54,7 @@ internal static class ProviderGenerators
                 await GenerateCgalAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
                 break;
             case "manifold":
-                await new ManifoldGenerationProvider().GenerateAsync(outputRoot, vcpkgRoot, cancellationToken)
-                    .ConfigureAwait(false);
+                await GenerateManifoldAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
                 break;
             case "fcl":
                 await GenerateFclAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
@@ -177,6 +176,54 @@ internal static class ProviderGenerators
             NativeArtifactCount = plan.CppSources.Count + 1,
             NativeFunctionCount = plan.NativeExports.Count,
             Toolchain = provider.Profile.Versions,
+        };
+        await File.WriteAllTextAsync(
+                Path.Combine(outputRoot.FullName, "generation-result.json"),
+                JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }) + "\n",
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task GenerateManifoldAsync(
+        DirectoryInfo outputRoot,
+        DirectoryInfo vcpkgRoot,
+        CancellationToken cancellationToken)
+    {
+        var provider = new ManifoldGenerationProvider(vcpkgRoot);
+        var options = new GenerationOptions
+        {
+            CSharpFolder = outputRoot.CreateSubdirectory("csharp"),
+            CppFolder = outputRoot.CreateSubdirectory("cpp"),
+            CSharpNamespace = "TedToolkit.CppBindings.Manifold",
+            NativeLibraryBaseName = provider.Profile.NativeLibraryBaseName,
+            CppVersion = 20,
+        };
+        var plan = await provider.CreatePlanAsync(cancellationToken).ConfigureAwait(false);
+        var builder = Pipeline.CreateBuilder();
+        builder.Options.PrintLogo = false;
+        builder.Options.PrintResults = false;
+        builder.Options.ShowProgressInConsole = false;
+        builder.Options.DefaultRetryCount = 0;
+        builder.Options.ThrowOnPipelineFailure = true;
+        var pipeline = await builder.AddCppGenerators(options, provider).BuildAsync().ConfigureAwait(false);
+        var summary = await pipeline.RunAsync().ConfigureAwait(false);
+        if (summary.Status is not Status.Successful)
+        {
+            throw new InvalidOperationException("The Manifold generator did not complete successfully.");
+        }
+
+        var result = new
+        {
+            provider.Profile.ProfileId,
+            ManagedArtifactCount = plan.CSharpSources.Count + 1,
+            NativeArtifactCount = plan.CppSources.Count + 1,
+            NativeExportCount = plan.NativeExports.Count,
+            Toolchain = new
+            {
+                provider.Profile.CMake,
+                provider.Profile.Msvc,
+                provider.Profile.Triplet,
+            },
         };
         await File.WriteAllTextAsync(
                 Path.Combine(outputRoot.FullName, "generation-result.json"),

@@ -7,145 +7,118 @@
 
 using System.Text.Json;
 
+using TedToolkit.CppBindings.Generator.Semantics;
+
 namespace TedToolkit.CppBindings.Manifold.Generator;
 
-/// <summary>
-/// Produces the deterministic, finite Manifold managed/native binding pair.
-/// </summary>
-public sealed class ManifoldGenerationProvider
+/// <summary>Supplies the finite Manifold profile to the provider-neutral Shared semantic engine.</summary>
+public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
 {
-    private static readonly string[] ExportNames =
+    private static readonly string[] Admitted =
     [
-        "Manifold_NativeError_Clear",
-        "Manifold_Destroy",
-        "Manifold_Create",
-        "Manifold_Status",
-        "Manifold_Boolean",
-        "Manifold_Translate",
-        "Manifold_NumTri",
-        "Manifold_GetMeshCounts",
-        "Manifold_CopyMesh",
+        "Manifold", "Manifold.Create", "Manifold.Status", "Manifold.Boolean",
+        "Manifold.Translate", "Manifold.NumTri", "Manifold.GetMesh", "ManifoldMeshData",
+        "ManifoldOp", "ManifoldError",
     ];
 
-    /// <summary>Gets the supported finite profile.</summary>
-    public ManifoldProfile Profile { get; } = new();
+    private readonly DirectoryInfo _vcpkgRoot;
 
-    /// <summary>Creates a fresh immutable plan.</summary>
-    public ManifoldGenerationPlan CreatePlan()
+    /// <summary>Initializes a provider using the process <c>VCPKG_ROOT</c>.</summary>
+    public ManifoldGenerationProvider()
+        : this(ResolveVcpkgRoot())
     {
-        return CreatePlan(ResolveVcpkgRoot());
     }
 
-    /// <summary>Creates a fresh immutable plan from the selected vcpkg installation.</summary>
+    /// <summary>Initializes a provider from the selected vcpkg installation.</summary>
     /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
-    /// <returns>The immutable generation plan.</returns>
-    public ManifoldGenerationPlan CreatePlan(DirectoryInfo vcpkgRoot)
+    public ManifoldGenerationProvider(DirectoryInfo vcpkgRoot)
+        : base(ManifoldSemanticProfile.Create())
     {
         ArgumentNullException.ThrowIfNull(vcpkgRoot);
-        var jsonOptions = new JsonSerializerOptions { WriteIndented = true };
-        var sourceInventory = ManifoldHeaderDiscovery.Resolve(vcpkgRoot, Profile);
-        var managedInventory = new[]
-        {
-            "Manifold", "Manifold.Create", "Manifold.Status", "Manifold.Boolean",
-            "Manifold.Translate", "Manifold.NumTri", "Manifold.GetMesh", "ManifoldMeshData",
-            "ManifoldOp", "ManifoldError",
-        };
-        var admitted = managedInventory.Select(static value => new { id = value, disposition = "admitted" }).ToArray();
-        var sourceDeclarations = managedInventory.Select(static value => new
+        _vcpkgRoot = vcpkgRoot;
+    }
+
+    /// <summary>Gets the finite profile.</summary>
+    public ManifoldProfile Profile { get; } = new();
+
+    /// <inheritdoc />
+    public override IReadOnlyList<Type> PreparationModules { get; } = Array.Empty<Type>();
+
+    /// <inheritdoc />
+    protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        var sourceInventory = ManifoldHeaderDiscovery.Resolve(_vcpkgRoot, Profile);
+        var sourceDeclarations = Admitted.Select(static value => new
         {
             id = value,
-            header = value.StartsWith("Manifold", StringComparison.Ordinal) ? "manifold/manifold.h" : "manifold/mesh.h",
+            header = value.StartsWith("Manifold", StringComparison.Ordinal)
+                ? "manifold/manifold.h"
+                : "manifold/mesh.h",
             disposition = "finite-profile-candidate",
         }).ToArray();
-        var unsupported = new[]
-        {
-            new { id = "callbacks", reason = "callbacks-outside-finite-profile" },
-            new { id = "optional-mesh-properties", reason = "optional-properties-outside-finite-profile" },
-            new { id = "manifoldc", reason = "alternate-c-api-outside-finite-profile" },
-        };
-        var layoutInventory = new[]
-        {
-            new { id = "ManifoldAdapter", size = 8, alignment = 8, proof = "compiler-static-assert" },
-        };
-        var ownershipInventory = new[]
-        {
-            new { id = "Manifold", ownership = "Owned", nativeStorage = "ManifoldAdapter" },
-            new { id = "ManifoldMeshData", ownership = "managed-arrays", nativeStorage = "none" },
-        };
-        var managed = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["Manifold.Bindings.g.cs"] = ManifoldSourceRenderer.RenderManaged(Profile),
-            ["admitted-inventory.json"] = JsonSerializer.Serialize(admitted, jsonOptions) + "\n",
-            ["candidate-inventory.json"] = JsonSerializer.Serialize(sourceDeclarations, jsonOptions) + "\n",
-            ["layout-inventory.json"] = JsonSerializer.Serialize(layoutInventory, jsonOptions) + "\n",
-            ["managed-inventory.json"] = JsonSerializer.Serialize(managedInventory, jsonOptions) + "\n",
-            ["ownership-inventory.json"] = JsonSerializer.Serialize(ownershipInventory, jsonOptions) + "\n",
-            ["profile-manifest.json"] = JsonSerializer.Serialize(Profile, jsonOptions) + "\n",
-            ["source-declaration-inventory.json"] = JsonSerializer.Serialize(sourceDeclarations, jsonOptions) + "\n",
-            ["source-inventory.json"] = JsonSerializer.Serialize(sourceInventory.Select(static item => new
+        BindingSourceDefinition[] managedSources =
+        [
+            JsonSource("admitted-inventory.json", Admitted.Select(static value => new
+            {
+                id = value,
+                disposition = "admitted",
+            })),
+            JsonSource("candidate-inventory.json", sourceDeclarations),
+            JsonSource("layout-inventory.json", new[]
+            {
+                new { id = "ManifoldAdapter", size = 8, alignment = 8, proof = "compiler-static-assert" },
+            }),
+            JsonSource("managed-inventory.json", Admitted),
+            JsonSource("ownership-inventory.json", new[]
+            {
+                new { id = "Manifold", ownership = "Owned", nativeStorage = "ManifoldAdapter" },
+                new { id = "ManifoldMeshData", ownership = "managed-arrays", nativeStorage = "none" },
+            }),
+            JsonSource("profile-manifest.json", Profile),
+            JsonSource("source-declaration-inventory.json", sourceDeclarations),
+            JsonSource("source-inventory.json", sourceInventory.Select(static item => new
             {
                 header = item.Header,
                 disposition = item.Disposition,
-            }), jsonOptions) + "\n",
-            ["toolchain-inventory.json"] = JsonSerializer.Serialize(new
+            })),
+            JsonSource("toolchain-inventory.json", new
             {
                 Profile.ManifoldVersion,
                 Profile.Triplet,
                 Profile.VcpkgBuiltinBaseline,
                 Profile.CMake,
                 Profile.Msvc,
-            }, jsonOptions) + "\n",
-            ["unsupported-inventory.json"] = JsonSerializer.Serialize(unsupported, jsonOptions) + "\n",
-        };
-        var native = new Dictionary<string, string>(StringComparer.Ordinal)
-        {
-            ["CMakeLists.txt"] = ManifoldSourceRenderer.RenderCMake(Profile),
-            ["ManifoldProfileAdapter.cpp"] = ManifoldSourceRenderer.RenderNative(Profile, ExportNames),
-            ["native-inventory.json"] = JsonSerializer.Serialize(ExportNames, jsonOptions) + "\n",
-        };
-        return new ManifoldGenerationPlan
-        {
-            ProfileId = Profile.ProfileId,
-            ManagedSources = ManifoldGenerationPlan.Snapshot(managed),
-            NativeSources = ManifoldGenerationPlan.Snapshot(native),
-            NativeExports = Array.AsReadOnly((string[])ExportNames.Clone()),
-        };
-    }
-
-    /// <summary>Writes one plan without retaining inputs or mutable plan state.</summary>
-    public async Task GenerateAsync(DirectoryInfo outputRoot, CancellationToken cancellationToken)
-    {
-        await GenerateAsync(outputRoot, ResolveVcpkgRoot(), cancellationToken).ConfigureAwait(false);
-    }
-
-    /// <summary>Writes one plan from the selected vcpkg installation without retaining mutable state.</summary>
-    /// <param name="outputRoot">The generated output root.</param>
-    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
-    /// <param name="cancellationToken">The cancellation token.</param>
-    /// <returns>A task that completes after all outputs are written.</returns>
-    public async Task GenerateAsync(
-        DirectoryInfo outputRoot,
-        DirectoryInfo vcpkgRoot,
-        CancellationToken cancellationToken)
-    {
-        ArgumentNullException.ThrowIfNull(outputRoot);
-        ArgumentNullException.ThrowIfNull(vcpkgRoot);
-        var plan = CreatePlan(vcpkgRoot);
-        await WriteAsync(new DirectoryInfo(Path.Combine(outputRoot.FullName, "csharp")), plan.ManagedSources, cancellationToken)
-            .ConfigureAwait(false);
-        await WriteAsync(new DirectoryInfo(Path.Combine(outputRoot.FullName, "cpp")), plan.NativeSources, cancellationToken)
-            .ConfigureAwait(false);
-        await File.WriteAllTextAsync(
-            Path.Combine(outputRoot.FullName, "generation-result.json"),
-            JsonSerializer.Serialize(new
+            }),
+            JsonSource("unsupported-inventory.json", new[]
             {
-                plan.ProfileId,
-                ManagedArtifactCount = plan.ManagedSources.Count,
-                NativeArtifactCount = plan.NativeSources.Count,
-                NativeExportCount = plan.NativeExports.Count,
-                Toolchain = new { Profile.CMake, Profile.Msvc, Profile.Triplet },
-            }, new JsonSerializerOptions { WriteIndented = true }) + "\n",
-            cancellationToken).ConfigureAwait(false);
+                new { id = "callbacks", reason = "callbacks-outside-finite-profile" },
+                new { id = "optional-mesh-properties", reason = "optional-properties-outside-finite-profile" },
+                new { id = "manifoldc", reason = "alternate-c-api-outside-finite-profile" },
+            }),
+        ];
+        var finiteApi = ManifoldFiniteProfile.Create(Profile);
+        BindingSourceDefinition[] nativeSources =
+        [
+            JsonSource("native-inventory.json", finiteApi.NativeExportOrder),
+        ];
+        return Task.FromResult(new BindingProviderModel(
+            [],
+            [ManifoldFiniteProfile.CreateOperationEnum(Profile),],
+            ManifoldSemanticProfile.CreateEmissionProfile(),
+            managedSources,
+            nativeSources,
+            [],
+            ManifoldSemanticProfile.ManagedSourceStem,
+            ManifoldSemanticProfile.NativeSourceStem,
+            ManifoldFiniteProfile.CreateNativeProject(Profile),
+            [finiteApi,]));
+    }
+
+    private static BindingSourceDefinition JsonSource(string path, object value)
+    {
+        var text = JsonSerializer.Serialize(value, new JsonSerializerOptions { WriteIndented = true }) + "\n";
+        return new(path, (writer, token) => writer.WriteAsync(text.AsMemory(), token));
     }
 
     private static DirectoryInfo ResolveVcpkgRoot()
@@ -158,18 +131,5 @@ public sealed class ManifoldGenerationProvider
         }
 
         return new DirectoryInfo(path);
-    }
-
-    private static async Task WriteAsync(
-        DirectoryInfo root,
-        IReadOnlyDictionary<string, string> sources,
-        CancellationToken cancellationToken)
-    {
-        root.Create();
-        foreach (var source in sources.OrderBy(static item => item.Key, StringComparer.Ordinal))
-        {
-            await File.WriteAllTextAsync(Path.Combine(root.FullName, source.Key), source.Value, cancellationToken)
-                .ConfigureAwait(false);
-        }
     }
 }
