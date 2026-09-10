@@ -70,6 +70,14 @@ inputs, comparison authorities, fallbacks, or compatibility targets. A legacy bo
 physically present only as an inactive migration recovery artifact until the generated replacement
 passes, after which current source, build, fixtures, output, and documentation remove it.
 
+Finite adapters that do not map directly to C++ member declarations remain part of that same Model.
+They describe span pointer/length correlations, validation groups, conditional owned construction,
+composite output projection, and exact export order explicitly. Shared emits their managed/native
+transport and common bootstrap/error mechanics; a Provider supplies only its native algorithm body,
+profile facts, header inventory, and dependency-specific native project policy. A Provider-private
+plan, output writer, complete source renderer, or hard-coded copy of the function table is not an
+alternative generation path.
+
 `TedToolkit.CppBindings.Runtime` contains only handwritten, declaration-agnostic managed
 mechanisms, including common native-error diagnostic consumption and exception projection. Each
 provider Runtime contains only declaration-agnostic provider semantics: OCCT owns intrusive-handle

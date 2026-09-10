@@ -100,14 +100,15 @@
         "CMake": "4.4.3",
         "Triplet": "x64-windows"
       },
-      "ManagedArtifactCount": 11,
-      "NativeArtifactCount": 3,
+      "ManagedArtifactCount": 12,
+      "NativeArtifactCount": 4,
       "NormalizedManagedHashes": {
-        "Fcl.Bindings.g.cs": "aea95a13ff9150c8a42528c995e255f51d01de8dbf5852e8867b3f43322e89ec",
+        "Fcl.Bindings.g.cs": "c711cd9e0f0683d6cf3678b3897f5d003929c9d1a1603cf422c821d891bd7eb9",
         "admitted-inventory.json": "012371a71f17fea2e4cf29eda24c1a2e0b1aab5bda6ca3533fd7d25e8b65f19b",
         "candidate-inventory.json": "92f9c5332583877641c79938ab91c7634d8a8ba26e2c5082a8b80e51deaf45a3",
         "layout-inventory.json": "6e7e7f700b22c01434a27e526242fa4831fdf88b3d53539b31e0c2ae237ad704",
         "managed-inventory.json": "012371a71f17fea2e4cf29eda24c1a2e0b1aab5bda6ca3533fd7d25e8b65f19b",
+        "NativeApi.g.cs": "91432bc48471dfa2f98a7ce7cc638e71acb28b9dfcda63fad1a09ac54205bcbd",
         "ownership-inventory.json": "4bfa174f8f83ad5ff9cf18e396e29ca00b73ad147d666f3ee004e6827d4f6b5b",
         "profile-manifest.json": "5b1eec9d3e856d33ccde8ea4ecdfa62bbbe455f51ba56b6277912624ffbb74ac",
         "source-declaration-inventory.json": "dd132b5847af036b14054570975f719241e3f6c5a675735b8d551f0cde9cca70",
@@ -116,9 +117,10 @@
         "unsupported-inventory.json": "f73435a64d0d9e72d8cabfb834b18bf0d6e90c6df31216c8a4099b34c958b086"
       },
       "NormalizedNativeHashes": {
-        "CMakeLists.txt": "0ab605a5cf67153e603981361ca1b985f3681c2d8064b000c2551902a1124bf3",
-        "FclProfileAdapter.cpp": "233184cdebcce6c795f9a10276ac508f00bcd4ea1ceb77df60f28dbf6fdd3a23",
-        "native-inventory.json": "57bbc0fc677e7a049337c6d6382862f8a76f690a059765c61adf6072a108bc09"
+        "CMakeLists.txt": "3b9a1577f1ae6a6bc9c1e8c6e19de06e8f76c5a8417b7eb637e3d839e5eb1662",
+        "FclProfileAdapter.cpp": "fb613aa01541a52280bdfa558dcf08124c9a224d7b6e1ab0cb6ed42a5dfd0242",
+        "native-inventory.json": "57bbc0fc677e7a049337c6d6382862f8a76f690a059765c61adf6072a108bc09",
+        "NativeFunctionTable.cpp": "7e6ac36884bbb0f4b18a72f785fadcc9f8ce709ee1d75a1c5651047a8dbbbbab"
       },
       "NativeExports": [
         "Fcl_NativeError_Clear",

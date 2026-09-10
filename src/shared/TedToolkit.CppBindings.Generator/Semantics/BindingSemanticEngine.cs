@@ -150,11 +150,8 @@ public sealed class BindingSemanticEngine
             .Select(ValidateDeclaration)
             .OrderBy(static declaration => declaration.Type.NativeTypeName, StringComparer.Ordinal)
             .ToArray();
-        var nativeExports = providerModel.NativeExports
-            .Concat(declarations.SelectMany(static declaration => declaration.NativeExports))
-            .ToArray();
+        var nativeExports = CreateNativeExportOrder(providerModel, declarations);
         GenerationOutput.ValidateExports(nativeExports);
-        Array.Sort(nativeExports, StringComparer.Ordinal);
         return new(providerModel, declarations, nativeExports);
     }
 
@@ -171,8 +168,10 @@ public sealed class BindingSemanticEngine
             .ToDictionary(static item => item.export, static item => item.index, StringComparer.Ordinal));
         var managed = CreateManagedSources(model, slots);
         managed.AddRange(CreateEnumSources(model));
+        managed.AddRange(CreateFiniteProfileManagedSources(model, slots));
         managed.AddRange(model.Provider.ManagedSources.Select(ToGeneratedSource));
         var native = CreateNativeSources(model);
+        native.AddRange(CreateFiniteProfileNativeSources(model));
         native.AddRange(model.Provider.NativeSources.Select(ToGeneratedSource));
         AddNativeProject(model.Provider.NativeProject, native);
         return new(managed, native, model.NativeExports);
@@ -184,6 +183,7 @@ public sealed class BindingSemanticEngine
             || providerModel.Enums.Any(static declaration => declaration is null)
             || providerModel.ManagedSources.Any(static source => source is null || source.RenderAsync is null)
             || providerModel.NativeSources.Any(static source => source is null || source.RenderAsync is null)
+            || providerModel.FiniteProfileApis.Any(static api => api is null)
             || providerModel.EmissionProfile.NativeExceptionProjections.Any(static projection => projection is null))
         {
             throw new ArgumentException("Provider model collections cannot contain null values.", nameof(providerModel));
@@ -503,6 +503,44 @@ public sealed class BindingSemanticEngine
     private static GeneratedSource ToGeneratedSource(BindingSourceDefinition source)
     {
         return new(source.RelativePath, source.RenderAsync);
+    }
+
+    private static string[] CreateNativeExportOrder(
+        BindingProviderModel providerModel,
+        IReadOnlyList<BindingSemanticDeclaration> declarations)
+    {
+        var declarationExports = declarations.SelectMany(static declaration => declaration.NativeExports);
+        if (providerModel.FiniteProfileApis.Count > 0)
+        {
+            return providerModel.FiniteProfileApis.SelectMany(static api => api.NativeExportOrder)
+                .Concat(providerModel.NativeExports.Order(StringComparer.Ordinal))
+                .Concat(declarationExports.Order(StringComparer.Ordinal))
+                .ToArray();
+        }
+
+        return providerModel.NativeExports.Concat(declarationExports)
+            .Order(StringComparer.Ordinal)
+            .ToArray();
+    }
+
+    private static IEnumerable<GeneratedSource> CreateFiniteProfileManagedSources(
+        BindingSemanticModel model,
+        IReadOnlyDictionary<string, int> slots)
+    {
+        return model.Provider.FiniteProfileApis.Select(api => new GeneratedSource(
+            api.ManagedRelativePath,
+            (writer, token) => writer.WriteAsync(
+                BindingFiniteProfileEmitter.RenderManaged(api, model.Provider.EmissionProfile, slots).AsMemory(),
+                token)));
+    }
+
+    private static IEnumerable<GeneratedSource> CreateFiniteProfileNativeSources(BindingSemanticModel model)
+    {
+        return model.Provider.FiniteProfileApis.Select(api => new GeneratedSource(
+            api.NativeRelativePath,
+            (writer, token) => writer.WriteAsync(
+                BindingFiniteProfileEmitter.RenderNative(api, model.Provider.EmissionProfile).AsMemory(),
+                token)));
     }
 
     private static void AddNativeProject(

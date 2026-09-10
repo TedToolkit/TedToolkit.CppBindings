@@ -56,6 +56,14 @@ compiler-derived facts and finite syntax/runtime policy; they do not submit decl
 delegates or reconstruct a second model for either language. Supplemental provider renderers are
 limited to genuinely library-specific support files such as native error storage and build metadata.
 
+Finite handwritten native profiles use `BindingFiniteProfileApi` when their ABI is not a direct set
+of C++ member declarations. Its explicit buffer definitions drive span validation and pointer/length
+transport; owned-factory definitions make the native success condition responsible for constructing
+`Owned<T>`; composite definitions assemble one managed result from native output parameters; and its
+explicit export order drives both managed slots and `NativeFunctionTable.cpp`. Providers retain only
+their native algorithm bodies and dependency-specific build policy. Shared contains no provider-name
+branch or provider assembly dependency.
+
 Type rules are evaluated in registration order and the first match wins. Layout and template
 policies must return `BindingAdmission.Admitted` or a rejected result with a stable reason. Emitter
 primitive names are unique and case-sensitive. Keep these policies in the provider package; Shared

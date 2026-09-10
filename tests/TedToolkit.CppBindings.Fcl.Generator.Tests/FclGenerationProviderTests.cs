@@ -5,11 +5,11 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System.Security.Cryptography;
-using System.Text;
 using System.Text.Json;
 
 using TedToolkit.CppBindings.Fcl.Generator;
+using TedToolkit.CppBindings.Generator;
+using TedToolkit.CppBindings.Generator.Semantics;
 
 namespace TedToolkit.CppBindings.Fcl.Generator.Tests;
 
@@ -22,26 +22,44 @@ internal sealed class FclGenerationProviderTests
     public async Task Should_create_byte_identical_complete_plans_Async()
     {
         var vcpkgRoot = GetVcpkgRoot();
-        var first = new FclGenerationProvider().CreatePlan(vcpkgRoot);
-        var second = new FclGenerationProvider().CreatePlan(vcpkgRoot);
+        var firstProvider = new FclGenerationProvider(vcpkgRoot);
+        var secondProvider = new FclGenerationProvider(vcpkgRoot);
+        var first = await firstProvider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+        var second = await secondProvider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+        var firstManaged = await RenderAsync(first.CSharpSources).ConfigureAwait(false);
+        var secondManaged = await RenderAsync(second.CSharpSources).ConfigureAwait(false);
+        var firstNative = await RenderAsync(first.CppSources).ConfigureAwait(false);
+        var secondNative = await RenderAsync(second.CppSources).ConfigureAwait(false);
 
-        await Assert.That(first.ProfileId).IsEqualTo("fcl-0.7.0-obbrss-double-windows-v2");
-        await Assert.That(first.NativeFunctions.Count).IsEqualTo(7);
-        await Assert.That(first.NativeFunctions).IsEquivalentTo(second.NativeFunctions);
-        await Assert.That(first.ManagedSources.Keys).IsEquivalentTo(second.ManagedSources.Keys);
-        await Assert.That(first.NativeSources.Keys).IsEquivalentTo(second.NativeSources.Keys);
-        foreach (var source in first.ManagedSources)
+        await Assert.That(firstProvider.Profile.ProfileId).IsEqualTo("fcl-0.7.0-obbrss-double-windows-v2");
+        await Assert.That(firstProvider).IsAssignableTo<SemanticGenerationProvider>();
+        await Assert.That(first.NativeExports.Count).IsEqualTo(7);
+        string[] expectedExports =
+        [
+            "Fcl_NativeError_Clear",
+            "Fcl_Model_Destroy",
+            "Fcl_Model_Create",
+            "Fcl_ContinuousCollision_Query",
+            "Fcl_Lifetime_Reset",
+            "Fcl_Lifetime_CreateCount",
+            "Fcl_Lifetime_DestroyCount",
+        ];
+        await Assert.That(first.NativeExports.SequenceEqual(expectedExports, StringComparer.Ordinal)).IsTrue();
+        await Assert.That(first.NativeExports.SequenceEqual(second.NativeExports, StringComparer.Ordinal)).IsTrue();
+        await Assert.That(firstManaged.Keys).IsEquivalentTo(secondManaged.Keys);
+        await Assert.That(firstNative.Keys).IsEquivalentTo(secondNative.Keys);
+        foreach (var source in firstManaged)
         {
-            await Assert.That(source.Value).IsEqualTo(second.ManagedSources[source.Key]);
+            await Assert.That(source.Value).IsEqualTo(secondManaged[source.Key]);
         }
 
-        foreach (var source in first.NativeSources)
+        foreach (var source in firstNative)
         {
-            await Assert.That(source.Value).IsEqualTo(second.NativeSources[source.Key]);
+            await Assert.That(source.Value).IsEqualTo(secondNative[source.Key]);
         }
 
-        var managed = first.ManagedSources["Fcl.Bindings.g.cs"];
-        var native = first.NativeSources["FclProfileAdapter.cpp"];
+        var managed = firstManaged["Fcl.Bindings.g.cs"];
+        var native = firstNative["FclProfileAdapter.cpp"];
         await Assert.That(managed).Contains("ReadOnlySpan<nuint> triangleIndices");
         await Assert.That(managed).Contains("public readonly struct FclVector3");
         await Assert.That(managed).Contains("GC.SuppressFinalize(owner);");
@@ -53,6 +71,13 @@ internal sealed class FclGenerationProviderTests
         await Assert.That(native).Contains("SetError(error, 3, \"std::underflow_error\"");
         await Assert.That(native).Contains("SetError(error, 8, \"std::exception\"");
         await Assert.That(native).DoesNotContain("SetError(error, 9, \"std::exception\"");
+        await Assert.That(managed).DoesNotContain("class NativeApi");
+        await Assert.That(native).DoesNotContain("NativeApi_GetFunctionTable");
+        await Assert.That(typeof(FclGenerationProvider).GetMethod("GenerateAsync")).IsNull();
+        await Assert.That(typeof(FclGenerationProvider).Assembly.GetType(
+            "TedToolkit.CppBindings.Fcl.Generator.FclGenerationPlan")).IsNull();
+        await Assert.That(typeof(FclGenerationProvider).Assembly.GetType(
+            "TedToolkit.CppBindings.Fcl.Generator.FclSourceRenderer")).IsNull();
     }
 
     /// <summary>Verifies vcpkg is the complete public-header inventory authority.</summary>
@@ -61,8 +86,10 @@ internal sealed class FclGenerationProviderTests
     public async Task Should_resolve_complete_header_inventory_from_vcpkg_Async()
     {
         var vcpkgRoot = GetVcpkgRoot();
-        var plan = new FclGenerationProvider().CreatePlan(vcpkgRoot);
-        using var document = JsonDocument.Parse(plan.ManagedSources["source-inventory.json"]);
+        var plan = await new FclGenerationProvider(vcpkgRoot).CreatePlanAsync(CancellationToken.None)
+            .ConfigureAwait(false);
+        var managed = await RenderAsync(plan.CSharpSources).ConfigureAwait(false);
+        using var document = JsonDocument.Parse(managed["source-inventory.json"]);
         var actual = document.RootElement.EnumerateArray()
             .Select(static item => (
                 Header: item.GetProperty("header").GetString()!,
@@ -92,8 +119,10 @@ internal sealed class FclGenerationProviderTests
         var root = CreateClassificationVcpkg();
         try
         {
-            var plan = new FclGenerationProvider().CreatePlan(root);
-            using var document = JsonDocument.Parse(plan.ManagedSources["source-inventory.json"]);
+            var plan = await new FclGenerationProvider(root).CreatePlanAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var managed = await RenderAsync(plan.CSharpSources).ConfigureAwait(false);
+            using var document = JsonDocument.Parse(managed["source-inventory.json"]);
             var actual = document.RootElement.EnumerateArray()
                 .Select(static item => (
                     Header: item.GetProperty("header").GetString()!,
@@ -147,10 +176,8 @@ internal sealed class FclGenerationProviderTests
             {
                 try
                 {
-                    await new FclGenerationProvider().GenerateAsync(
-                        output,
-                        root,
-                        CancellationToken.None).ConfigureAwait(false);
+                    _ = await new FclGenerationProvider(root).CreatePlanAsync(CancellationToken.None)
+                        .ConfigureAwait(false);
                 }
                 catch (InvalidOperationException exception)
                 {
@@ -183,53 +210,31 @@ internal sealed class FclGenerationProviderTests
         {
             var vcpkgRoot = GetVcpkgRoot();
             Environment.SetEnvironmentVariable("VCPKG_ROOT", vcpkgRoot.FullName);
-            var ambient = new FclGenerationProvider().CreatePlan();
-            var explicitPlan = new FclGenerationProvider().CreatePlan(vcpkgRoot);
+            var ambient = await new FclGenerationProvider().CreatePlanAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var explicitPlan = await new FclGenerationProvider(vcpkgRoot).CreatePlanAsync(CancellationToken.None)
+                .ConfigureAwait(false);
+            var ambientManaged = await RenderAsync(ambient.CSharpSources).ConfigureAwait(false);
+            var explicitManaged = await RenderAsync(explicitPlan.CSharpSources).ConfigureAwait(false);
+            var ambientNative = await RenderAsync(ambient.CppSources).ConfigureAwait(false);
+            var explicitNative = await RenderAsync(explicitPlan.CppSources).ConfigureAwait(false);
 
-            await Assert.That(ambient.ManagedSources.Keys).IsEquivalentTo(explicitPlan.ManagedSources.Keys);
-            await Assert.That(ambient.ManagedSources["source-inventory.json"])
-                .IsEqualTo(explicitPlan.ManagedSources["source-inventory.json"]);
-            await AssertPreservedArtifactHashesAsync(explicitPlan).ConfigureAwait(false);
-            foreach (var source in ambient.ManagedSources.Where(static item => item.Key != "source-inventory.json"))
+            await Assert.That(ambientManaged.Keys).IsEquivalentTo(explicitManaged.Keys);
+            await Assert.That(ambientManaged["source-inventory.json"])
+                .IsEqualTo(explicitManaged["source-inventory.json"]);
+            foreach (var source in ambientManaged.Where(static item => item.Key != "source-inventory.json"))
             {
-                await Assert.That(source.Value).IsEqualTo(explicitPlan.ManagedSources[source.Key]);
+                await Assert.That(source.Value).IsEqualTo(explicitManaged[source.Key]);
             }
 
-            foreach (var source in ambient.NativeSources)
+            foreach (var source in ambientNative)
             {
-                await Assert.That(source.Value).IsEqualTo(explicitPlan.NativeSources[source.Key]);
-            }
-
-            var outputRoot = new DirectoryInfo(Path.Combine(
-                Path.GetTempPath(),
-                $"tedtoolkit-fcl-compatibility-{Guid.NewGuid():N}"));
-            try
-            {
-                var ambientOutput = new DirectoryInfo(Path.Combine(outputRoot.FullName, "ambient"));
-                var explicitOutput = new DirectoryInfo(Path.Combine(outputRoot.FullName, "explicit"));
-                await new FclGenerationProvider().GenerateAsync(ambientOutput, CancellationToken.None)
-                    .ConfigureAwait(false);
-                await new FclGenerationProvider().GenerateAsync(explicitOutput, vcpkgRoot, CancellationToken.None)
-                    .ConfigureAwait(false);
-                await AssertDirectoriesEqualAsync(ambientOutput, explicitOutput).ConfigureAwait(false);
-            }
-            finally
-            {
-                if (Directory.Exists(outputRoot.FullName))
-                {
-                    outputRoot.Delete(true);
-                }
+                await Assert.That(source.Value).IsEqualTo(explicitNative[source.Key]);
             }
 
             Environment.SetEnvironmentVariable("VCPKG_ROOT", null);
-            await Assert.That(() => new FclGenerationProvider().CreatePlan())
+            await Assert.That(() => new FclGenerationProvider())
                 .Throws<InvalidOperationException>();
-            var missingOutput = new DirectoryInfo(Path.Combine(
-                Path.GetTempPath(),
-                $"tedtoolkit-fcl-missing-root-{Guid.NewGuid():N}"));
-            await Assert.That(() => new FclGenerationProvider().GenerateAsync(missingOutput, CancellationToken.None))
-                .Throws<InvalidOperationException>();
-            await Assert.That(missingOutput.Exists).IsFalse();
         }
         finally
         {
@@ -285,62 +290,21 @@ internal sealed class FclGenerationProviderTests
             .ToArray();
     }
 
-    private static async Task AssertPreservedArtifactHashesAsync(FclGenerationPlan plan)
+    private static async Task<IReadOnlyDictionary<string, string>> RenderAsync(
+        IReadOnlyList<GeneratedSource> sources)
     {
-        var expected = new Dictionary<string, string>(StringComparer.Ordinal)
+        var rendered = new Dictionary<string, string>(StringComparer.Ordinal);
+        foreach (var source in sources)
         {
-            ["csharp/admitted-inventory.json"] = "012371a71f17fea2e4cf29eda24c1a2e0b1aab5bda6ca3533fd7d25e8b65f19b",
-            ["csharp/candidate-inventory.json"] = "92f9c5332583877641c79938ab91c7634d8a8ba26e2c5082a8b80e51deaf45a3",
-            ["csharp/Fcl.Bindings.g.cs"] = "aea95a13ff9150c8a42528c995e255f51d01de8dbf5852e8867b3f43322e89ec",
-            ["csharp/layout-inventory.json"] = "6e7e7f700b22c01434a27e526242fa4831fdf88b3d53539b31e0c2ae237ad704",
-            ["csharp/managed-inventory.json"] = "012371a71f17fea2e4cf29eda24c1a2e0b1aab5bda6ca3533fd7d25e8b65f19b",
-            ["csharp/ownership-inventory.json"] = "4bfa174f8f83ad5ff9cf18e396e29ca00b73ad147d666f3ee004e6827d4f6b5b",
-            ["csharp/profile-manifest.json"] = "b7149563521117cf5c99fd4a5b9c19fd9d05ffe8a8512af685c5320fe789ffa3",
-            ["csharp/source-declaration-inventory.json"] = "dd132b5847af036b14054570975f719241e3f6c5a675735b8d551f0cde9cca70",
-            ["csharp/toolchain-inventory.json"] = "3180ef9efc10f6c3aa7083113dd476fc8c2c64427cd66413edfb24f31b7b44ee",
-            ["csharp/unsupported-inventory.json"] = "f73435a64d0d9e72d8cabfb834b18bf0d6e90c6df31216c8a4099b34c958b086",
-            ["cpp/CMakeLists.txt"] = "0ab605a5cf67153e603981361ca1b985f3681c2d8064b000c2551902a1124bf3",
-            ["cpp/FclProfileAdapter.cpp"] = "233184cdebcce6c795f9a10276ac508f00bcd4ea1ceb77df60f28dbf6fdd3a23",
-            ["cpp/native-inventory.json"] = "57bbc0fc677e7a049337c6d6382862f8a76f690a059765c61adf6072a108bc09",
-        };
-        var actual = plan.ManagedSources
-            .Where(static item => item.Key != "source-inventory.json")
-            .ToDictionary(static item => "csharp/" + item.Key, static item => Hash(item.Value), StringComparer.Ordinal);
-        foreach (var source in plan.NativeSources)
-        {
-            actual.Add("cpp/" + source.Key, Hash(source.Value));
+            var writer = new StringWriter();
+            await using (writer.ConfigureAwait(false))
+            {
+                await source.RenderAsync(writer, CancellationToken.None).ConfigureAwait(false);
+                rendered.Add(source.RelativePath, writer.ToString());
+            }
         }
 
-        await Assert.That(actual.Count).IsEqualTo(expected.Count);
-        foreach (var artifact in expected)
-        {
-            await Assert.That(actual[artifact.Key]).IsEqualTo(artifact.Value.ToUpperInvariant());
-        }
-    }
-
-    private static async Task AssertDirectoriesEqualAsync(DirectoryInfo first, DirectoryInfo second)
-    {
-        var firstFiles = first.EnumerateFiles("*", SearchOption.AllDirectories)
-            .ToDictionary(
-                file => Path.GetRelativePath(first.FullName, file.FullName),
-                static file => File.ReadAllBytes(file.FullName),
-                StringComparer.Ordinal);
-        var secondFiles = second.EnumerateFiles("*", SearchOption.AllDirectories)
-            .ToDictionary(
-                file => Path.GetRelativePath(second.FullName, file.FullName),
-                static file => File.ReadAllBytes(file.FullName),
-                StringComparer.Ordinal);
-
-        await Assert.That(firstFiles.Keys).IsEquivalentTo(secondFiles.Keys);
-        foreach (var file in firstFiles)
-        {
-            await Assert.That(file.Value.SequenceEqual(secondFiles[file.Key])).IsTrue();
-        }
-    }
-
-    private static string Hash(string value)
-    {
-        return Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(value)));
+        return rendered;
     }
 
     private static DirectoryInfo CreateClassificationVcpkg()

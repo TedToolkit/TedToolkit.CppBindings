@@ -24,6 +24,7 @@ public sealed class BindingProviderModel
     /// <param name="managedSourceStemEmitter">The registered emitter used for managed source stems.</param>
     /// <param name="nativeSourceStemEmitter">The registered emitter used for native source stems.</param>
     /// <param name="nativeProject">The native build-file renderer, when required.</param>
+    /// <param name="finiteProfileApis">Finite profile APIs emitted from explicit shared transport semantics.</param>
     public BindingProviderModel(
         IEnumerable<BindingDeclaration> declarations,
         IEnumerable<EnumModel> enums,
@@ -33,7 +34,8 @@ public sealed class BindingProviderModel
         IEnumerable<string> nativeExports,
         string managedSourceStemEmitter,
         string nativeSourceStemEmitter,
-        BindingNativeProject? nativeProject)
+        BindingNativeProject? nativeProject,
+        IEnumerable<BindingFiniteProfileApi>? finiteProfileApis = null)
     {
         ArgumentNullException.ThrowIfNull(declarations);
         ArgumentNullException.ThrowIfNull(enums);
@@ -52,6 +54,9 @@ public sealed class BindingProviderModel
         ManagedSourceStemEmitter = managedSourceStemEmitter;
         NativeSourceStemEmitter = nativeSourceStemEmitter;
         NativeProject = nativeProject;
+        FiniteProfileApis = Array.AsReadOnly((finiteProfileApis ?? [])
+            .Select(SnapshotFiniteProfileApi)
+            .ToArray());
     }
 
     /// <summary>
@@ -98,4 +103,33 @@ public sealed class BindingProviderModel
     /// Gets the native build-file renderer, when required.
     /// </summary>
     public BindingNativeProject? NativeProject { get; }
+
+    /// <summary>
+    /// Gets finite profile APIs emitted from explicit shared buffer, ownership, and result semantics.
+    /// </summary>
+    public IReadOnlyList<BindingFiniteProfileApi> FiniteProfileApis { get; }
+
+    private static BindingFiniteProfileApi SnapshotFiniteProfileApi(BindingFiniteProfileApi source)
+    {
+        ArgumentNullException.ThrowIfNull(source);
+        return new(
+            source.ManagedRelativePath,
+            source.NativeRelativePath,
+            source.Status with { Members = Array.AsReadOnly(source.Status.Members.ToArray()), },
+            source.ValueType with { Fields = Array.AsReadOnly(source.ValueType.Fields.ToArray()), },
+            source.Owner,
+            source.OwnedResult,
+            source.CompositeResult with
+            {
+                Fields = Array.AsReadOnly(source.CompositeResult.Fields.ToArray()),
+            },
+            source.Factory with { Buffers = Array.AsReadOnly(source.Factory.Buffers.ToArray()), },
+            source.CompositeOperation,
+            source.NativePreamble,
+            source.FactoryBody,
+            source.CompositeOperationBody,
+            source.NativeUnknownExceptionMessage,
+            Array.AsReadOnly(source.NativeExportOrder.ToArray()),
+            Array.AsReadOnly(source.AdditionalNativeExports.ToArray()));
+    }
 }

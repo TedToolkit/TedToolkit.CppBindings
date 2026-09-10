@@ -58,8 +58,7 @@ internal static class ProviderGenerators
                     .ConfigureAwait(false);
                 break;
             case "fcl":
-                await new FclGenerationProvider().GenerateAsync(outputRoot, vcpkgRoot, cancellationToken)
-                    .ConfigureAwait(false);
+                await GenerateFclAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
                 break;
             default:
                 throw new ArgumentException($"Unknown Windows provider '{provider}'.", nameof(provider));
@@ -139,6 +138,49 @@ internal static class ProviderGenerators
         await File.WriteAllTextAsync(
                 Path.Combine(outputRoot.FullName, "generation-result.json"),
                 JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }),
+                cancellationToken)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task GenerateFclAsync(
+        DirectoryInfo outputRoot,
+        DirectoryInfo vcpkgRoot,
+        CancellationToken cancellationToken)
+    {
+        var options = new GenerationOptions
+        {
+            CSharpFolder = outputRoot.CreateSubdirectory("csharp"),
+            CppFolder = outputRoot.CreateSubdirectory("cpp"),
+            CSharpNamespace = "TedToolkit.CppBindings.Fcl",
+            NativeLibraryBaseName = "ted_toolkit_cpp_bindings_fcl",
+            CppVersion = 20,
+        };
+        var provider = new FclGenerationProvider(vcpkgRoot);
+        var plan = await provider.CreatePlanAsync(cancellationToken).ConfigureAwait(false);
+        var builder = Pipeline.CreateBuilder();
+        builder.Options.PrintLogo = false;
+        builder.Options.PrintResults = false;
+        builder.Options.ShowProgressInConsole = false;
+        builder.Options.DefaultRetryCount = 0;
+        builder.Options.ThrowOnPipelineFailure = true;
+        var pipeline = await builder.AddCppGenerators(options, provider).BuildAsync().ConfigureAwait(false);
+        var summary = await pipeline.RunAsync().ConfigureAwait(false);
+        if (summary.Status is not Status.Successful)
+        {
+            throw new InvalidOperationException("The FCL generator did not complete successfully.");
+        }
+
+        var result = new
+        {
+            provider.Profile.ProfileId,
+            ManagedArtifactCount = plan.CSharpSources.Count + 1,
+            NativeArtifactCount = plan.CppSources.Count + 1,
+            NativeFunctionCount = plan.NativeExports.Count,
+            Toolchain = provider.Profile.Versions,
+        };
+        await File.WriteAllTextAsync(
+                Path.Combine(outputRoot.FullName, "generation-result.json"),
+                JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }) + "\n",
                 cancellationToken)
             .ConfigureAwait(false);
     }
