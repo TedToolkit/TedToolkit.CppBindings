@@ -14,7 +14,7 @@ using TedToolkit.ModularPipelines.Constants;
 using TedToolkit.ModularPipelines.Modules;
 
 /// <summary>
-/// Builds and executes the native Handle integration fixtures.
+/// Builds and executes native integration fixtures and the isolated four-provider package gate.
 /// </summary>
 [DependsOn<DotnetBuildModule>]
 public sealed class NativeIntegrationModule(PipelineFiles files) : CompileCheckModule<bool>
@@ -22,7 +22,7 @@ public sealed class NativeIntegrationModule(PipelineFiles files) : CompileCheckM
     /// <inheritdoc />
     protected override ModuleConfiguration Configure()
     {
-        return ModuleConfiguration.Create().WithRetryCount(0).Build();
+        return ModuleConfiguration.Create().WithTimeout(TimeSpan.FromHours(6)).WithRetryCount(0).Build();
     }
 
     /// <inheritdoc />
@@ -67,6 +67,30 @@ public sealed class NativeIntegrationModule(PipelineFiles files) : CompileCheckM
                 repositoryRoot.FullName,
                 cancellationToken)
             .ConfigureAwait(false);
+
+        if (OperatingSystem.IsWindows())
+        {
+            var reportName = $"bg-{Guid.NewGuid():N}"[..11];
+            var reportDirectory = Path.Combine(
+                repositoryRoot.FullName,
+                "out",
+                "verification",
+                reportName);
+            await BuildProcess.RunAsync(
+                    "pwsh",
+                    [
+                        "-NoProfile",
+                        "-File",
+                        Path.Combine(repositoryRoot.FullName, "Build", "VerifyNativePackageIsolation.ps1"),
+                        "-ReportDirectory",
+                        reportDirectory,
+                        "-Providers",
+                        "Occt,Cgal,Manifold,Fcl",
+                    ],
+                    repositoryRoot.FullName,
+                    cancellationToken)
+                .ConfigureAwait(false);
+        }
 
         return true;
     }

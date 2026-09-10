@@ -89,6 +89,52 @@ internal sealed class ThrowIfFailedTests
     }
 
     /// <summary>
+    /// Verifies that a Provider extension cannot replace Shared success, common failures, or unknown failures.
+    /// </summary>
+    /// <returns>A task that completes when every reserved-kind assertion finishes.</returns>
+    [Test]
+    public async Task Should_not_allow_a_provider_extension_to_override_shared_kinds_Async()
+    {
+        var extensionCalls = 0;
+        NativeErrorExtension extension = (_, _, _, _) =>
+        {
+            Interlocked.Increment(ref extensionCalls);
+            return new FirstProviderException();
+        };
+        var cases = new (int Kind, Type ExceptionType)[]
+        {
+            (1, typeof(NativeArgumentException)),
+            (2, typeof(NativeArgumentOutOfRangeException)),
+            (3, typeof(NativeArithmeticException)),
+            (4, typeof(NativeInvalidOperationException)),
+            (5, typeof(NativeNullObjectException)),
+            (6, typeof(NativeOutOfMemoryException)),
+            (7, typeof(NativeOverflowException)),
+            (8, typeof(NativeStandardException)),
+            (255, typeof(NativeUnknownException)),
+        };
+
+        foreach (var testCase in cases)
+        {
+            var exception = ProjectWithExtension(CreateError(testCase.Kind), extension);
+
+            await Assert.That(exception.GetType()).IsEqualTo(testCase.ExceptionType);
+        }
+
+        var success = CreateError(0);
+        unsafe
+        {
+            global::TedToolkit.CppBindings.NativeErrorProjection.ThrowIfFailed(
+                ref success,
+                &ClearNative,
+                "Fixture",
+                extension);
+        }
+
+        await Assert.That(extensionCalls).IsEqualTo(0);
+    }
+
+    /// <summary>
     /// Verifies that a defective Provider extension cannot replace the transported native failure.
     /// </summary>
     /// <returns>A task that completes when the fallback assertions finish.</returns>

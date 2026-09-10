@@ -498,6 +498,8 @@ __declspec(dllexport) int selected_value(void) { return 2; }
 }
 
 $repository = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
+$candidateRevision = (& git -C $repository rev-parse HEAD).Trim()
+$startingStatus = @(& git -C $repository status --porcelain --untracked-files=all)
 $verificationRoot = [IO.Path]::GetFullPath((Join-Path $repository 'out/verification'))
 if (-not $ReportDirectory) {
     $ReportDirectory = Join-Path $verificationRoot `
@@ -582,6 +584,19 @@ try {
         $fclRoot = Join-Path $report 'f'
         & (Join-Path $PSScriptRoot 'VerifyFclWindowsPackage.ps1') -ReportDirectory $fclRoot
         if ($LASTEXITCODE -ne 0) { throw 'FCL Windows package verification failed.' }
+    }
+
+    $providerVerification = [ordered]@{
+        Occt = Get-Content -LiteralPath (Join-Path $occtRoot 'v/result.json') -Raw | ConvertFrom-Json
+        Cgal = Get-Content -LiteralPath (Join-Path $cgalRoot 'result.json') -Raw | ConvertFrom-Json
+    }
+    if ($manifoldRoot) {
+        $providerVerification.Manifold = Get-Content -LiteralPath `
+            (Join-Path $manifoldRoot 'verification-summary.json') -Raw | ConvertFrom-Json
+    }
+    if ($fclRoot) {
+        $providerVerification.Fcl = Get-Content -LiteralPath `
+            (Join-Path $fclRoot 'verification-summary.json') -Raw | ConvertFrom-Json
     }
 
     $packages = Join-Path $report 'packages'
@@ -684,10 +699,19 @@ try {
         throw 'The combined provider consumer did not observe every selected native call.'
     }
 
+    $endingRevision = (& git -C $repository rev-parse HEAD).Trim()
+    $endingStatus = @(& git -C $repository status --porcelain --untracked-files=all)
+    if ($candidateRevision -cne $endingRevision `
+        -or ($startingStatus -join "`n") -cne ($endingStatus -join "`n")) {
+        throw 'The candidate revision or worktree changed during native package isolation verification.'
+    }
+
     [ordered]@{
         Passed = $true
+        CandidateRevision = $candidateRevision
         ProviderBuildOrder = @($Providers)
         CompilerWorkers = 1
+        ProviderVerification = $providerVerification
         Packages = @(Get-ChildItem -LiteralPath $packages -Filter '*.nupkg' -File | ForEach-Object {
             [ordered]@{ Name = $_.Name; Hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }
         })

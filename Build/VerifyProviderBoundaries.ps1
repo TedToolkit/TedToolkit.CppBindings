@@ -172,37 +172,6 @@ function Assert-ForbiddenProviderGeneratorFixture {
     throw "Negative Provider Generator fixture was accepted: $Name"
 }
 
-function Assert-ProviderExtensionKindAllowed {
-    param(
-        [Parameter(Mandatory)][string] $Provider,
-        [Parameter(Mandatory)][int] $Kind
-    )
-
-    if ($Kind -lt 9 -or $Kind -gt 254) {
-        throw "Provider '$Provider' overrides reserved Shared native-error kind $Kind."
-    }
-}
-
-function Assert-ForbiddenProviderExtensionFixture {
-    param(
-        [Parameter(Mandatory)][string] $Provider,
-        [Parameter(Mandatory)][int] $Kind
-    )
-
-    try {
-        Assert-ProviderExtensionKindAllowed -Provider $Provider -Kind $Kind
-    }
-    catch {
-        if ($_.Exception.Message.StartsWith("Provider '$Provider' overrides reserved Shared native-error kind", [StringComparison]::Ordinal)) {
-            return
-        }
-
-        throw
-    }
-
-    throw "Negative Provider extension fixture was accepted: $Provider kind $Kind"
-}
-
 foreach ($relativePath in $expectedProjects) {
     $path = Join-Path $repository $relativePath
     if (-not (Test-Path -LiteralPath $path -PathType Leaf)) {
@@ -495,16 +464,6 @@ foreach ($project in $providerProjects) {
     }
 }
 
-$providerProjectionFiles = @(Get-ChildItem -LiteralPath $providersRoot -Recurse `
-    -Filter 'NativeErrorProjection.cs' -File)
-foreach ($projection in $providerProjectionFiles) {
-    $owner = Get-ProjectOwner -Path $projection.FullName
-    $contents = Get-Content -LiteralPath $projection.FullName -Raw
-    foreach ($match in [regex]::Matches($contents, '(?m)^\s*(\d+)\s*=>')) {
-        Assert-ProviderExtensionKindAllowed -Provider $owner.Provider -Kind ([int] $match.Groups[1].Value)
-    }
-}
-
 $toolProjects = @(Get-ChildItem -LiteralPath $toolsRoot -Recurse -Filter '*.csproj' -File)
 $sourceProjects = @($sharedProjectFiles) + @($providerProjects) + @($toolProjects)
 $referenceCount = 0
@@ -542,10 +501,6 @@ Assert-ForbiddenSourceFixture -Name 'ConcretePolicy' -Contents 'internal sealed 
 Assert-ForbiddenSourceFixture -Name 'ProviderBranch' -Contents 'if (providerName == "Occt") { return; }'
 Assert-ForbiddenProviderGeneratorFixture -Name 'BootstrapCopy' `
     -Contents 'private const string Output = "NativeFunctionTable.cpp";'
-Assert-ProviderExtensionKindAllowed -Provider 'first' -Kind 9
-Assert-ProviderExtensionKindAllowed -Provider 'second' -Kind 9
-Assert-ForbiddenProviderExtensionFixture -Provider 'fixture' -Kind 8
-Assert-ForbiddenProviderExtensionFixture -Provider 'fixture' -Kind 255
 
 $solution = Get-Content -LiteralPath (Join-Path $repository 'TedToolkit.CppBindings.slnx') -Raw
 foreach ($relativePath in $expectedProjects) {
@@ -562,7 +517,7 @@ foreach ($relativePath in $expectedProjects) {
     VerifiedProjects = $expectedProjects.Count
     ProjectReferences = $referenceCount
     ProviderIdentifiers = $providerIdentifiers
-    NegativeCases = 8
+    NegativeCases = 6
     NativePackagingRules = $windowsPackagingRules.Count
     WindowsCiGenerationProviders = $windowsPackagingRules.Count
 } | ConvertTo-Json
