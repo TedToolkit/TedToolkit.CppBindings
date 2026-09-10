@@ -19,6 +19,7 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// <param name="Values">The ordered scalar and value parameters.</param>
 /// <param name="NativeExport">The native operation export.</param>
 /// <param name="NativeBody">The provider-owned native algorithm body.</param>
+/// <param name="ManagedTransportType">The managed function-pointer ABI result type, or the public type when omitted.</param>
 public sealed record BindingScalarOperationDefinition(
     string ContainingType,
     string MethodName,
@@ -28,4 +29,5 @@ public sealed record BindingScalarOperationDefinition(
     IReadOnlyList<BindingOwnerParameterDefinition> Owners,
     IReadOnlyList<BindingValueParameterDefinition> Values,
     string NativeExport,
-    string NativeBody) : BindingFiniteOperationDefinition(NativeExport, NativeBody);
+    string NativeBody,
+    string? ManagedTransportType = null) : BindingFiniteOperationDefinition(NativeExport, NativeBody);

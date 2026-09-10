@@ -502,18 +502,22 @@ internal sealed class BindingSemanticEngineTests
         var managed = await RenderAsync(plan.CSharpSources.Single()).ConfigureAwait(false);
         var native = await RenderAsync(plan.CppSources.Single()).ConfigureAwait(false);
 
-        await Assert.That(plan.NativeExports).IsEquivalentTo(api.NativeExportOrder);
+        await Assert.That(plan.NativeExports.SequenceEqual(api.NativeExportOrder)).IsTrue();
         await Assert.That(managed).Contains("public sealed class ManifoldMeshData");
         await Assert.That(managed).Contains("Owned<Manifold> Create(");
         await Assert.That(managed).Contains("Owned<Manifold> Boolean(");
         await Assert.That(managed).Contains("Owned<Manifold> Translate(");
         await Assert.That(managed).Contains("ManifoldError Status(");
         await Assert.That(managed).Contains("nuint NumTri(");
+        await Assert.That(managed).Contains(
+            "delegate* unmanaged[Cdecl]<Manifold*, global::TedToolkit.CppBindings.NativeError*, nuint>");
         await Assert.That(managed).Contains("ManifoldMeshData GetMesh(");
         await Assert.That(managed).Contains("vertexCoordinateCount > int.MaxValue");
         await Assert.That(native).Contains("extern \"C\" void Manifold_Create(");
         await Assert.That(native).Contains("extern \"C\" void Manifold_GetMeshCounts(");
         await Assert.That(native).Contains("extern \"C\" void Manifold_CopyMesh(");
+        await Assert.That(native).Contains("extern \"C\" std::size_t Manifold_NumTri(");
+        await Assert.That(native).DoesNotContain("extern \"C\" nuint");
     }
 
     /// <summary>
@@ -541,7 +545,7 @@ internal sealed class BindingSemanticEngineTests
         operations.Clear();
         var plan = engine.CreatePlan(providerModel);
 
-        await Assert.That(plan.NativeExports).IsEquivalentTo(api.NativeExportOrder);
+        await Assert.That(plan.NativeExports.SequenceEqual(api.NativeExportOrder)).IsTrue();
 
         var factory = (BindingBufferOwnerOperationDefinition)api.Operations[0];
         var invalidApi = api with
@@ -579,6 +583,30 @@ internal sealed class BindingSemanticEngineTests
 
         await Assert.That(failure).IsNotNull();
         await Assert.That(failure!.ParamName).IsEqualTo("ElementsPerItem");
+
+        var invalidDirectOwnerApi = api with
+        {
+            Operations =
+            [
+                factory with { NativeReturnType = "int", },
+                .. api.Operations.Skip(1),
+            ],
+        };
+        var invalidDirectOwnerProvider = new BindingProviderModel(
+            [],
+            [],
+            CreateEmissionProfile(),
+            [],
+            [],
+            [],
+            "source-stem",
+            "source-stem",
+            nativeProject: null,
+            [invalidDirectOwnerApi,]);
+
+        var invalidDirectOwnerAction = () => engine.CreateModel(invalidDirectOwnerProvider);
+
+        await Assert.That(invalidDirectOwnerAction).Throws<ArgumentException>();
     }
 
     private static BindingFiniteProfileApi CreateManifoldShapedFiniteApi()
@@ -626,7 +654,8 @@ internal sealed class BindingSemanticEngineTests
                     [self,],
                     [],
                     "Manifold_Status",
-                    "return static_cast<int>(self->Value->Status());"),
+                    "return static_cast<int>(self->Value->Status());",
+                    ManagedTransportType: "int"),
                 new BindingOwnedOperationDefinition(
                     "ManifoldExtensions",
                     "Boolean",
@@ -655,7 +684,7 @@ internal sealed class BindingSemanticEngineTests
                     "ManifoldExtensions",
                     "NumTri",
                     "nuint",
-                    "nuint",
+                    "std::size_t",
                     "0",
                     [self,],
                     [],

@@ -196,6 +196,11 @@ internal static class BindingFiniteProfileValidator
                     {
                         throw new ArgumentException("A direct owner operation cannot declare conditional status metadata.");
                     }
+
+                    if (value.NativeReturnType != "void")
+                    {
+                        throw new ArgumentException("A direct owner operation must use the void native return type.");
+                    }
                 }
                 else
                 {
@@ -233,6 +238,7 @@ internal static class BindingFiniteProfileValidator
                 ValidateMethod(api, value.ContainingType, value.MethodName, value.Owners, value.Values);
                 RequireText(value.ManagedReturnType, nameof(value.ManagedReturnType));
                 RequireText(value.NativeReturnType, nameof(value.NativeReturnType));
+                RequireText(value.ManagedTransportType ?? value.ManagedReturnType, nameof(value.ManagedTransportType));
                 RequireText(value.NativeFailureExpression, nameof(value.NativeFailureExpression));
                 break;
 

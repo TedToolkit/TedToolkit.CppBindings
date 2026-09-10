@@ -406,7 +406,7 @@ public static class BindingFiniteProfileEmitter
             .AppendJoin(", ", operation.Owners.Select(parameter => parameter.OwnerName + "*")
                 .Concat(operation.Values.Select(ValueFunctionPointerType))
                 .Append("global::TedToolkit.CppBindings.NativeError*")
-                .Append(operation.NativeReturnType))
+                .Append(operation.ManagedTransportType ?? operation.ManagedReturnType))
             .Append(">)NativeApi.GetFunction(").Append(slots[operation.NativeExport]).Append("))(")
             .AppendJoin(", ", operation.Owners.Select(OwnerPointerName).Concat(operation.Values.Select(ValueArgument)))
             .Append(", &error);\n");
@@ -414,7 +414,7 @@ public static class BindingFiniteProfileEmitter
         _ = builder.Append("            ");
         AppendManagedErrorCheck(builder, profile, slots, 12);
         _ = builder.Append("            return ");
-        if (operation.ManagedReturnType != operation.NativeReturnType)
+        if (operation.ManagedReturnType != (operation.ManagedTransportType ?? operation.ManagedReturnType))
         {
             _ = builder.Append('(').Append(operation.ManagedReturnType).Append(')');
         }
