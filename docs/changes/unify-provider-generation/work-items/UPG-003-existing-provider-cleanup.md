@@ -76,6 +76,25 @@ Record the exact candidate revision, changed artifacts, AC-03 proof purpose and 
 observed counts/results, Windows/vcpkg prerequisites, preserved concurrent CGAL work, and the verified
 OCCT/CGAL inputs supplied to UPG-004.
 
+## Verification result
+
+- Candidate: `0f6c2defc48e391d75a1073465832adb13e2f5fe`.
+- Changed artifacts: Shared `BindingNativeErrorTransportEmitter`, OCCT and CGAL provider
+  composition, Shared emitter tests, the provider-boundary gate, and platform architecture.
+- AC-03 structural/component proof: `pwsh -NoProfile -File
+  Build/VerifyProviderBoundaries.ps1` passed for 16 projects, 21 project references, seven
+  structural negative fixtures, four native packaging rules, and all four providers.
+- Authority result: OCCT's private native-error generator was removed; CGAL retains only its
+  exception header/stack preamble; Shared exclusively emits the generic carrier, copy, set, and
+  clear transport mechanisms used by OCCT, CGAL, FCL, and Manifold.
+- Regression proof: the full repository pipeline built all four Windows/native providers with zero
+  warnings and errors. Generator tests passed 47/47 for Shared, 143/143 for OCCT, and 11/11 for
+  CGAL. The Shared Generator package public-surface proof passed 25/25.
+- Package inputs supplied to UPG-004: exact-candidate OCCT and CGAL package consumers passed in
+  `out/verification/bg-500f78ee/result.json`; the concurrent CGAL inventory remained intact.
+- Required resources: Windows x64, the configured `VCPKG_ROOT`, CMake, Visual Studio MSVC/LLVM and
+  Ninja toolchains, and the locked OCCT and CGAL dependencies.
+
 ## Risks and implementation notes
 
 Do not mistake CGAL's template/library adapter semantics or OCCT's compiler extraction for generic

@@ -78,21 +78,20 @@ coexistence result, documentation disposition, and remaining operational limitat
 
 ## Verification result
 
-- Candidate: `cbdc1d0346970bc4748de3ba1428d2d71843b576`, based on the verified UPG-003
-  integration revision `a32615ffb6ddbd1b63c51599719cb1ae32547406`.
+- Candidate: `0f6c2defc48e391d75a1073465832adb13e2f5fe`.
 - Changed artifacts: the provider-boundary gate, native integration/package-isolation gate, Shared
   Generator and Runtime boundary tests, platform architecture, and FCL/Manifold provider guidance.
 - AC-04 boundary/integration proof: `dotnet run --project Build/Build.csproj -c Release` completed in
-  40 minutes with eight modules passed and the configured formatting module skipped. All four
+  36 minutes 44 seconds with eight modules passed and the configured formatting module skipped. All four
   Windows projects built with zero warnings and errors; the native Handle fixture passed 1/1; and
-  the eleven managed test projects passed 310/310.
-- Package evidence: `out/verification/bg-5a22692d/result.json` is bound to the candidate and records
+  the eleven managed test projects passed 312/312.
+- Package evidence: `out/verification/bg-500f78ee/result.json` is bound to the candidate and records
   successful isolated OCCT, CGAL, Manifold, and FCL package verification, ten produced packages,
   exact native closures of 60, 5, 5, and 5 files respectively, and successful real package consumers.
 - Coexistence: the combined consumer loaded and called all four packages and observed the approved
   OCCT, CGAL, Manifold, and FCL results.
 - Structural proof: `pwsh -NoProfile -File Build/VerifyProviderBoundaries.ps1` passed for 16 projects,
-  21 project references, six structural negative fixtures, four packaging rules, and four providers.
+  21 project references, seven structural negative fixtures, four packaging rules, and four providers.
   Shared Generator tests reject every reserved Provider kind from 0 through 8 and 255, while Shared
   Runtime tests prove an extension is never invoked for those kinds and still allow independent reuse
   of local kind 9.
@@ -100,7 +99,8 @@ coexistence result, documentation disposition, and remaining operational limitat
   Ninja toolchains, and the locked OCCT, CGAL, Manifold, and FCL dependencies.
 - Documentation: the durable platform architecture and provider READMEs now identify Shared as the
   plan/emission and common diagnostic authority; no additional ADR is required.
-- Independent candidate review: Ready, with no blocking or important findings.
+- Independent candidate review: the implementation and verification lanes found the previous
+  native-error transport authority blocker resolved, with no remaining code, test, or design finding.
 - Operational limitation: full proof is Windows-only and resource intensive; the immutable local
   evidence directory is intentionally ignored by source control.
 
