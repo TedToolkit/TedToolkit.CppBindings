@@ -3,12 +3,12 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: in-progress -->
+<!-- change-status: implemented -->
 <!-- delivery-shape: multi-item -->
 
 - Priority: P2
 <!-- approval-source: maintainer approved the revised Shared native-error contract and explicitly continued in the Codex task on 2026-09-09 with "没错，就是这样。我同意，然后开始修改！" -->
-<!-- candidate-binding: none -->
+<!-- candidate-binding: commit:6b52eccbbc52da9c391fd42531045355bcadd803 -->
 
 <!-- section: goal-rationale -->
 ## Goal and rationale
