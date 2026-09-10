@@ -62,8 +62,9 @@ Both emitted languages therefore consume the same normalized model and exact exp
 Preparation failures, missing dependencies, rejected semantics, invalid paths, collisions, duplicate
 exports and cancellation fail the pipeline instead of yielding a successful empty set.
 
-The provider owns OCCT error projection, headers, CMake, and native dependencies as finite profile or
-supplemental metadata. Shared owns declaration emission, publication, loader, and function table.
+The provider owns OCCT error projection, headers, native dependency choices, compiler options, and
+unity grouping facts as finite profile or supplemental metadata. Shared owns declaration emission,
+deterministic CMake construction, publication, loader, and function table.
 Record/template-family and enum emission limits remain unchanged; this migration does not adopt a
 benchmark strategy.
 

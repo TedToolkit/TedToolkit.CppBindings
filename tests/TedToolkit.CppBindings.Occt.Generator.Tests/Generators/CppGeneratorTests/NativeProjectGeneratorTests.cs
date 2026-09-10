@@ -5,7 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.CppBindings.Occt.Generator.Generators;
+using TedToolkit.CppBindings.Generator.Semantics;
+using TedToolkit.CppBindings.Occt.Generator.Services;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Generators.CppGeneratorTests;
 
@@ -24,7 +25,15 @@ internal sealed class NativeProjectGeneratorTests
         var sources = Enumerable.Range(0, 33).Select(static index => $"Flat_{index:D2}.cpp").ToList();
         sources.Add("Units.cpp");
         sources.Add("Units_Dimensions.cpp");
-        var project = NativeProjectGenerator.Generate(sources, "fixture");
+        var definition = OcctGenerationProvider.CreateNativeProjectDefinition(new()
+        {
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
+            DeclOptions = [],
+            NativeLibraryBaseName = "fixture",
+            CppVersion = 17,
+        });
+        var project = BindingCMakeProjectEmitter.Render(definition, sources);
 
         await Assert.That(project).Contains("PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP1>");
         await Assert.That(project).Contains("UNITY_BUILD ON");

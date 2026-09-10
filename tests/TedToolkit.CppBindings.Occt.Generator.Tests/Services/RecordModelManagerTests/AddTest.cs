@@ -71,7 +71,7 @@ internal sealed class AddTest
         var sources = new List<string>();
         foreach (var record in records)
         {
-            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+            sources.Add(await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
                 .ConfigureAwait(false));
         }
 
@@ -177,7 +177,7 @@ internal sealed class AddTest
             CSharpFolder = new(Path.GetTempPath()),
             CppFolder = new(Path.GetTempPath()),
         });
-        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var source = await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
         var write = constantPointer ? "" : "int target = 79; value.Pointer = &target; if (*value.Pointer != 79) return false;";
         var probe = $$"""
             namespace LayoutProbe
@@ -243,7 +243,7 @@ internal sealed class AddTest
         var sources = new List<string>();
         foreach (var record in records)
         {
-            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+            sources.Add(await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
                 .ConfigureAwait(false));
         }
 
@@ -319,7 +319,7 @@ internal sealed class AddTest
         var sources = new List<string>();
         foreach (var record in records)
         {
-            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+            sources.Add(await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
                 .ConfigureAwait(false));
         }
 
@@ -472,7 +472,7 @@ internal sealed class AddTest
         await Assert.That(string.Join("\n", manager.UnsupportedDeclarations)).IsEqualTo(diagnostics);
 
         api.ObjectKind = NativeObjectKind.Value;
-        var native = await new CppGenerator(api).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var native = await OcctEmitterFactory.Native(api).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
         await Assert.That(native).Contains("Api_Keep(");
         await Assert.That(native).DoesNotContain("Api_Borrow(");
         await Assert.That(native).DoesNotContain("Api_Copy(");
@@ -511,7 +511,7 @@ internal sealed class AddTest
         var sources = new List<string>();
         foreach (var record in records)
         {
-            sources.Add(await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+            sources.Add(await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
                 .ConfigureAwait(false));
         }
 
@@ -599,7 +599,7 @@ internal sealed class AddTest
             CSharpFolder = new(Path.GetTempPath()),
             CppFolder = new(Path.GetTempPath()),
         });
-        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+        var source = await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
             .ConfigureAwait(false);
         var probe = $$"""
             namespace LayoutProbe
@@ -686,7 +686,7 @@ internal sealed class AddTest
             CSharpFolder = new(Path.GetTempPath()),
             CppFolder = new(Path.GetTempPath()),
         });
-        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+        var source = await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
             .ConfigureAwait(false);
         var returnIndex = checks.LastIndexOf("return ", StringComparison.Ordinal);
         var writes = checks[..returnIndex];
@@ -2085,7 +2085,7 @@ internal sealed class AddTest
         foreach (var record in boxes)
         {
             await Assert.That(record.TemplateProjection).IsNotNull();
-            var source = await new CSharpGenerator(record, options, nativeFunctionIndices: slots)
+            var source = await OcctEmitterFactory.Managed(record, options, nativeFunctionIndices: slots)
                 .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
             await Assert.That(source).Contains("public TValue Value;");
             await Assert.That(source).Contains("public float Fixed;");
@@ -2185,7 +2185,7 @@ internal sealed class AddTest
             await Assert.That(record.TemplateProjection is null).IsEqualTo(dependent);
             var relation = record.Bases.Single();
             await Assert.That(relation.Base.MethodModels.Any(static method => method.MethodName == "Read")).IsTrue();
-            var source = await new CSharpGenerator(record, options, nativeFunctionIndices: slots)
+            var source = await OcctEmitterFactory.Managed(record, options, nativeFunctionIndices: slots)
                 .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
             await Assert.That(source).Contains(relation.Base.Type.CSharpInterfaceName);
             await Assert.That(source).DoesNotContain("IBase<T>");

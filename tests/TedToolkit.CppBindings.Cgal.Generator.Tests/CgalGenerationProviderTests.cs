@@ -155,6 +155,9 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(native.Keys).Contains("TedToolkit_CppBindings_Cgal_Kernel_API.cpp");
         await Assert.That(native.Keys).Contains("CgalProfileAdapter.hpp");
         await Assert.That(native.Keys).Contains("CgalNativeError.cpp");
+        await Assert.That(native["CMakeLists.txt"]).Contains("find_package(CGAL CONFIG REQUIRED)");
+        await Assert.That(native["CMakeLists.txt"])
+            .Contains("target_compile_definitions(ted_toolkit_cpp_bindings_cgal PRIVATE CGAL_DEBUG)");
         await Assert.That(managed["Point_2.g.cs"]).Contains("NativeApi.GetFunction");
         await Assert.That(native["TedToolkit_CppBindings_Cgal_Point_2.cpp"])
             .Contains("extern \"C\" double Cgal_Point2_Cartesian");

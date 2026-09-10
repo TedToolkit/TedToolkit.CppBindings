@@ -82,10 +82,14 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
             TextSource("CgalNativeError.cpp", CgalSourceRenderer.RenderNativeErrorSource()),
             JsonSource("native-inventory.json", Inventory.NativeArtifacts),
         };
-        var nativeProject = new BindingNativeProject(
-            "CMakeLists.txt",
-            (sources, writer, token) => writer.WriteAsync(
-                CgalSourceRenderer.RenderCMake(_options.NativeLibraryBaseName, sources).AsMemory(), token));
+        var nativeProject = BindingCMakeProjectEmitter.CreateNativeProject(new(
+            "TedToolkitCppBindingsCgal",
+            _options.NativeLibraryBaseName,
+            20,
+            [new("CGAL", "CONFIG REQUIRED"),],
+            compileDefinitions: ["CGAL_DEBUG",],
+            includeDirectories: ["\"${CMAKE_CURRENT_SOURCE_DIR}\"",],
+            linkLibraries: ["CGAL::CGAL",]));
         return Task.FromResult(new BindingProviderModel(
             CgalSemanticCatalog.CreateDeclarations(Inventory.Admitted),
             [],

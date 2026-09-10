@@ -5,13 +5,12 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System.Reflection;
 using System.Runtime.CompilerServices;
 
 namespace TedToolkit.CppBindings.Cgal.Generator.Tests;
 
 /// <summary>
-/// Binds the compiled Runtime result fixture to the current CGAL Generator renderer.
+/// Binds the compiled Runtime result fixture to the result projection in Shared's current CGAL plan.
 /// </summary>
 internal sealed class CgalResultProjectionCompatibilityTests
 {
@@ -22,18 +21,33 @@ internal sealed class CgalResultProjectionCompatibilityTests
     [Test]
     public async Task Should_match_the_runtime_compiled_result_projection_Async()
     {
-        var renderer = typeof(CgalGenerationProvider).Assembly.GetType(
-            "TedToolkit.CppBindings.Cgal.Generator.CgalSourceRenderer",
-            throwOnError: true)!;
-        var render = renderer.GetMethod(
-            "RenderManagedResultProjection",
-            BindingFlags.Static | BindingFlags.NonPublic)!;
-        var actual = (string)render.Invoke(
-            null,
-            new object[] { "TedToolkit.CppBindings.Cgal.Runtime.Tests", })!;
-        var expected = await File.ReadAllTextAsync(GetRuntimeGeneratedSourcePath()).ConfigureAwait(false);
+        var provider = new CgalGenerationProvider(new()
+        {
+            VcpkgRoot = new(GetVcpkgRoot()),
+            RequireLockedHeaderInventory = false,
+            RequireLockedToolchain = false,
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
+            CSharpNamespace = "TedToolkit.CppBindings.Cgal.Runtime.Tests",
+            NativeLibraryBaseName = "ted_toolkit_cpp_bindings_cgal",
+            CppVersion = 20,
+        });
+        var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+        var source = plan.CSharpSources.Single(static item => item.RelativePath == "Cgal.ResultProjection.g.cs");
+        var writer = new StringWriter();
+        await using (writer.ConfigureAwait(false))
+        {
+            await source.RenderAsync(writer, CancellationToken.None).ConfigureAwait(false);
+            var actual = writer.ToString();
+            var expected = await File.ReadAllTextAsync(GetRuntimeGeneratedSourcePath()).ConfigureAwait(false);
 
-        await Assert.That(Normalize(actual)).IsEqualTo(Normalize(expected));
+            await Assert.That(Normalize(actual)).IsEqualTo(Normalize(expected));
+        }
+    }
+
+    private static string GetVcpkgRoot()
+    {
+        return Environment.GetEnvironmentVariable("VCPKG_ROOT") is { Length: > 0, } root ? root : @"C:\vcpkg";
     }
 
     private static string GetRuntimeGeneratedSourcePath(

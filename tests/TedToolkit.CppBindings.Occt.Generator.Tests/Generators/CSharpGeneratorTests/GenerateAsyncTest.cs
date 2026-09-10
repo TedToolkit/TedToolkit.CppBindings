@@ -15,7 +15,7 @@ using TedToolkit.RoslynHelper.Generators.Syntaxes;
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Generators.CSharpGeneratorTests;
 
 /// <summary>
-/// Verifies <see cref="TedToolkit.CppBindings.Occt.Generator.Generators.CSharpGenerator"/> output.
+/// Verifies Shared managed emitter output under the OCCT semantic profile.
 /// </summary>
 internal sealed class GenerateAsyncTest
 {
@@ -57,7 +57,7 @@ internal sealed class GenerateAsyncTest
             },
         ];
         var catalog = new Dictionary<string, RecordModel>(StringComparer.Ordinal) { ["Storage"] = record, };
-        var code = await new CSharpGenerator(record, CreateOptions("LayoutProbe"), catalog)
+        var code = await OcctEmitterFactory.Managed(record, CreateOptions("LayoutProbe"), catalog)
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
         const string Probe = """
             namespace LayoutProbe
@@ -122,7 +122,7 @@ internal sealed class GenerateAsyncTest
         };
         NativeExportNameBuilder.Assign(record);
 
-        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
+        var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains(
@@ -214,7 +214,7 @@ internal sealed class GenerateAsyncTest
             [derivedRecord.Type.CppTypeName] = derivedRecord,
         };
 
-        var code = await new CSharpGenerator(
+        var code = await OcctEmitterFactory.Managed(
                 baseRecord,
                 CreateOptions(),
                 catalog,
@@ -279,7 +279,7 @@ internal sealed class GenerateAsyncTest
 
         var indices = CreateFunctionIndices(record);
         indices["Standard_Type_Release"] = indices.Count;
-        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: indices)
+        var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: indices)
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("Handle<Standard_Type>? DynamicType(");
@@ -320,7 +320,7 @@ internal sealed class GenerateAsyncTest
             },
         };
         NativeExportNameBuilder.Assign(record);
-        var generator = new CSharpGenerator(
+        var generator = OcctEmitterFactory.Managed(
             record,
             CreateOptions(),
             nativeFunctionIndices: CreateFunctionIndices(record));
@@ -406,7 +406,7 @@ internal sealed class GenerateAsyncTest
                 ],
         };
         NativeExportNameBuilder.Assign(record);
-        var generator = new CSharpGenerator(
+        var generator = OcctEmitterFactory.Managed(
             record,
             CreateOptions(),
             nativeFunctionIndices: CreateFunctionIndices(record));
@@ -504,7 +504,7 @@ internal sealed class GenerateAsyncTest
         };
         NativeExportNameBuilder.Assign(record);
 
-        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
+        var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("public static bool Multiply_1(in Matrix left, in Matrix right)");
@@ -606,7 +606,7 @@ internal sealed class GenerateAsyncTest
         };
         NativeExportNameBuilder.Assign(record);
 
-        var code = await new CSharpGenerator(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
+        var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("public unsafe struct Buffer_4_void<");
@@ -667,7 +667,7 @@ internal sealed class GenerateAsyncTest
         };
         NativeExportNameBuilder.Assign(record);
         var catalog = new Dictionary<string, RecordModel>(StringComparer.Ordinal) { ["Resource"] = record, };
-        var code = await new CSharpGenerator(
+        var code = await OcctEmitterFactory.Managed(
                 record, CreateOptions("Independent.Generated"), catalog, CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
