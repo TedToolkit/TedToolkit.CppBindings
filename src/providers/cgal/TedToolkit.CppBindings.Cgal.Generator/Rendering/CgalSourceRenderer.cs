@@ -316,29 +316,4 @@ internal static class CgalSourceRenderer
                }
                """;
     }
-
-    /// <summary>
-    /// Renders the native project for the Shared-emitted and provider support sources.
-    /// </summary>
-    /// <param name="nativeLibraryBaseName">The native library basename.</param>
-    /// <param name="sources">The exact compiled source inventory.</param>
-    /// <returns>The CMake project.</returns>
-    internal static string RenderCMake(string nativeLibraryBaseName, IReadOnlyList<string> sources)
-    {
-        var sourceList = string.Join("\n", sources.Order(StringComparer.Ordinal).Select(static source => "    " + source));
-        return $$"""
-                 cmake_minimum_required(VERSION 3.28)
-                 project(TedToolkitCppBindingsCgal LANGUAGES CXX)
-
-                 find_package(CGAL CONFIG REQUIRED)
-
-                 add_library({{nativeLibraryBaseName}} SHARED
-                 {{sourceList}}
-                 )
-                 target_compile_features({{nativeLibraryBaseName}} PRIVATE cxx_std_20)
-                 target_compile_definitions({{nativeLibraryBaseName}} PRIVATE CGAL_DEBUG)
-                 target_include_directories({{nativeLibraryBaseName}} PRIVATE "${CMAKE_CURRENT_SOURCE_DIR}")
-                 target_link_libraries({{nativeLibraryBaseName}} PRIVATE CGAL::CGAL)
-                 """;
-    }
 }

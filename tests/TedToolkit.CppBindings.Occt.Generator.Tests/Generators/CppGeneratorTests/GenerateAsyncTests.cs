@@ -64,7 +64,7 @@ internal sealed class GenerateAsyncTests
 
         NativeExportNameBuilder.Assign(record);
 
-        var source = await new CppGenerator(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var source = await OcctEmitterFactory.Native(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(source).Contains("#include <gp_Pnt2d.hxx>");
         await Assert.That(source).Contains(
@@ -128,7 +128,7 @@ internal sealed class GenerateAsyncTests
         };
         NativeExportNameBuilder.Assign(record);
 
-        var source = await new CppGenerator(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var source = await OcctEmitterFactory.Native(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(source).Contains(
             "extern \"C\" Geom_Surface* SurfaceOwner_Surface(const SurfaceOwner* self, NativeError* __error) noexcept");
@@ -185,7 +185,7 @@ internal sealed class GenerateAsyncTests
         };
         NativeExportNameBuilder.Assign(record);
 
-        var source = await new CppGenerator(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var source = await OcctEmitterFactory.Native(record).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(source).Contains(
             "::new (result) IntPolyh_Array<IntPolyh_StartPoint>(aN, 256);");

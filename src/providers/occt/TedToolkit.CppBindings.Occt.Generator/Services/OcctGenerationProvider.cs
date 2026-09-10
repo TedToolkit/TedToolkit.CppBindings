@@ -109,10 +109,8 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
             NativeErrorSupportGenerator.SourceFileName,
             static (writer, token) => writer.WriteAsync(NativeErrorSupportGenerator.GenerateSource().AsMemory(), token)),
         ];
-        var nativeProject = new BindingNativeProject(
-            NativeProjectGenerator.FileName,
-            (sources, writer, token) => writer.WriteAsync(NativeProjectGenerator.Generate(
-                sources, _options.Value.NativeLibraryBaseName, _options.Value.CppVersion).AsMemory(), token));
+        var nativeProject = BindingCMakeProjectEmitter.CreateNativeProject(
+            CreateNativeProjectDefinition(_options.Value));
         return Task.FromResult(new BindingProviderModel(
             declarations,
             _records.EnumModels,
@@ -123,5 +121,30 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
             OcctSemanticProfile.ManagedSourceStem,
             OcctSemanticProfile.NativeSourceStem,
             nativeProject));
+    }
+
+    /// <summary>
+    /// Creates the OCCT-specific native dependency and compilation facts consumed by Shared.
+    /// </summary>
+    /// <param name="options">The current provider options.</param>
+    /// <returns>The provider-neutral CMake project definition.</returns>
+    internal static BindingCMakeProjectDefinition CreateNativeProjectDefinition(OcctGenerationOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return new(
+            "TedToolkitOcctGenerated",
+            options.NativeLibraryBaseName,
+            options.CppVersion,
+            [new("OpenCASCADE", "CONFIG REQUIRED"),],
+            compileOptions: ["$<$<CXX_COMPILER_ID:MSVC>:/MP1>",],
+            includeDirectories: ["${OpenCASCADE_INCLUDE_DIR}",],
+            linkLibraries: ["${OpenCASCADE_LIBRARIES}",],
+            targetProperties:
+            [
+                new("UNITY_BUILD", "ON"),
+                new("UNITY_BUILD_MODE", "GROUP"),
+                new("RUNTIME_OUTPUT_DIRECTORY", "\"${CMAKE_BINARY_DIR}/$<CONFIG>\""),
+            ],
+            unityBuild: new(32));
     }
 }

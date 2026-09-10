@@ -37,9 +37,12 @@ the supplied `TextWriter`, observe cancellation, and neither retain nor dispose 
 can preserve its own renderer concurrency limits; the core owns file creation and disposal. Rendering
 starts only after the entire plan passes path, collision and export checks.
 
-The core reserves `NativeApi.g.cs` and `NativeFunctionTable.cpp`. A provider's native build description
-must include the latter. The provider owns its native headers, error support, library dependencies,
-and declaration-specific sources. Do not return either reserved path yourself.
+The core reserves `NativeApi.g.cs` and `NativeFunctionTable.cpp`; the native project automatically
+receives the latter in its complete compiled-source inventory. `BindingCMakeProjectDefinition` lets
+providers submit dependency targets, compile facts, target properties, and optional bounded
+family/depth unity grouping while Shared owns deterministic CMake rendering. Providers still own
+their native headers, local error support, dependency choices, and declaration-specific semantics.
+Do not return either reserved path yourself.
 
 ## Semantic extension boundary
 
@@ -54,7 +57,8 @@ closes roots over dependencies, rejects incomplete semantics, assigns the single
 and emits both declaration bodies before creating the final `GenerationPlan`. Providers supply
 compiler-derived facts and finite syntax/runtime policy; they do not submit declaration-renderer
 delegates or reconstruct a second model for either language. Supplemental provider renderers are
-limited to genuinely library-specific support files such as native error storage and build metadata.
+limited to genuinely library-specific support such as adapter types or polymorphic result projection;
+generic native-project boilerplate belongs to Shared.
 
 Finite handwritten native profiles use `BindingFiniteProfileApi` when their ABI is not a direct set
 of C++ member declarations. The API contains collections of named status, value, owner, and result

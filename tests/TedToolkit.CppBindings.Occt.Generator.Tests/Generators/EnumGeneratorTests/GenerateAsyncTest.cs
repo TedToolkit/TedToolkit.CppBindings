@@ -24,7 +24,7 @@ internal sealed class GenerateAsyncTest
     [Test]
     public async Task Should_generate_public_csharp_enum_with_underlying_type_and_values_Async()
     {
-        var generator = new EnumGenerator(new EnumModel()
+        var generator = OcctEmitterFactory.Enum(new EnumModel()
         {
             DescriptionItems = [new DescriptionSummary(new DescriptionText("Color kind.")),],
             Name = "Quantity_TypeOfColor",

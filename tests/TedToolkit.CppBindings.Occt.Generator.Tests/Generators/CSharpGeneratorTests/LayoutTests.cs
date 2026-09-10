@@ -54,7 +54,7 @@ internal sealed class LayoutTests
             CSharpFolder = new(Path.GetTempPath()),
             CppFolder = new(Path.GetTempPath()),
         });
-        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var source = await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None).ConfigureAwait(false);
         const string probe = """
             namespace LayoutProbe
             {
@@ -123,7 +123,7 @@ internal sealed class LayoutTests
         });
         await Assert.That(async () =>
             {
-                _ = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+                _ = await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
                     .ConfigureAwait(false);
             })
             .Throws<NotSupportedException>();
@@ -173,7 +173,7 @@ internal sealed class LayoutTests
             CppFolder = new(Path.GetTempPath()),
             DeclOptions = [],
         });
-        var source = await new CSharpGenerator(record, options).GenerateAsync(CancellationToken.None)
+        var source = await OcctEmitterFactory.Managed(record, options).GenerateAsync(CancellationToken.None)
             .ConfigureAwait(false);
         await Assert.That(source.Split("__padding", StringSplitOptions.None).Length - 1).IsLessThanOrEqualTo(8);
         var fieldChecks = fieldOffset < 0

@@ -307,13 +307,42 @@ if (-not $occtPackageVerifier.Contains(
         [StringComparison]::Ordinal)) {
     throw 'OCCT package verification does not isolate layout evidence beneath GeneratedRoot.'
 }
-$occtNativeProjectGenerator = Get-Content -LiteralPath (Join-Path $repository `
-    'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/Generators/NativeProjectGenerator.cs') -Raw
-if ($occtNativeProjectGenerator -notmatch '/MP1' `
-    -or $occtNativeProjectGenerator -match '/MP(?:[2-9]|\d{2,})' `
-    -or $occtNativeProjectGenerator -notmatch 'UnityBatchSize = 32' `
-    -or $occtNativeProjectGenerator -notmatch 'UNITY_BUILD_MODE GROUP') {
+$occtGenerationProvider = Get-Content -LiteralPath (Join-Path $repository `
+    'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/Services/OcctGenerationProvider.cs') -Raw
+if ($occtGenerationProvider -notmatch '/MP1' `
+    -or $occtGenerationProvider -match '/MP(?:[2-9]|\d{2,})' `
+    -or $occtGenerationProvider -notmatch 'unityBuild: new\(32\)' `
+    -or $occtGenerationProvider -notmatch 'new\("UNITY_BUILD_MODE", "GROUP"\)') {
     throw 'OCCT generated native compilation is not a bounded single-worker unity build.'
+}
+$sharedCMakeEmitter = Join-Path $repository `
+    'src/shared/TedToolkit.CppBindings.Generator/Semantics/Emission/BindingCMakeProjectEmitter.cs'
+if (-not (Test-Path -LiteralPath $sharedCMakeEmitter -PathType Leaf)) {
+    throw 'Shared does not own the provider-neutral native-project emitter.'
+}
+$legacyOcctEmitters = @(
+    'CSharpGenerator.cs',
+    'CppGenerator.cs',
+    'EnumGenerator.cs',
+    'IGenerator.cs',
+    'NativeProjectGenerator.cs')
+foreach ($fileName in $legacyOcctEmitters) {
+    $path = Join-Path $repository `
+        "src/providers/occt/TedToolkit.CppBindings.Occt.Generator/Generators/$fileName"
+    if (Test-Path -LiteralPath $path) {
+        throw "OCCT still owns legacy or generic emitter adapter '$fileName'."
+    }
+}
+foreach ($providerPath in @(
+        'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator',
+        'src/providers/occt/TedToolkit.CppBindings.Occt.Generator')) {
+    $providerSources = @(Get-ChildItem -LiteralPath (Join-Path $repository $providerPath) -Recurse -Filter '*.cs' -File)
+    foreach ($providerSource in $providerSources) {
+        $contents = Get-Content -LiteralPath $providerSource.FullName -Raw
+        if ($contents -match 'cmake_minimum_required\s*\(' -or $contents -match 'RenderCMake\s*\(') {
+            throw "Provider source owns generic native-project rendering: $($providerSource.FullName)"
+        }
+    }
 }
 
 foreach ($legacyRoot in @('src/core', 'src/providers/common')) {

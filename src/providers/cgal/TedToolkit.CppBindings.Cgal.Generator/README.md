@@ -44,3 +44,5 @@ managed/native files and function-table exports from that one model. Per-declara
 inventories name the actual emitted file and symbol on both sides. Value transports keep ABI storage
 private. Native `const T&` accessors are emitted as `ref readonly T`; each returned reference is
 borrowed from the receiver and remains subject to that receiver's lifetime and invalidation rules.
+CGAL continues to own its finite adapter and tagged intersection alternatives; it submits CMake
+dependency and target facts to Shared instead of rendering generic native-project boilerplate.
