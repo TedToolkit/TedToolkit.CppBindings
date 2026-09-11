@@ -1,0 +1,335 @@
+# Binding generation experiment
+
+This directory contains isolated measurement tooling, not production optimizations. The comparative
+experiment concluded without an accepted baseline/candidate sample pair. No performance
+recommendation or speedup was established; see `docs/performance/binding-generation.md` for the
+decision, evidence bindings, and limitations.
+
+## Resource preflight
+
+Run from PowerShell 7.5 or later on the Windows benchmark machine, with a new report path for each attempt:
+
+```powershell
+./benchmarks/Get-BenchmarkEnvironment.ps1 -RepositoryRoot . `
+  -ReportPath ./out/benchmark/environment-01.json `
+  -ArtifactProbePath ./out/benchmark/artifacts-baseline `
+  -ExpectedArtifactVolumeIdentity '<volume identity frozen by New-OcctBenchmarkPlan.ps1>'
+./benchmarks/Verify-BenchmarkPreflight.ps1
+```
+
+The script records the Git revision, working-tree status, submodules, .NET/CMake tools, CPU, free
+memory, explicitly bound artifact-volume space, and potentially competing builds. It fails closed when collection
+fails, the destination already exists, or the resource checks fail. A rejected resource snapshot is
+retained with its reasons. It does not stop other processes, alter the baseline, or run a build.
+CIM access may require permission outside a restricted execution sandbox.
+
+The initial screening gate requires 10 GiB free physical memory and 20 GiB free artifact-drive space.
+These are preparation thresholds, not measured workload requirements or a peak-memory result. The
+workload driver must separately declare and enforce its process-tree memory ceiling, reserve, and
+12-machine-hour experiment budget. Idle persistent MSBuild and IDE service processes are excluded
+from the competing-build heuristic; the snapshot cannot detect every source of CPU/I/O contention.
+
+Before sampling, also pin MSVC, Windows SDK, the selected `clang++` and Ninja executables, OCCT/vcpkg versions,
+input hashes, worker counts, cache state, and a complete exact source candidate. A revision alone
+does not bind uncommitted edits. Full-workload sampling must not overlap migration builds.
+
+## Process-stage measurement
+
+`Measure-BenchmarkStage.ps1` executes one phase from a JSON specification. It records the exact
+executable/argument array, specification and runner hashes, process elapsed time, exit code,
+separate untruncated output/error logs, and sampled process-tree working set, CPU, and transfer
+counters. Commands must stay within the approved experiment and must not contain secrets: command
+arguments and child output are retained verbatim. Use a new output directory for each phase.
+
+The specification has these required members:
+
+| Member | Meaning |
+| --- | --- |
+| `Label` | Variant, workload, repetition, and phase identifier |
+| `Executable` | Executable path or command resolved from PATH |
+| `Arguments` | JSON string array, passed directly without a command shell |
+| `WorkingDirectory` | Existing isolated working directory |
+| `DeadlineUtc` | One shared UTC deadline for the complete experiment, at most 12 hours away |
+| `TimeLimitSeconds` | Per-stage time ceiling, between 1 and 43,200 seconds |
+| `MemoryLimitBytes` | Positive ceiling for the observed sum of process working sets |
+
+```powershell
+./benchmarks/Measure-BenchmarkStage.ps1 -SpecificationPath ./out/benchmark/phase.json -ReportDirectory ./out/benchmark/sample-01/compile
+./benchmarks/Verify-BenchmarkStage.ps1
+```
+
+The driver must reuse the same experiment deadline, rather than grant each phase another 12 hours.
+The stage runner terminates its own workload tree on observed memory excess, timeout, or failure;
+it also cleans up recorded descendants whose process identity still matches. Disable build servers
+and do not launch detached workloads. Polling cannot discover every very short-lived or orphaned
+descendant; this is not an OS containment boundary or an OS-enforced memory quota.
+
+CIM counters are sampled and introduce overhead. `ProcessElapsedSeconds` uses the process's recorded
+start/exit times and excludes post-exit polling delay; `RunnerElapsedSeconds` also includes polling
+and termination overhead. Working-set sums can double-count shared pages and miss transient peaks.
+CPU and I/O sums omit work after the final observation or between samples. I/O counters are not
+physical disk traffic. The raw report states these limitations; an uncertain memory result cannot
+justify an optimization recommendation. Between-sample peaks require stronger measurement before
+claiming compliance with a strict memory budget.
+
+`Verify-BenchmarkStage.ps1` uses controlled PowerShell children to check argument boundaries,
+UTF-8 output, large-log capture, nonzero exit propagation, timeout, observed memory excess,
+descendant termination, and evidence preservation. Its outputs are harness verification, not OCCT
+performance samples. No .NET project or production build path is modified.
+
+## Artifact comparison
+
+Capture sources before and after each sample, outside the timed interval and with all writers
+stopped. Store manifests outside the measured roots. Keep category order identical in both runs:
+
+```powershell
+./benchmarks/Get-ArtifactManifest.ps1 -Roots @('./out/baseline/csharp', './out/baseline/cpp') -Files @('./out/baseline/unsupported-headers.txt') -ReportPath ./out/benchmark/before.json
+./benchmarks/Get-ArtifactManifest.ps1 -Roots @('./out/candidate/csharp', './out/candidate/cpp') -Files @('./out/candidate/unsupported-headers.txt') -ReportPath ./out/benchmark/after.json -CompareTo ./out/benchmark/before.json
+./benchmarks/Verify-ArtifactManifest.ps1
+```
+
+The manifest records sorted relative names, sizes, SHA-256 content hashes, modification times, total
+bytes, and file count. Comparison separates added, removed, changed-content, and observed rewritten
+files. Explicit files are ordered semantic categories after the directory roots and must be outside
+those roots. An unchanged warm source set needs equal content and zero observed rewrites. Timestamp-based
+rewrite detection is not a filesystem write trace; a writer that restores timestamps can hide an
+identical rewrite. Byte equality supports unchanged-partition prototypes, not ABI/lifetime proof
+for sharding or other repartitioning. Hashing itself warms the OS file cache: claims remain
+artifact-cold, never OS-cache cold, unless a separate procedure establishes the latter.
+
+## Paired matrix execution
+
+`Invoke-BenchmarkMatrix.ps1` always covers all five approved full-public-header workloads. Screening
+runs exactly one recorded baseline/candidate pair per workload (10 executions), without warmups,
+and alternates the first variant across workloads. It supports correctness, resource, and directional
+feasibility only. Full scope retains one warmup for each variant/workload, then three artifact-cold
+pairs and five pairs for each other workload (56 executions); pair order alternates. Preparation and
+correctness verification are outside the measured stage sum, but all phases consume the same
+experiment deadline and resource budget. Full warmup diagnostics are retained and excluded from
+statistics.
+
+```powershell
+./benchmarks/Invoke-BenchmarkMatrix.ps1 -SpecificationPath ./out/benchmark/matrix.json -ReportDirectory ./out/benchmark/plan-01 -PlanOnly
+./benchmarks/Invoke-BenchmarkMatrix.ps1 -SpecificationPath ./out/benchmark/matrix.json -ReportDirectory ./out/benchmark/matrix-01
+./benchmarks/Verify-BenchmarkMatrix.ps1
+```
+
+The matrix specification is JSON with these members:
+
+| Member | Meaning |
+| --- | --- |
+| `RepositoryRoot` | Existing repository for environment snapshots |
+| `ArtifactProbePath`, `ArtifactVolumeIdentity` | Explicit artifact/report volume bound for every resource snapshot |
+| `Scope` | `screening` for one non-warmup pair per workload, or `full` for recommendation-sized sampling |
+| `DeadlineUtc` | Original shared experiment deadline, unexpired and at most 12 hours away |
+| `MemoryLimitBytes`, `MemoryReserveBytes` | Positive integer workload ceiling and free-memory reserve |
+| `InputFiles` | Nonempty array of immutable `{ "Path": "...", "Sha256": "..." }` bindings |
+| `Workloads` | Exactly `artifact-cold`, `unchanged`, `declaration-edit`, `generator-change`, and `missing-output` |
+
+Each workload has `Name`, integer `Samples`, and `baseline` / `candidate` objects. `Samples` must be
+exactly 1 for screening; full requires at least 3 for artifact-cold and 5 for every other workload. Each variant
+object has nonempty `Prepare`, `Measure`, and `Verify` arrays of stage-specification file paths.
+Each stage file supplies `Executable`, string-array `Arguments`, existing `WorkingDirectory`, and
+integer `TimeLimitSeconds`. The matrix supplies the label, common deadline, and memory ceiling.
+Paths resolve against the invocation directory; prefer absolute paths in a frozen specification.
+An argument that is exactly `{SampleRoot}`, `{Sequence}`, `{Workload}`, `{Variant}`, `{Repetition}`,
+or `{IsWarmup}` is replaced with that sample's context. Placeholders embedded in a larger argument
+and unknown whole-argument placeholders are rejected; pass paths and values as separate arguments.
+
+Preparation must reset the disposable variant to the declared cache/edit state for every sample,
+including artifact removal for independent cold samples. Verification commands must fail nonzero
+unless expected source/export inventories, rewritten-file counts, missing/stale-output handling,
+and the applicable native boundary checks pass. A successful command alone is not evidence that
+those checks were adequate. Pin immutable source/toolchain/input manifests and guard scripts;
+perform deliberate declaration/generator edits only in disposable working copies. A manifest hash
+does not verify its referenced live files: supply a verifier that checks those files as well.
+
+The runner binds the matrix, stage specifications, measurement/preflight scripts, and declared input
+files; checks them before phases and after samples; and takes resource snapshots before and after
+each sample against the explicit artifact volume. The candidate repository, specification/report,
+both measured artifact and input roots, and all four host roots must remain on that physical volume;
+the real vcpkg toolchain may remain elsewhere. Any detected mismatch, resource rejection, failed phase, failed verification, or expired
+deadline stops the matrix. Completed samples and failed-phase logs are retained under a fresh report
+directory. Partial statistics are diagnostic only when `Succeeded` is false. A `-PlanOnly` run checks
+the schedule and declared bindings but performs neither resource checks nor workloads.
+
+The reported median/range sums only `Measure` phases, not end-to-end elapsed time. Inspect per-stage
+reports to distinguish parse/model, emission/write, configure, compile, and link. This control layer
+does not supply OCCT workload commands, native correctness assertions, per-file outliers, or TU counts.
+Pre/post snapshots still cannot rule out transient contention during a sample. There is no automatic
+recommendation. `MeetsRecommendationSamplingRequirements` is false for screening and every failed
+matrix; `EvidenceUse` states whether results are feasibility-only, incomplete, or eligible for
+recommendation-threshold assessment. `ProductionAdoptionAuthorized` is always false. Full-workload
+correctness and resource evidence must accompany any later adoption proposal.
+Do not reset the deadline for another candidate, a retry, or a subsequent invocation of the same
+experiment. The coordinator retains the original deadline across invocations; the script is not a
+cross-invocation machine-time ledger and has no automatic resume.
+
+`Verify-BenchmarkMatrix.ps1` runs deterministic orchestration fixtures in a disposable copy of
+the runner with stubbed process/resource tools. It checks paired ordering, warmup/statistics exclusion,
+shared deadlines and ceilings, plan-only behavior, invalid specifications, immutable evidence, and
+fail-closed resource/input/verification behavior. Its 56 synthetic samples are **not measurements**;
+real process measurement remains covered separately by `Verify-BenchmarkStage.ps1`. Add
+`-RealProcess` to also test the matrix with the actual stage runner and controlled PowerShell children:
+an exit-17 verification must invalidate the entire sample. That optional integration check needs CIM
+access, still uses fixture resource snapshots, and is never a performance sample.
+
+## Native command accounting
+
+`Get-NinjaBuildMetrics.ps1` reads complete Ninja v5/v7 log snapshots outside the timed interval.
+For a warm sample, capture `.ninja_log` before and after exactly one invocation and supply both:
+
+```powershell
+./benchmarks/Get-NinjaBuildMetrics.ps1 -BeforeLogPath ./out/benchmark/before.ninja_log -LogPath ./out/benchmark/after.ninja_log -ReportPath ./out/benchmark/native-metrics.json
+./benchmarks/Verify-NinjaBuildMetrics.ps1
+```
+
+Omit `BeforeLogPath` only for a fresh log containing one invocation. Stop writers before capture.
+The parser rejects malformed/truncated snapshots, overwritten reports, duplicate outputs, and
+non-prefix deltas caused by log replacement or recompaction. It cannot establish invocation
+boundaries itself. An unchanged log yields zero commands; parallel completion rows may arrive out
+of timestamp order. Output extensions identify compile/link commands. Multiple outputs with the
+same command hash and timing, such as a DLL and its import library, count as one command.
+
+The report retains all commands, the 20 longest compilations, link durations, aggregate command
+duration, and logged execution span. Aggregate duration overlaps across workers and is **not wall
+time**. Neither the longest file nor the logged span proves the dependency critical path; process
+timing, build success, workload isolation, and resource evidence still come from the stage runner.
+Custom multi-object commands need a separate source inventory. These diagnostics are not a speedup
+claim, and historical verification builds are not benchmark samples.
+
+## OCCT workload plan
+
+`New-OcctBenchmarkPlan.ps1` freezes the approved five-workload OCCT matrix. It requires the exact
+baseline commit `e94f10a9bb9490d47363cf43d8ce17600b435b8a`, candidate behavior commit
+`9952e5a76358028c22c8ec215a23d7b82413ad4f`, clean repositories, four complete Console-host
+receipts, canonical baseline/declaration oracles, a native boundary gate, physically isolated roots,
+and a shared deadline.
+The initial plan intentionally retains `commit:PENDING-FINAL-HARNESS-COMMIT`; regenerate it with
+the final harness commit before execution. `Invoke-OcctBenchmarkWorkload.ps1` rejects that pending
+binding, so a template plan cannot accidentally become a performance run.
+
+Create each host with `Publish-OcctBenchmarkHost.ps1`, giving it an absent unique host directory
+and absent completion-receipt path. It runs the exact Release/net10.0 `dotnet publish` for the
+repository benchmark-host project and writes a non-overwriting completion receipt only after a successful
+publish from the exact clean source revision. The receipt binds the exact command, captured output,
+publisher, dotnet and project hashes, and every file in the newly produced host. Then create the
+provenance receipt with `New-OcctBenchmarkHostReceipt.ps1`; it independently rechecks that fresh-build
+relationship, the real managed `TedToolkit.CppBindings.Occt.BenchmarkHost` assembly, and runtime metadata.
+Original hosts must use the exact
+variant revision. Changed hosts must use clean commits whose complete `git diff --binary
+--full-index` is byte-identical to the same frozen harmless patch. Fixture-only receipts can test
+the plan schema, but make the resulting plan permanently non-executable; a text file named `.dll`
+is rejected in both modes.
+
+The editable inputs are private physical copies of the complete `installed/x64-windows` triplet and
+`installed/vcpkg/status`; `include`, `lib`, and `bin` are all required because generation parses
+headers, links its compiler probe against OCCT libraries, and runs that probe with the triplet DLLs.
+Every private file must have hard-link count one when the plan is frozen, and its physical identity,
+relative path, size, and hash are rechecked outside measured work. Baseline and candidate inventories
+must be byte-identical. Only the selected declaration header is excluded from the stable inventory;
+its original/changed hashes and physical identity remain separately frozen. The real vcpkg root is
+used only as the CMake toolchain and must be a different path.
+Repositories, inputs, toolchain, canonical artifacts, measured artifacts, specifications, and host
+directories must be pairwise disjoint under case-insensitive comparison and cannot contain reparse
+components. Nested reparse points are rechecked immediately before artifact cleanup. Both measured
+artifact roots must have equal path lengths and share the candidate repository's physical volume,
+which is the volume checked by matrix resource preflight. Corresponding original/changed host paths
+and private input paths must also have equal lengths; both variants use one neutral working directory.
+
+Plan creation revalidates and freezes every publish completion receipt, host file, publishing and
+receipt script, then loads the exact declared `vcvars64.bat`, verifies that it selects the declared x64
+`cl.exe`, and records compiler `/Bv`, MSVC and Windows SDK roots/version, plus direct CMake, Ninja,
+and dotnet probes. It separately establishes the exact generator environment: a frozen `PATH` whose
+first directory contains the selected `clang++.exe` and the baseline private `VCPKG_ROOT`. In that
+environment it captures a stable non-executing `clang++ -###` compile/link trace, verifies the
+Clang-selected MSVC and Windows SDK root/version equal the `vcvars64` snapshot, binds the exact
+`clang++.exe` path/hash/version, resolves and hashes every explicit driver companion (including
+exactly one `lld-link.exe`), and inventories every file in `-print-resource-dir` by relative path,
+size, and SHA-256. The resource inventory file itself is hash-bound.
+
+Prepare reproduces that generator environment and rechecks the full driver trace, companion hashes,
+resource-directory identity and inventory outside material timing. Every Generate stage also declares
+a bound pre-measurement validation command. The stage runner executes that full check immediately
+before starting its stopwatch and measured child, under a separate 300-second limit and the shared
+experiment deadline. It records separate stdout, stderr, elapsed time, and process-tree evidence;
+timeout or failure terminates the live validation tree and identity-checked observed descendants,
+and refuses to start the measured child. Validation emits a single-use receipt scoped to the plan,
+variant, workload, generator host, driver trace, and resource inventory; timed Generate consumes only
+a matching receipt no more than 30 seconds old. The timed action therefore contains only negligible
+receipt/environment setup plus the exact benchmark-host invocation
+`dotnet <TedToolkit.CppBindings.Occt.BenchmarkHost.dll> --output-root <isolated-root>`, and restores both `PATH` and `VCPKG_ROOT` after
+success or failure. Prepare and verify stages also validate the complete live private-triplet
+inventory. No PATH-only tool identity is accepted. The benchmark host calls the OCCT Generator
+directly and therefore cannot be hidden by the repository generation tool's cache.
+The full compiler/version probes remain in preparation; configure/build only recheck the already
+bound vcvars environment immediately before launching the pinned native tool, with the same check
+on both variants.
+
+Bind artifact manifests and source-ordered `NativeFunctionTable.cpp` export inventories for the
+canonical original state and the representative declaration edit. Native symbol identity and duplicate
+detection are ordinal and case-sensitive; comparisons preserve and compare the exact source order.
+Inventory readers require the exact schema, integral counts, generated C identifier grammar, and
+ordinal uniqueness. Original and declaration inventories must contain the same elementwise ordinal
+sequence; add, remove, reorder, or case-only changes invalidate the plan. Every baseline and
+candidate result must
+match its applicable oracle. A bound native boundary/integration gate runs against the immutable
+canonical artifact before preparation and against the sampled artifact after build. Its executable,
+arguments, working directory, and inputs are immutable plan inputs; fixture-only gates cannot execute
+a formal workload.
+
+The generated stage plan has these fixed semantics:
+
+| Workload | Measured stages | Preparation and verification |
+| --- | --- | --- |
+| `artifact-cold` | generate, `cmake --fresh` configure, build | Remove only a marker-owned artifact root, then retain source and Ninja evidence |
+| `unchanged` | generate, build | Compare source manifests and Ninja-log delta; candidate must rewrite zero sources |
+| `declaration-edit` | generate, build | Apply one frozen header replacement in the private copy, verify a content delta, then restore canonical state outside timing |
+| `generator-change` | changed-host generate, build | Use a prebuilt immutable changed host, verify unchanged output content, then restore with the original host outside timing |
+| `missing-output` | generate, build | Delete one frozen `cpp/*.cpp`, verify restoration and the source/Ninja delta |
+
+All native builds use the declared fixed parallelism. Every sample receives manifests and parsed
+Ninja evidence through `{SampleRoot}`. `cmake --fresh` is rejected outside artifact-cold. Root
+ownership markers, immutable file bindings, reparse-point rejection, private-input inventory checks,
+and non-overwrite evidence make destructive or stale execution fail closed. This is experiment
+infrastructure only and grants no production-adoption authority.
+
+```powershell
+./benchmarks/Verify-OcctBenchmarkPlan.ps1
+```
+
+The verifier publishes only a tiny managed Console-shaped fixture, generates cryptographically valid
+receipts and oracles, exercises pre-existing/stale/mismatched-output, missing `lib`/`bin`, mismatched
+`clang++`, mutated `lld-link.exe` and Clang-resource identities, mismatched Clang-selected MSVC/SDK,
+missing pre-measurement receipts, out-of-band validation placement, hard-link alias,
+junction/case/shared-target/nested-reparse failures, and runs matrix
+`-PlanOnly`. An external-process
+formal Prepare fixture transports manifest root/file arrays as JSON and verifies both root categories;
+the verifier does not run the OCCT generator, compile native code, or collect timing.
+
+## Reference workload inventory
+
+The 2026-09-04 manifest of the previously verified isolated build contains 14,514 source/support
+files totaling 400,648,748 bytes: 7,521 managed files and 6,993 native/support files. The largest
+managed file is `OpenGl_SetOfPrograms.g.cs` (22,443,193 bytes); `NativeFunctionTable.cpp` is
+14,272,835 bytes. These are corpus measurements, not speed results. They justify including
+per-file emission outliers in screening; size alone does not establish the critical path.
+
+The isolated Generator, header source-generator, Console, and shared build/package properties were
+compared with commit `ce469d5cfa1befc8a9466638836463daff916c92` without a content delta. This does not
+bind all native/toolchain inputs or the current main worktree's uncommitted template changes.
+Rebind the selected baseline and regenerate the manifest when preparing actual samples.
+
+`WriteIfChangedProbe` is an experiment-only public-consumer probe. Point `GeneratorProjectPath` at
+an isolated baseline or candidate project and give it a disposable output directory. It verifies
+unchanged timestamps, selective replacement, stale and missing output handling, failed-render
+rollback, and file/directory transitions. It is correctness evidence, not a timing sample.
+
+## Experiment disposition
+
+The paired execution control, OCCT workload adapter, frozen inputs, canonical correctness oracle,
+and final decision report are complete. The bounded screening stopped with zero accepted samples,
+so partial timings, resource reports, and synthetic fixtures are not comparative timing evidence.
+Production adoption is not authorized. Any renewed measurement or optimization proposal is a new
+experiment with fresh artifact roots, an isolated machine window, a new shared deadline, and exact
+source and harness bindings.

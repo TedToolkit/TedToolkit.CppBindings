@@ -1,3 +1,5 @@
+name: Build
+
 on:
   push:
   workflow_dispatch:
@@ -7,6 +9,124 @@ permissions:
   pull-requests: write
 
 jobs:
-  run-build-project:
-    uses: TedToolkit/TedToolkit/.github/workflows/build.yml@development
-    secrets: inherit
+  windows-build:
+    runs-on: windows-2025-vs2026
+    timeout-minutes: 330
+    env:
+      VCPKG_ROOT: ${{ github.workspace }}\.vcpkg
+      VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}\.vcpkg-binary-cache
+      VCPKG_CACHE_KEY_PREFIX: vcpkg-windows-x64-30ef65cad98f08e7197c9a1656fbd871bcb72f2d
+      TEDTOOLKIT_NATIVE_SCRATCH_ROOT: ${{ github.workspace }}\output
+
+    steps:
+      - name: Checkout code
+        uses: actions/checkout@v4
+        with:
+          submodules: recursive
+
+      - name: Checkout locked vcpkg baseline
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: 30ef65cad98f08e7197c9a1656fbd871bcb72f2d
+          path: .vcpkg
+
+      - name: Setup .NET
+        uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: '10.0'
+
+      - name: Setup locked CMake
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          python -m pip install --disable-pip-version-check --no-warn-script-location cmake==4.4.3
+          $cmakeBin = python -c "import cmake; print(cmake.CMAKE_BIN_DIR)"
+          $cmakeBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Restore vcpkg binary packages
+        id: vcpkg-cache-restore
+        uses: actions/cache/restore@v4
+        with:
+          path: .vcpkg-binary-cache
+          key: ${{ env.VCPKG_CACHE_KEY_PREFIX }}-${{ github.run_id }}-${{ github.run_attempt }}
+          restore-keys: |
+            ${{ env.VCPKG_CACHE_KEY_PREFIX }}-
+
+      - name: Install locked native dependencies
+        id: vcpkg-install
+        shell: pwsh
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          New-Item -ItemType Directory -Path $env:VCPKG_DEFAULT_BINARY_CACHE -Force | Out-Null
+          $cacheBefore = @(
+            Get-ChildItem -LiteralPath $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File |
+              Sort-Object FullName |
+              ForEach-Object {
+                '{0}|{1}' -f [IO.Path]::GetRelativePath(
+                  $env:VCPKG_DEFAULT_BINARY_CACHE,
+                  $_.FullName), $_.Length
+              }
+          ) -join "`n"
+          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          & "$env:VCPKG_ROOT\vcpkg.exe" install `
+            opencascade:x64-windows `
+            cgal:x64-windows `
+            manifold:x64-windows `
+            fcl:x64-windows `
+            --clean-after-build
+          $cacheAfter = @(
+            Get-ChildItem -LiteralPath $env:VCPKG_DEFAULT_BINARY_CACHE -Recurse -File |
+              Sort-Object FullName |
+              ForEach-Object {
+                '{0}|{1}' -f [IO.Path]::GetRelativePath(
+                  $env:VCPKG_DEFAULT_BINARY_CACHE,
+                  $_.FullName), $_.Length
+              }
+          ) -join "`n"
+          $cacheUpdated = $cacheBefore -cne $cacheAfter
+          "cache-updated=$($cacheUpdated.ToString().ToLowerInvariant())" |
+            Out-File -FilePath $env:GITHUB_OUTPUT -Encoding utf8 -Append
+
+      - name: Save updated vcpkg binary packages
+        if: steps.vcpkg-install.outputs.cache-updated == 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: .vcpkg-binary-cache
+          key: ${{ steps.vcpkg-cache-restore.outputs.cache-primary-key }}
+
+      - name: Run Windows build pipeline
+        shell: pwsh
+        env:
+          AI__ApiKey: ${{ secrets.AI__APIKEY }}
+          AI__EndPoint: ${{ secrets.AI__ENDPOINT }}
+          AI__ModelId: ${{ secrets.AI__MODELID }}
+          NuGet__ApiKey: ${{ secrets.NUGET__APIKEY }}
+          NuGet__Url: ${{ vars.NUGET__URL }}
+          NuGet__Source: ${{ vars.NUGET__SOURCE }}
+          GITHUB_TOKEN: ${{ secrets.GITHUB_TOKEN }}
+        run: |
+          $ErrorActionPreference = 'Stop'
+          $PSNativeCommandUseErrorActionPreference = $true
+          cmake --version
+          dotnet run --project Build/Build.csproj -c Release
+
+      - name: Verify all generated Windows providers
+        shell: pwsh
+        run: pwsh -NoProfile -File Build/VerifyWindowsGenerationOutputs.ps1 -Configuration Release
+
+      - name: Upload generated Windows sources
+        uses: actions/upload-artifact@v4
+        if: success()
+        with:
+          name: windows-generated-sources
+          path: |
+            output/generated/csharp/
+            output/providers/cgal/csharp/
+            output/providers/manifold/csharp/
+            output/providers/fcl/csharp/
+            output/windows-generation-summary.json
+          retention-days: 2
+          if-no-files-found: error

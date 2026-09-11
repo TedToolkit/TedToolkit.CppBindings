@@ -1,0 +1,9 @@
+{
+  "$schema": "https://raw.githubusercontent.com/microsoft/vcpkg-tool/main/docs/vcpkg.schema.json",
+  "name": "tedtoolkit-cppbindings-fcl-profile",
+  "version-string": "1.0.0",
+  "dependencies": [
+    { "name": "fcl", "version>=": "0.7.0#5" }
+  ],
+  "builtin-baseline": "30ef65cad98f08e7197c9a1656fbd871bcb72f2d"
+}

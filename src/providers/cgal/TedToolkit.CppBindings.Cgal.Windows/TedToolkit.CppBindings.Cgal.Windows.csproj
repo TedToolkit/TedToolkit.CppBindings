@@ -1,0 +1,49 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <AssemblyName>TedToolkit.CppBindings.Cgal.Windows</AssemblyName>
+    <RootNamespace>TedToolkit.CppBindings.Cgal</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Title>TedToolkit CGAL Windows bindings</Title>
+    <Description>Generated finite-profile CGAL bindings for the locked Windows x64 native artifact.</Description>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\..\output\providers\cgal</GeneratedRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.CppBindings.Cgal.Runtime\TedToolkit.CppBindings.Cgal.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\tools\TedToolkit.CppBindings.Windows.Generation.Tool\TedToolkit.CppBindings.Windows.Generation.Tool.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      OutputItemType="WindowsGenerationHost" />
+    <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_cpp_bindings_cgal.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\third-party-notices\*.txt"
+          Pack="true" PackagePath="third-party-notices" />
+  </ItemGroup>
+
+  <Target Name="GenerateCgalWindowsBindings" BeforeTargets="CoreCompile">
+    <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Cgal.Windows." />
+    <Error Condition="'@(WindowsGenerationHost)' == ''" Text="The Windows generation host output was not resolved." />
+    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider cgal --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; --vcpkg-root &quot;$(VcpkgRoot)&quot; --configuration &quot;$(Configuration)&quot;" />
+  </Target>
+
+  <Target Name="IncludeGeneratedCgalWindowsBindings"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="GenerateCgalWindowsBindings">
+    <ItemGroup>
+      <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
+    </ItemGroup>
+  </Target>
+
+</Project>
