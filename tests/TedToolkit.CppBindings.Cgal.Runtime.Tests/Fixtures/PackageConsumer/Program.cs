@@ -35,7 +35,7 @@ var expected = new[]
     typeof(CgalTestException),
     typeof(CgalWarningException),
     typeof(CgalUnknownResultException),
-    typeof(NativeErrorProjection),
+    typeof(TedToolkit.CppBindings.Cgal.NativeErrorProjection),
 };
 
 if (carrier.Kind != 0

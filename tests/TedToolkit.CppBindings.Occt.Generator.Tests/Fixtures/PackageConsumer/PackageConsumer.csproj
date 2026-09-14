@@ -7,6 +7,6 @@
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="TedToolkit.CppBindings.Occt.Generator" Version="1.0.0" />
+    <PackageReference Include="TedToolkit.CppBindings.Occt.Generator" />
   </ItemGroup>
 </Project>

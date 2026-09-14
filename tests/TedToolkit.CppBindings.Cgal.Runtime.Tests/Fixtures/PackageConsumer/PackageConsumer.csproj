@@ -6,6 +6,6 @@
     <Nullable>enable</Nullable>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="TedToolkit.CppBindings.Cgal.Runtime" Version="1.0.0" />
+    <PackageReference Include="TedToolkit.CppBindings.Cgal.Runtime" />
   </ItemGroup>
 </Project>

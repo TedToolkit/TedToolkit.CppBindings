@@ -7,10 +7,9 @@
     <Nullable>enable</Nullable>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <PackageVersionUnderTest Condition="'$(PackageVersionUnderTest)' == ''">1.0.0</PackageVersionUnderTest>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="TedToolkit.CppBindings.Occt.Windows" Version="$(PackageVersionUnderTest)" />
-    <PackageReference Include="TedToolkit.CppBindings.Analyzers" Version="$(PackageVersionUnderTest)" PrivateAssets="all" />
+    <PackageReference Include="TedToolkit.CppBindings.Occt.Windows" />
+    <PackageReference Include="TedToolkit.CppBindings.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>

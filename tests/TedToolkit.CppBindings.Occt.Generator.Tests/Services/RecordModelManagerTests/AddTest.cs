@@ -630,6 +630,7 @@ internal sealed class AddTest
     /// <param name="checks">Managed writes and observable checks.</param>
     /// <returns>A task representing the asynchronous test.</returns>
     [Test]
+    [ParallelLimiter<NativeBitFieldProbeParallelLimit>]
     [Arguments("unsigned Flag : 1;", "value.Flag = 3; return value.Flag == 1;")]
     [Arguments("unsigned First : 1; unsigned Last : 3;",
         "value.First = 1; value.Last = 15; return value.First == 1 && value.Last == 7;")]
@@ -661,6 +662,7 @@ internal sealed class AddTest
     /// <param name="nativeChecks">Equivalent native writes and observable checks.</param>
     /// <returns>A task representing the asynchronous test.</returns>
     [Test]
+    [ParallelLimiter<NativeBitFieldProbeParallelLimit>]
     [Arguments("long First : 3; unsigned long Last : 5;",
         "value.First = new System.Runtime.InteropServices.CLong(7); value.Last = new System.Runtime.InteropServices.CULong(49U); return value.First.Value == -1 && value.Last.Value == 17;",
         "value.First = 7; value.Last = 49; return value.First == -1 && value.Last == 17;")]
@@ -2264,6 +2266,28 @@ internal sealed class AddTest
         public string GetTriplet()
         {
             return "x64-windows";
+        }
+    }
+
+    /// <summary>
+    /// Prevents native bitfield probes from oversubscribing constrained CI runners.
+    /// </summary>
+    internal sealed class NativeBitFieldProbeParallelLimit : TUnit.Core.Interfaces.IParallelLimit
+    {
+        /// <summary>
+        /// Initializes a new instance of the <see cref="NativeBitFieldProbeParallelLimit"/> class.
+        /// </summary>
+        public NativeBitFieldProbeParallelLimit()
+        {
+        }
+
+        /// <inheritdoc />
+        public int Limit
+        {
+            get
+            {
+                return 2;
+            }
         }
     }
 }

@@ -1,1 +1,12 @@
-<Project />
+<Project>
+  <PropertyGroup>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <PackageVersionUnderTest Condition="'$(PackageVersionUnderTest)' == ''">1.0.0</PackageVersionUnderTest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="TedToolkit.CppBindings.Cgal.Windows" Version="$(PackageVersionUnderTest)" />
+    <PackageVersion Include="TedToolkit.CppBindings.Fcl.Windows" Version="$(PackageVersionUnderTest)" />
+    <PackageVersion Include="TedToolkit.CppBindings.Manifold.Windows" Version="$(PackageVersionUnderTest)" />
+    <PackageVersion Include="TedToolkit.CppBindings.Occt.Windows" Version="$(PackageVersionUnderTest)" />
+  </ItemGroup>
+</Project>
