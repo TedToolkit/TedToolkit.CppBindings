@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.CppBindings.Runtime.FirstWrapper\TedToolkit.CppBindings.Runtime.FirstWrapper.csproj" />
+    <ProjectReference Include="..\TedToolkit.CppBindings.Runtime.SecondWrapper\TedToolkit.CppBindings.Runtime.SecondWrapper.csproj" />
+  </ItemGroup>
+
+</Project>

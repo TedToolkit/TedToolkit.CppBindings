@@ -3,8 +3,18 @@
     <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="HexaGen.CppAst" Version="1.0.8" />
-    <PackageVersion Include="HexaGen.Runtime" Version="1.1.24" />
+    <PackageVersion Include="ClangSharp" Version="21.1.8.3" />
+    <PackageVersion Include="libclang.runtime.linux-x64" Version="21.1.8" />
+    <PackageVersion Include="libclang.runtime.win-x64" Version="21.1.8" />
+    <PackageVersion Include="libClangSharp.runtime.linux-x64" Version="21.1.8.2" />
+    <PackageVersion Include="libClangSharp.runtime.win-x64" Version="21.1.8.2" />
+    <PackageVersion Include="ModularPipelines" Version="3.2.8" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp" Version="5.0.0" />
+    <PackageVersion Include="Microsoft.CodeAnalysis.CSharp.Workspaces" Version="5.0.0" />
     <PackageVersion Include="Sourcy.DotNet" Version="1.1.1" />
+    <PackageVersion Include="TedToolkit.RoslynHelper" Version="2026.6.19" />
+    <PackageVersion Include="TUnit" Version="1.54.0" />
+    <PackageVersion Include="TUnit.Mocks" Version="1.54.0" />
+    <PackageVersion Include="ZString" Version="2.6.0" />
   </ItemGroup>
 </Project>

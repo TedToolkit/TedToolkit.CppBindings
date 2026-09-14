@@ -9,7 +9,13 @@ temp
 *.g.cs
 
 output
+out
 
 artifacts
 
 Build/appsettings.json
+
+.editorconfig
+
+cmake-build*
+.idea/

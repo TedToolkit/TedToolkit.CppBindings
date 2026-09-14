@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\externals\TedToolkit\props\CodeAnalysis.props"/>
+  <Import Project="..\..\..\externals\TedToolkit\props\NugetPackage.props"/>
+
+  <PropertyGroup>
+    <Title>C++ bindings Runtime</Title>
+    <Description>Provider-neutral ownership and metadata contracts for generated C++ bindings.</Description>
+    <RootNamespace>TedToolkit.CppBindings</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA1032;CA1040;CA1708;CA1711;CS8981;RCS1194</NoWarn>
+  </PropertyGroup>
+
+</Project>

@@ -1,0 +1,60 @@
+<Solution>
+  <Folder Name="/build/">
+    <Project Path="Build/Build.csproj">
+      <Build Project="false" />
+    </Project>
+  </Folder>
+  <Folder Name="/SolutionItems/">
+    <File Path=".github\workflows\build.yml" />
+    <File Path=".gitignore" />
+    <File Path="Directory.Build.props" />
+    <File Path="Directory.Packages.props" />
+    <File Path="README.md" />
+  </Folder>
+  <Folder Name="/src/" />
+  <Folder Name="/src/shared/">
+    <Project Path="src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj" />
+    <Project Path="src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj" />
+  </Folder>
+  <Folder Name="/src/providers/cgal/">
+    <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj" />
+    <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj" />
+    <Project Path="src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj" />
+  </Folder>
+  <Folder Name="/src/providers/fcl/">
+    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/TedToolkit.CppBindings.Fcl.Generator.csproj" />
+    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Runtime/TedToolkit.CppBindings.Fcl.Runtime.csproj" />
+    <Project Path="src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/TedToolkit.CppBindings.Fcl.Windows.csproj" />
+  </Folder>
+  <Folder Name="/src/providers/manifold/">
+    <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj" />
+    <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Runtime/TedToolkit.CppBindings.Manifold.Runtime.csproj" />
+    <Project Path="src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj" />
+  </Folder>
+  <Folder Name="/src/providers/occt/">
+    <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj" />
+    <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj" />
+    <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj" />
+    <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.SourceGenerators/TedToolkit.CppBindings.Occt.SourceGenerators.csproj" />
+  </Folder>
+  <Folder Name="/src/tools/">
+    <Project Path="src/tools/TedToolkit.CppBindings.Analyzers/TedToolkit.CppBindings.Analyzers.csproj" />
+    <Project Path="src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj" />
+  </Folder>
+  <Folder Name="/tests/">
+    <Project Path="tests/TedToolkit.CppBindings.Cgal.Generator.Tests/TedToolkit.CppBindings.Cgal.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Cgal.Runtime.Tests/TedToolkit.CppBindings.Cgal.Runtime.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Fcl.Generator.Tests/TedToolkit.CppBindings.Fcl.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Fcl.Runtime.Tests/TedToolkit.CppBindings.Fcl.Runtime.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Generator.Tests/TedToolkit.CppBindings.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Manifold.Generator.Tests/TedToolkit.CppBindings.Manifold.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Manifold.Runtime.Tests/TedToolkit.CppBindings.Manifold.Runtime.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Occt.Generator.Tests/TedToolkit.CppBindings.Occt.Generator.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Runtime.FirstWrapper/TedToolkit.CppBindings.Runtime.FirstWrapper.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Runtime.NativeIntegration/TedToolkit.CppBindings.Runtime.NativeIntegration.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Runtime.SecondWrapper/TedToolkit.CppBindings.Runtime.SecondWrapper.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Runtime.Tests/TedToolkit.CppBindings.Runtime.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Windows.Generation.Tool.Tests/TedToolkit.CppBindings.Windows.Generation.Tool.Tests.csproj" />
+    <Project Path="tests/TedToolkit.CppBindings.Analyzers.Tests/TedToolkit.CppBindings.Analyzers.Tests.csproj" />
+  </Folder>
+</Solution>

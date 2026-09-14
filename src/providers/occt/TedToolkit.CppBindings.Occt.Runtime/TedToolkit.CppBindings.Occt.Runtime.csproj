@@ -1,0 +1,15 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+  <PropertyGroup>
+    <Title>OCCT bindings Runtime</Title>
+    <Description>OCCT intrusive ownership, borrowed handle layout, and native exception projection.</Description>
+    <RootNamespace>TedToolkit.CppBindings.Occt</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA1032;CA1040;CA1708;CA1711;CS8981;RCS1194</NoWarn>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
+  </ItemGroup>
+</Project>

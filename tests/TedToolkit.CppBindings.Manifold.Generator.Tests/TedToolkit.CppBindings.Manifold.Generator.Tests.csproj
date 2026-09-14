@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net10.0</TargetFramework>
+    <LangVersion>14.0</LangVersion>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+    <NoWarn>$(NoWarn);RCS0058</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\providers\manifold\TedToolkit.CppBindings.Manifold.Generator\TedToolkit.CppBindings.Manifold.Generator.csproj" />
+    <PackageReference Include="TUnit" />
+  </ItemGroup>
+
+</Project>

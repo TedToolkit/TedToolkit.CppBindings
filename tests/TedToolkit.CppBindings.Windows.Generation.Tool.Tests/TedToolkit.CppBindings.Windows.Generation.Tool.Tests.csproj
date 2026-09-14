@@ -1,0 +1,11 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <TestingPlatformDotnetTestSupport>true</TestingPlatformDotnetTestSupport>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\src\tools\TedToolkit.CppBindings.Windows.Generation.Tool\TedToolkit.CppBindings.Windows.Generation.Tool.csproj" />
+    <PackageReference Include="TUnit" />
+  </ItemGroup>
+</Project>

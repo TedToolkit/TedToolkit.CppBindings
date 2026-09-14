@@ -1,0 +1,17 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <Nullable>enable</Nullable>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <IsPackable>false</IsPackable>
+    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <UseSharedCompilation>false</UseSharedCompilation>
+    <NuGetAudit>false</NuGetAudit>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="TedToolkit.CppBindings.Analyzers" Version="1.0.0" PrivateAssets="all" />
+    <PackageReference Include="TedToolkit.CppBindings.Runtime" Version="1.0.0" Condition="'$(UseRuntime)' != 'false'" />
+    <PackageReference Include="TedToolkit.CppBindings.Occt.Runtime" Version="1.0.0" Condition="'$(UseOcct)' == 'true'" />
+  </ItemGroup>
+</Project>

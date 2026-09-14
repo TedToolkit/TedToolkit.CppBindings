@@ -1,0 +1,24 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net10.0</TargetFramework>
+    <AssemblyName>TedToolkit.CppBindings.Windows.Generation.Tool</AssemblyName>
+    <RootNamespace>TedToolkit.CppBindings.Windows.Generation.Tool</RootNamespace>
+    <IsPackable>false</IsPackable>
+    <NoWarn>$(NoWarn);ConsoleUse</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\providers\cgal\TedToolkit.CppBindings.Cgal.Generator\TedToolkit.CppBindings.Cgal.Generator.csproj" />
+    <ProjectReference Include="..\..\providers\fcl\TedToolkit.CppBindings.Fcl.Generator\TedToolkit.CppBindings.Fcl.Generator.csproj" />
+    <ProjectReference Include="..\..\providers\manifold\TedToolkit.CppBindings.Manifold.Generator\TedToolkit.CppBindings.Manifold.Generator.csproj" />
+    <ProjectReference Include="..\..\providers\occt\TedToolkit.CppBindings.Occt.Generator\TedToolkit.CppBindings.Occt.Generator.csproj" />
+    <PackageReference Include="ModularPipelines" />
+  </ItemGroup>
+
+  <ItemGroup>
+    <InternalsVisibleTo Include="TedToolkit.CppBindings.Windows.Generation.Tool.Tests" />
+  </ItemGroup>
+
+</Project>

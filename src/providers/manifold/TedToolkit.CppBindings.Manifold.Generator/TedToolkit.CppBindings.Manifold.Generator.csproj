@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <Title>TedToolkit C++ Bindings Manifold Generator</Title>
+    <Description>Generate deterministic finite-profile managed and native Manifold bindings.</Description>
+    <TargetFramework>net10.0</TargetFramework>
+    <NoWarn>$(NoWarn);RCS0048;RCS0058;RCS1050;RCS1141;RCS1163;RCS1250;RCS1253;RCS1260;SA1600;SA1611;SA1615;CA1859;CA1869;IDE0060</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
+    <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\manifold-3.5.2-windows-v2\" />
+    <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\manifold-3.5.2-windows-v2\" />
+  </ItemGroup>
+
+</Project>

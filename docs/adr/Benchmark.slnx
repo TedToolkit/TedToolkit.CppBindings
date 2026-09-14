@@ -1,0 +1,6 @@
+<Solution>
+  <Folder Name="/ADR-001-native-release-binding/">
+    <Project Path="ADR-001-native-release-binding/benchmark/TedToolkit.Occt.NativeRelease.Benchmarks.csproj" />
+    <Project Path="ADR-001-native-release-binding/compatibility/TedToolkit.Occt.NativeRelease.NetStandard20Probe.csproj" />
+  </Folder>
+</Solution>

@@ -1,0 +1,32 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Nullable>enable</Nullable>
+    <IsPackable>false</IsPackable>
+    <VcpkgRoot>$(VCPKG_ROOT)</VcpkgRoot>
+    <GeneratedSourceDirectory Condition="'$(GeneratedSourceDirectory)' == ''">$(MSBuildThisFileDirectory)..\..\output\generated\csharp</GeneratedSourceDirectory>
+  </PropertyGroup>
+  <ItemGroup>
+    <Compile Include="Program.cs" />
+    <Compile Include="$(GeneratedSourceDirectory)\*.cs" Link="Generated\%(Filename)%(Extension)" />
+    <ProjectReference Include="..\..\src\providers\occt\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
+  </ItemGroup>
+  <ItemGroup Condition="'$(LayoutOnly)' != 'true'">
+    <None Include="..\..\output\generated\native-build\Release\ted_toolkit_occt.dll"
+          CopyToOutputDirectory="PreserveNewest">
+      <Link>ted_toolkit_occt.dll</Link>
+    </None>
+    <None Include="$(VcpkgRoot)\installed\x64-windows\bin\*.dll"
+          CopyToOutputDirectory="PreserveNewest"
+          Link="%(Filename)%(Extension)" />
+  </ItemGroup>
+  <Target Name="GeneratePreparedLayoutChecks" BeforeTargets="CoreCompile">
+    <Exec Command="pwsh -NoProfile -File &quot;$(MSBuildProjectDirectory)\GenerateLayoutChecks.ps1&quot; -InputPath &quot;$(GeneratedSourceDirectory)\native-layouts.json&quot; -OutputPath &quot;$(IntermediateOutputPath)PreparedLayoutProbe.g.cs&quot;" />
+    <ItemGroup>
+      <Compile Include="$(IntermediateOutputPath)PreparedLayoutProbe.g.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

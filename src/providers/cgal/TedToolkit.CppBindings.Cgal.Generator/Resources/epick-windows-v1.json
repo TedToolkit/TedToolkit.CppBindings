@@ -1,0 +1,44 @@
+{
+  "schemaVersion": 1,
+  "profileId": "epick-windows-v1",
+  "cgalVersion": "6.2",
+  "vcpkgBuiltinBaseline": "30ef65cad98f08e7197c9a1656fbd871bcb72f2d",
+  "triplet": "x64-windows",
+  "kernelAlias": "CGAL::Exact_predicates_inexact_constructions_kernel",
+  "selectedHeaders": [
+    "CGAL/Exact_predicates_inexact_constructions_kernel.h",
+    "CGAL/Point_2.h",
+    "CGAL/Point_3.h",
+    "CGAL/Segment_2.h",
+    "CGAL/intersections.h",
+    "CGAL/squared_distance_2.h",
+    "CGAL/squared_distance_3.h"
+  ],
+  "declarations": [
+    { "id": "point-2", "nativeSignature": "Kernel::Point_2", "header": "CGAL/Point_2.h", "kind": "closed-class-template", "evidence": "class Point_2 :", "isRoot": true },
+    { "id": "point-2-cartesian", "nativeSignature": "Kernel::Point_2::cartesian(int) const", "header": "CGAL/Point_2.h", "kind": "method", "evidence": "cartesian(int i) const", "dependencies": ["point-2"] },
+    { "id": "point-2-constructor", "nativeSignature": "Kernel::Point_2(double,double)", "header": "CGAL/Point_2.h", "kind": "constructor", "evidence": "Point_2(", "dependencies": ["point-2"] },
+    { "id": "point-2-x", "nativeSignature": "Kernel::Point_2::x() const", "header": "CGAL/Point_2.h", "kind": "method", "evidence": "x() const", "dependencies": ["point-2"] },
+    { "id": "point-2-y", "nativeSignature": "Kernel::Point_2::y() const", "header": "CGAL/Point_2.h", "kind": "method", "evidence": "y() const", "dependencies": ["point-2"] },
+    { "id": "point-3", "nativeSignature": "Kernel::Point_3", "header": "CGAL/Point_3.h", "kind": "closed-class-template", "evidence": "class Point_3 :", "isRoot": true },
+    { "id": "point-3-cartesian", "nativeSignature": "Kernel::Point_3::cartesian(int) const", "header": "CGAL/Point_3.h", "kind": "method", "evidence": "cartesian(int i) const", "dependencies": ["point-3"] },
+    { "id": "point-3-constructor", "nativeSignature": "Kernel::Point_3(double,double,double)", "header": "CGAL/Point_3.h", "kind": "constructor", "evidence": "Point_3(", "dependencies": ["point-3"] },
+    { "id": "point-3-x", "nativeSignature": "Kernel::Point_3::x() const", "header": "CGAL/Point_3.h", "kind": "method", "evidence": "x() const", "dependencies": ["point-3"] },
+    { "id": "point-3-y", "nativeSignature": "Kernel::Point_3::y() const", "header": "CGAL/Point_3.h", "kind": "method", "evidence": "y() const", "dependencies": ["point-3"] },
+    { "id": "point-3-z", "nativeSignature": "Kernel::Point_3::z() const", "header": "CGAL/Point_3.h", "kind": "method", "evidence": "z() const", "dependencies": ["point-3"] },
+    { "id": "segment-2", "nativeSignature": "Kernel::Segment_2", "header": "CGAL/Segment_2.h", "kind": "closed-class-template", "evidence": "class Segment_2 :", "isRoot": true, "dependencies": ["point-2"] },
+    { "id": "segment-2-constructor", "nativeSignature": "Kernel::Segment_2(Kernel::Point_2,Kernel::Point_2)", "header": "CGAL/Segment_2.h", "kind": "constructor", "evidence": "Segment_2(", "dependencies": ["segment-2", "point-2"] },
+    { "id": "segment-2-source", "nativeSignature": "Kernel::Segment_2::source() const", "header": "CGAL/Segment_2.h", "kind": "method", "evidence": "source() const", "dependencies": ["segment-2", "point-2"] },
+    { "id": "segment-2-target", "nativeSignature": "Kernel::Segment_2::target() const", "header": "CGAL/Segment_2.h", "kind": "method", "evidence": "target() const", "dependencies": ["segment-2", "point-2"] },
+    { "id": "segment-2-squared-length", "nativeSignature": "Kernel::Segment_2::squared_length() const", "header": "CGAL/Segment_2.h", "kind": "method", "evidence": "squared_length() const", "dependencies": ["segment-2"] },
+    { "id": "squared-distance-2", "nativeSignature": "CGAL::squared_distance(Kernel::Point_2,Kernel::Point_2)", "header": "CGAL/squared_distance_2.h", "kind": "closed-free-function-template", "evidence": "squared_distance(", "isRoot": true, "dependencies": ["point-2"] },
+    { "id": "squared-distance-3", "nativeSignature": "CGAL::squared_distance(Kernel::Point_3,Kernel::Point_3)", "header": "CGAL/squared_distance_3.h", "kind": "closed-free-function-template", "evidence": "squared_distance(", "isRoot": true, "dependencies": ["point-3"] },
+    { "id": "intersection-segment-2", "nativeSignature": "CGAL::intersection(Kernel::Segment_2,Kernel::Segment_2)", "header": "CGAL/intersections.h", "kind": "closed-free-function-template", "evidence": "intersection(", "isRoot": true, "dependencies": ["segment-2", "point-2"] }
+  ],
+  "toolchain": {
+    "msvc": "19.51.36256",
+    "cmake": "4.4.3",
+    "gmp": "6.3.0#5",
+    "mpfr": "4.2.2#1"
+  }
+}

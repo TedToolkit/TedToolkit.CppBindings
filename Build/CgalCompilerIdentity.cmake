@@ -1,0 +1,3 @@
+file(
+    WRITE "${CMAKE_BINARY_DIR}/compiler-identity.txt"
+    "${CMAKE_CXX_COMPILER_ID}|${CMAKE_CXX_COMPILER_VERSION}|${CMAKE_CXX_COMPILER}\n")

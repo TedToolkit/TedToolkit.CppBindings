@@ -1,0 +1,19 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <Title>Manifold bindings Runtime</Title>
+    <Description>Manifold native diagnostic ownership and exception contracts.</Description>
+    <RootNamespace>TedToolkit.CppBindings.Manifold</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <NoWarn>$(NoWarn);CA1032;CA1711;RCS0021;RCS0029;RCS0058;RCS1060;RCS1140;RCS1141;RCS1194;RCS1231;RCS1253;SA1128;SA1402;SA1502;SA1600;SA1611</NoWarn>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
+  </ItemGroup>
+
+</Project>

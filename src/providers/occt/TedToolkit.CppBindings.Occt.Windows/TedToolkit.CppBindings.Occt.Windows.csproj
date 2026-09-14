@@ -1,0 +1,47 @@
+<Project Sdk="Microsoft.NET.Sdk">
+
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+
+  <PropertyGroup>
+    <AssemblyName>TedToolkit.CppBindings.Occt.Windows</AssemblyName>
+    <RootNamespace>TedToolkit.CppBindings.Occt</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Title>TedToolkit OCCT Windows bindings</Title>
+    <Description>Generated OCCT bindings for the pinned Windows x64 native artifact.</Description>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\..\output\generated</GeneratedRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="..\TedToolkit.CppBindings.Occt.Runtime\TedToolkit.CppBindings.Occt.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\tools\TedToolkit.CppBindings.Windows.Generation.Tool\TedToolkit.CppBindings.Windows.Generation.Tool.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      OutputItemType="WindowsGenerationHost" />
+    <None Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_occt.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
+          Pack="true" PackagePath="runtimes\win-x64\native" />
+  </ItemGroup>
+
+  <Target Name="GenerateWindowsBindings"
+          BeforeTargets="CoreCompile">
+    <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Occt.Windows." />
+    <Error Condition="'@(WindowsGenerationHost)' == ''" Text="The Windows generation host output was not resolved." />
+    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider occt --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; --vcpkg-root &quot;$(VcpkgRoot)&quot; --configuration &quot;$(Configuration)&quot;" />
+  </Target>
+
+  <Target Name="IncludeGeneratedWindowsBindings"
+          BeforeTargets="CoreCompile"
+          DependsOnTargets="GenerateWindowsBindings">
+    <ItemGroup>
+      <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
+    </ItemGroup>
+  </Target>
+</Project>

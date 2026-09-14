@@ -1,0 +1,16 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <OutputType>Exe</OutputType>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifier>win-x64</RuntimeIdentifier>
+    <ImplicitUsings>enable</ImplicitUsings>
+    <Nullable>enable</Nullable>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PackageVersionUnderTest Condition="'$(PackageVersionUnderTest)' == ''">1.0.0</PackageVersionUnderTest>
+  </PropertyGroup>
+  <ItemGroup>
+    <PackageReference Include="TedToolkit.CppBindings.Occt.Windows" Version="$(PackageVersionUnderTest)" />
+    <PackageReference Include="TedToolkit.CppBindings.Analyzers" Version="$(PackageVersionUnderTest)" PrivateAssets="all" />
+  </ItemGroup>
+</Project>
