@@ -6,16 +6,15 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
-    <PackageVersionUnderTest Condition="'$(PackageVersionUnderTest)' == ''">1.0.0</PackageVersionUnderTest>
     <DefineConstants Condition="'$(IncludeManifold)' == 'true'">$(DefineConstants);INCLUDE_MANIFOLD</DefineConstants>
     <DefineConstants Condition="'$(IncludeFcl)' == 'true'">$(DefineConstants);INCLUDE_FCL</DefineConstants>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="TedToolkit.CppBindings.Cgal.Windows" Version="$(PackageVersionUnderTest)" />
-    <PackageReference Include="TedToolkit.CppBindings.Occt.Windows" Version="$(PackageVersionUnderTest)" />
+    <PackageReference Include="TedToolkit.CppBindings.Cgal.Windows" />
+    <PackageReference Include="TedToolkit.CppBindings.Occt.Windows" />
     <PackageReference Condition="'$(IncludeManifold)' == 'true'"
-                      Include="TedToolkit.CppBindings.Manifold.Windows" Version="$(PackageVersionUnderTest)" />
+                      Include="TedToolkit.CppBindings.Manifold.Windows" />
     <PackageReference Condition="'$(IncludeFcl)' == 'true'"
-                      Include="TedToolkit.CppBindings.Fcl.Windows" Version="$(PackageVersionUnderTest)" />
+                      Include="TedToolkit.CppBindings.Fcl.Windows" />
   </ItemGroup>
 </Project>

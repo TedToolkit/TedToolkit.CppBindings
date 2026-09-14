@@ -4,12 +4,16 @@ param(
     [string]$Source,
 
     [Parameter(Mandatory = $true)]
-    [string]$Output
+    [string]$Output,
+
+    [Parameter(Mandatory = $true)]
+    [string]$CompilerIdentityOutput
 )
 
 $ErrorActionPreference = 'Stop'
 $sourcePath = [System.IO.Path]::GetFullPath($Source)
 $outputPath = [System.IO.Path]::GetFullPath($Output)
+$compilerIdentityOutputPath = [System.IO.Path]::GetFullPath($CompilerIdentityOutput)
 $outputDirectory = Split-Path -Parent $outputPath
 $sourceDirectory = Split-Path -Parent $sourcePath
 $hasher = [System.Security.Cryptography.SHA256]::Create()
@@ -44,6 +48,14 @@ if ($LASTEXITCODE -ne 0) {
 if (-not (Test-Path -LiteralPath $outputPath -PathType Leaf)) {
     throw "Native fixture was not produced at '$outputPath'."
 }
+
+$compilerIdentitySource = Join-Path $buildDirectory 'compiler-identity.txt'
+if (-not (Test-Path -LiteralPath $compilerIdentitySource -PathType Leaf)) {
+    throw "Native fixture compiler identity was not produced at '$compilerIdentitySource'."
+}
+$compilerIdentityOutputDirectory = Split-Path -Parent $compilerIdentityOutputPath
+New-Item -ItemType Directory -Path $compilerIdentityOutputDirectory -Force | Out-Null
+Copy-Item -LiteralPath $compilerIdentitySource -Destination $compilerIdentityOutputPath -Force
 
 @('gmp-10.dll', 'mpfr-6.dll') | ForEach-Object {
     $dependency = Join-Path $vcpkgRoot "installed/x64-windows/bin/$_"

@@ -33,6 +33,20 @@ $expectedProjects = @(
     'src/providers/occt/TedToolkit.CppBindings.Occt.SourceGenerators/TedToolkit.CppBindings.Occt.SourceGenerators.csproj'
 )
 
+$allProjectPaths = @(& git -C $repository ls-files --cached --others --exclude-standard -- '*.csproj')
+if ($LASTEXITCODE -ne 0) {
+    throw 'Could not enumerate repository project files.'
+}
+foreach ($relativePath in $allProjectPaths) {
+    $projectPath = Join-Path $repository $relativePath
+    [xml] $projectDocument = Get-Content -LiteralPath $projectPath -Raw
+    $versionDeclarations = @($projectDocument.SelectNodes(
+        "//*[local-name()='Version'] | //@Version | //@VersionOverride"))
+    if ($versionDeclarations.Count -ne 0) {
+        throw "Project '$relativePath' declares a version; use Directory.Packages.props or Directory.Build.props."
+    }
+}
+
 function Get-ProjectOwner {
     param([Parameter(Mandatory)][string] $Path)
 
@@ -520,6 +534,7 @@ foreach ($relativePath in $expectedProjects) {
     ProviderProjects = $providerProjects.Count
     ToolProjects = $toolProjects.Count
     VerifiedProjects = $expectedProjects.Count
+    VersionFreeProjects = $allProjectPaths.Count
     ProjectReferences = $referenceCount
     ProviderIdentifiers = $providerIdentifiers
     NegativeCases = 7

@@ -1,5 +1,9 @@
 <Project>
   <PropertyGroup>
-    <ManagePackageVersionsCentrally>false</ManagePackageVersionsCentrally>
+    <ManagePackageVersionsCentrally>true</ManagePackageVersionsCentrally>
+    <PackageVersionUnderTest Condition="'$(PackageVersionUnderTest)' == ''">1.0.0</PackageVersionUnderTest>
   </PropertyGroup>
+  <ItemGroup>
+    <PackageVersion Include="TedToolkit.CppBindings.Cgal.Generator" Version="$(PackageVersionUnderTest)" />
+  </ItemGroup>
 </Project>
