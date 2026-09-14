@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VerifyNativePackageClosure.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'PackageVerification.psm1') -Force
 
 $repository = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $candidateRevision = (& git -C $repository rev-parse HEAD).Trim()
@@ -109,7 +110,9 @@ foreach ($name in $projects.Keys) {
     if ($LASTEXITCODE -ne 0) { throw "Manifold packaging failed for '$name'." }
 }
 
-$package = Join-Path $feed 'TedToolkit.CppBindings.Manifold.Windows.1.0.0.nupkg'
+$artifacts = Get-UniformNuGetPackageArtifacts -Feed $feed -PackageIds @($projects.Keys)
+$packageVersion = $artifacts.Version
+$package = $artifacts.Paths['TedToolkit.CppBindings.Manifold.Windows']
 $extractRoot = Join-Path $report 'package-content'
 [IO.Compression.ZipFile]::ExtractToDirectory($package, $extractRoot)
 $nativeRoot = Join-Path $extractRoot 'runtimes/win-x64/native'
@@ -169,7 +172,8 @@ $packages = Join-Path $report 'packages'
 & dotnet run --project (Join-Path $consumer 'PackageConsumer.csproj') -c Release `
     --disable-build-servers --no-launch-profile -p:NuGetAudit=false `
     "-p:RestoreSources=$feed" -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json `
-    "-p:RestorePackagesPath=$packages" -- $resultPath *> (Join-Path $report 'consumer-run.log')
+    "-p:RestorePackagesPath=$packages" "-p:PackageVersionUnderTest=$packageVersion" `
+    -- $resultPath *> (Join-Path $report 'consumer-run.log')
 if ($LASTEXITCODE -ne 0) { throw 'The isolated real Manifold package consumer failed.' }
 
 $result = Get-Content -LiteralPath $resultPath -Raw | ConvertFrom-Json
@@ -200,7 +204,7 @@ if (@($assets.libraries.Keys | Where-Object { $_ -match 'Generator|Clang|Occt|Cg
     throw 'The standalone Manifold consumer restored another provider or generation tooling.'
 }
 foreach ($name in $projects.Keys) {
-    if (-not $assets.libraries.ContainsKey("$name/1.0.0")) {
+    if (-not $assets.libraries.ContainsKey("$name/$packageVersion")) {
         throw "The consumer did not restore expected local package '$name'."
     }
 }
@@ -213,6 +217,7 @@ if ($candidateRevision -cne $endingRevision -or ($startingStatus -join "`n") -cn
 
 [ordered]@{
     CandidateRevision = $candidateRevision
+    PackageVersion = $packageVersion
     ProfileId = $generation.ProfileId
     ManagedHash = (Get-FileHash -LiteralPath $managedBinding -Algorithm SHA256).Hash
     NativeHash = (Get-FileHash -LiteralPath $packedBinding -Algorithm SHA256).Hash

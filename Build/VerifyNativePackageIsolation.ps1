@@ -17,6 +17,7 @@ if ($unsupportedProviders.Count -ne 0) {
 }
 Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VerifyNativePackageClosure.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'PackageVerification.psm1') -Force
 
 function Remove-OwnedDirectory {
     param(
@@ -613,24 +614,32 @@ try {
         }
     }
 
+    $providerPackageIds = @(
+        'TedToolkit.CppBindings.Occt.Windows',
+        'TedToolkit.CppBindings.Cgal.Windows')
+    if ($manifoldRoot) { $providerPackageIds += 'TedToolkit.CppBindings.Manifold.Windows' }
+    if ($fclRoot) { $providerPackageIds += 'TedToolkit.CppBindings.Fcl.Windows' }
+    $artifacts = Get-UniformNuGetPackageArtifacts -Feed $packages -PackageIds $providerPackageIds
+    $packageVersion = $artifacts.Version
+
     $extractRoot = Join-Path $report 'x'
     $occtExtract = Join-Path $extractRoot 'occt'
     $cgalExtract = Join-Path $extractRoot 'cgal'
     [IO.Compression.ZipFile]::ExtractToDirectory(
-        (Join-Path $packages 'TedToolkit.CppBindings.Occt.Windows.1.0.0.nupkg'), $occtExtract)
+        $artifacts.Paths['TedToolkit.CppBindings.Occt.Windows'], $occtExtract)
     [IO.Compression.ZipFile]::ExtractToDirectory(
-        (Join-Path $packages 'TedToolkit.CppBindings.Cgal.Windows.1.0.0.nupkg'), $cgalExtract)
+        $artifacts.Paths['TedToolkit.CppBindings.Cgal.Windows'], $cgalExtract)
     $manifoldExtract = $null
     if ($manifoldRoot) {
         $manifoldExtract = Join-Path $extractRoot 'manifold'
         [IO.Compression.ZipFile]::ExtractToDirectory(
-            (Join-Path $packages 'TedToolkit.CppBindings.Manifold.Windows.1.0.0.nupkg'), $manifoldExtract)
+            $artifacts.Paths['TedToolkit.CppBindings.Manifold.Windows'], $manifoldExtract)
     }
     $fclExtract = $null
     if ($fclRoot) {
         $fclExtract = Join-Path $extractRoot 'fcl'
         [IO.Compression.ZipFile]::ExtractToDirectory(
-            (Join-Path $packages 'TedToolkit.CppBindings.Fcl.Windows.1.0.0.nupkg'), $fclExtract)
+            $artifacts.Paths['TedToolkit.CppBindings.Fcl.Windows'], $fclExtract)
     }
 
     $visualStudioRoot = Join-Path ([Environment]::GetFolderPath('ProgramFiles')) 'Microsoft Visual Studio'
@@ -686,6 +695,7 @@ try {
         --disable-build-servers --no-launch-profile "-p:RestoreSources=$packages" `
         -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json `
         "-p:RestorePackagesPath=$restoreCache" -p:NuGetAudit=false `
+        "-p:PackageVersionUnderTest=$packageVersion" `
         "-p:IncludeManifold=$($Providers -contains 'Manifold')" `
         "-p:IncludeFcl=$($Providers -contains 'Fcl')" -- $consumerResultPath *> $consumerLog
     if ($LASTEXITCODE -ne 0) { throw "The combined provider consumer failed; see $consumerLog" }
@@ -711,6 +721,7 @@ try {
         CandidateRevision = $candidateRevision
         ProviderBuildOrder = @($Providers)
         CompilerWorkers = 1
+        PackageVersion = $packageVersion
         ProviderVerification = $providerVerification
         Packages = @(Get-ChildItem -LiteralPath $packages -Filter '*.nupkg' -File | ForEach-Object {
             [ordered]@{ Name = $_.Name; Hash = (Get-FileHash -LiteralPath $_.FullName -Algorithm SHA256).Hash }

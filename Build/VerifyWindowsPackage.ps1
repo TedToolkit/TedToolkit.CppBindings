@@ -8,6 +8,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VerifyNativePackageClosure.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'PackageVerification.psm1') -Force
 $repository = Split-Path $PSScriptRoot -Parent
 if (-not $ReportDirectory) {
     $ReportDirectory = Join-Path $repository ('out/verification/wp-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
@@ -44,7 +45,9 @@ foreach ($name in $projects.Keys) {
     & dotnet @arguments *> $log
     if ($LASTEXITCODE -ne 0) { throw "Packaging failed; build the Release solution first. See $log" }
 }
-$package = Join-Path $feed 'TedToolkit.CppBindings.Occt.Windows.1.0.0.nupkg'
+$artifacts = Get-UniformNuGetPackageArtifacts -Feed $feed -PackageIds @($projects.Keys)
+$packageVersion = $artifacts.Version
+$package = $artifacts.Paths['TedToolkit.CppBindings.Occt.Windows']
 $archive = [IO.Compression.ZipFile]::OpenRead($package)
 try {
     if ($null -eq $archive.GetEntry('lib/net8.0/TedToolkit.CppBindings.Occt.Windows.dll')) { throw 'Generated managed binding assembly is absent.' }
@@ -88,13 +91,17 @@ Copy-Item -LiteralPath (Join-Path $repository 'tests/TedToolkit.CppBindings.Occt
 $buildLog = Join-Path $report 'consumer-build.log'
 $arguments = @('build', (Join-Path $consumer 'WindowsPackageConsumer.csproj'), '-c', 'Release', '--disable-build-servers', '--maxcpucount:1',
     ('-p:RestoreSources=' + $feed), '-p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json',
-    ('-p:RestorePackagesPath=' + (Join-Path $report 'packages')), '-p:NuGetAudit=false')
+    ('-p:RestorePackagesPath=' + (Join-Path $report 'packages')), '-p:NuGetAudit=false',
+    "-p:PackageVersionUnderTest=$packageVersion")
 & dotnet @arguments *> $buildLog
 if ($LASTEXITCODE -ne 0) { throw "Windows package consumer failed to compile; see $buildLog" }
 $assets = Get-Content -LiteralPath (Join-Path $consumer 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
 foreach ($name in $projects.Keys) {
-    $hash = [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes((Join-Path $feed "$name.1.0.0.nupkg"))))
-    if ($assets.libraries["$name/1.0.0"].sha512 -cne $hash) { throw "Consumer did not restore the just-built $name package." }
+    $hash = [Convert]::ToBase64String(
+        [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($artifacts.Paths[$name])))
+    if ($assets.libraries["$name/$packageVersion"].sha512 -cne $hash) {
+        throw "Consumer did not restore the just-built $name package."
+    }
 }
 if (@($assets.libraries.Keys | Where-Object { $_ -match 'Generator|Clang' }).Count -ne 0) { throw 'Runtime consumer acquired generation tooling.' }
 $runLog = Join-Path $report 'consumer-run.log'
@@ -106,7 +113,10 @@ if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath $runLog -Raw) -notmatch 's
     Passed = $true
     NativeHash = $packedHash
     VerifiedClosure = $verifiedClosure
-    Packages = @($projects.Keys | ForEach-Object { Get-FileHash -LiteralPath (Join-Path $feed "$_.1.0.0.nupkg") -Algorithm SHA256 | Select-Object Path,Hash })
+    PackageVersion = $packageVersion
+    Packages = @($projects.Keys | ForEach-Object {
+        Get-FileHash -LiteralPath $artifacts.Paths[$_] -Algorithm SHA256 | Select-Object Path,Hash
+    })
     BuildArguments = $arguments
     RunLog = $runLog
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $report 'result.json') -Encoding utf8

@@ -5,6 +5,7 @@ $ErrorActionPreference = 'Stop'
 Set-StrictMode -Version Latest
 Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VerifyNativePackageClosure.psm1') -Force
+Import-Module (Join-Path $PSScriptRoot 'PackageVerification.psm1') -Force
 
 $repository = [IO.Path]::GetFullPath((Split-Path $PSScriptRoot -Parent))
 $candidateRevision = (& git -C $repository rev-parse HEAD).Trim()
@@ -87,7 +88,9 @@ foreach ($name in $projects.Keys) {
     }
 }
 
-$package = Join-Path $feed 'TedToolkit.CppBindings.Cgal.Windows.1.0.0.nupkg'
+$artifacts = Get-UniformNuGetPackageArtifacts -Feed $feed -PackageIds @($projects.Keys)
+$packageVersion = $artifacts.Version
+$package = $artifacts.Paths['TedToolkit.CppBindings.Cgal.Windows']
 $dependencyManifest = Get-Content -LiteralPath (Join-Path $generated 'native-dependencies.json') `
     -Raw | ConvertFrom-Json
 $outputManifestPath = Join-Path $generated 'output-manifest.json'
@@ -225,7 +228,8 @@ Assert-NativeBuildDiskBoundary -Path $report -Phase 'CGAL consumer execution' `
     --disable-build-servers --no-launch-profile `
     "-p:RestoreSources=$feed" `
     -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json `
-    "-p:RestorePackagesPath=$packages" -p:NuGetAudit=false -- $consumerResultPath *> $consumerLog
+    "-p:RestorePackagesPath=$packages" -p:NuGetAudit=false `
+    "-p:PackageVersionUnderTest=$packageVersion" -- $consumerResultPath *> $consumerLog
 if ($LASTEXITCODE -ne 0) {
     throw "The isolated CGAL Windows consumer failed; see $consumerLog"
 }
@@ -233,10 +237,10 @@ if ($LASTEXITCODE -ne 0) {
 $assets = Get-Content -LiteralPath (Join-Path $consumer 'obj/project.assets.json') `
     -Raw | ConvertFrom-Json -AsHashtable
 foreach ($name in $projects.Keys) {
-    $packagePath = Join-Path $feed "$name.1.0.0.nupkg"
+    $packagePath = $artifacts.Paths[$name]
     $expectedHash = [Convert]::ToBase64String(
         [Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($packagePath)))
-    if ($assets.libraries["$name/1.0.0"].sha512 -cne $expectedHash) {
+    if ($assets.libraries["$name/$packageVersion"].sha512 -cne $expectedHash) {
         throw "The consumer did not restore the just-built '$name' package."
     }
 }
@@ -282,6 +286,7 @@ if ($endingRevision -cne $candidateRevision `
     OutputManifestHash = $outputManifestHash
     CacheCorruptionRecovery = $true
     PackageDependencies = @($projects.Keys)
+    PackageVersion = $packageVersion
     ManagedAssemblyHash = $managedHash
     NativeLibraryHash = $nativeHash
     WindowsPackageHash = (Get-FileHash -LiteralPath $package -Algorithm SHA256).Hash

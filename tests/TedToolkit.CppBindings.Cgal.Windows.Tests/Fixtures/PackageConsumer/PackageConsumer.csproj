@@ -6,8 +6,9 @@
     <ImplicitUsings>enable</ImplicitUsings>
     <Nullable>enable</Nullable>
     <TreatWarningsAsErrors>true</TreatWarningsAsErrors>
+    <PackageVersionUnderTest Condition="'$(PackageVersionUnderTest)' == ''">1.0.0</PackageVersionUnderTest>
   </PropertyGroup>
   <ItemGroup>
-    <PackageReference Include="TedToolkit.CppBindings.Cgal.Windows" Version="1.0.0" />
+    <PackageReference Include="TedToolkit.CppBindings.Cgal.Windows" Version="$(PackageVersionUnderTest)" />
   </ItemGroup>
 </Project>
