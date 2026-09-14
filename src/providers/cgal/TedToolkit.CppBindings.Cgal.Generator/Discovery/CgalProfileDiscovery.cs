@@ -282,7 +282,7 @@ internal static partial class CgalProfileDiscovery
             mpfr.Version,
             mpfr.Abi,
             ReadCMakeVersion(),
-            ReadMsvcVersion());
+            ReadMsvcToolsetVersion());
     }
 
     private static (string Version, string Abi) ReadPackage(string status, string package, string triplet)
@@ -342,7 +342,7 @@ internal static partial class CgalProfileDiscovery
         return firstLine["cmake version ".Length..].Trim();
     }
 
-    private static string ReadMsvcVersion()
+    private static string ReadMsvcToolsetVersion()
     {
         var root = Path.Combine(Environment.GetFolderPath(Environment.SpecialFolder.ProgramFiles), "Microsoft Visual Studio");
         var compiler = Directory.EnumerateFiles(root, "cl.exe", SearchOption.AllDirectories)
@@ -351,10 +351,10 @@ internal static partial class CgalProfileDiscovery
             .OrderDescending(StringComparer.OrdinalIgnoreCase)
             .FirstOrDefault()
             ?? throw new InvalidOperationException("The x64 MSVC compiler was not found.");
-        var version = FileVersionInfo.GetVersionInfo(compiler).FileVersion
-            ?? throw new InvalidOperationException("The MSVC file version was not available.");
-        var components = version.Split('.');
-        return string.Join('.', components.Take(3));
+        var match = MsvcToolsetPathRegex().Match(compiler);
+        return match.Success
+            ? match.Groups["version"].Value
+            : throw new InvalidOperationException($"The MSVC toolset version could not be resolved from '{compiler}'.");
     }
 
     private static void ValidateToolchain(CgalProfileManifest profile, CgalResolvedToolchain actual)
@@ -369,8 +369,17 @@ internal static partial class CgalProfileDiscovery
         }
 
         throw new InvalidOperationException(
-            $"Installed CGAL toolchain does not match finite profile '{profile.ProfileId}'.");
+            $"Installed CGAL toolchain does not match finite profile '{profile.ProfileId}': "
+            + $"expected CGAL {profile.CgalVersion}, GMP {profile.Toolchain.Gmp}, MPFR {profile.Toolchain.Mpfr}, "
+            + $"CMake {profile.Toolchain.Cmake}, and MSVC toolset {profile.Toolchain.Msvc}; "
+            + $"found CGAL {actual.Cgal}, GMP {actual.Gmp}, MPFR {actual.Mpfr}, CMake {actual.CMake}, "
+            + $"and MSVC toolset {actual.Msvc}.");
     }
+
+    [GeneratedRegex(
+        @"[\\/]VC[\\/]Tools[\\/]MSVC[\\/](?<version>[^\\/]+)[\\/]bin[\\/]Hostx64[\\/]x64[\\/]cl\.exe$",
+        RegexOptions.IgnoreCase | RegexOptions.CultureInvariant)]
+    private static partial Regex MsvcToolsetPathRegex();
 
     [GeneratedRegex("(?m)^\\s*#\\s*include\\s*[<\\\"](?<path>CGAL/[^>\\\"]+)[>\\\"]", RegexOptions.CultureInvariant)]
     private static partial Regex CgalInclude();

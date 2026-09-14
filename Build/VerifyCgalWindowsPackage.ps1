@@ -114,7 +114,7 @@ if (($managedIds -join "`n") -cne ($nativeIds -join "`n")) {
     throw 'Managed and native declaration inventories do not identify the same admitted surface.'
 }
 if ($buildToolchain.CompilerId -cne 'MSVC' `
-    -or $buildToolchain.CompilerVersion -cne "$($generationResult.Toolchain.Msvc).0" `
+    -or $buildToolchain.ToolsetVersion -cne $generationResult.Toolchain.Msvc `
     -or $buildToolchain.CMake -cne $generationResult.Toolchain.CMake) {
     throw 'The native build toolchain does not match the locked profile identity.'
 }

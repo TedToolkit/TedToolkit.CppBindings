@@ -146,6 +146,21 @@ internal sealed class WindowsGenerationCoordinatorTests
     }
 
     [Test]
+    [Arguments("19.51.36256.0")]
+    [Arguments("19.51.36257.0")]
+    public async Task Should_accept_compiler_servicing_variants_from_the_locked_toolset_Async(
+        string compilerVersion)
+    {
+        WindowsGenerationCoordinator.EnsureCompilerMatchesLockedProfile(
+            "MSVC",
+            compilerVersion,
+            "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36231\\bin\\Hostx64\\x64\\cl.exe",
+            "14.51.36231");
+
+        await Assert.That(compilerVersion).StartsWith("19.51.");
+    }
+
+    [Test]
     [Arguments("fcl")]
     [Arguments("manifold")]
     public async Task Should_reject_a_mismatched_locked_compiler_without_publishing_outputs_Async(string provider)
@@ -166,7 +181,7 @@ internal sealed class WindowsGenerationCoordinatorTests
 
         await Assert.That(failure).IsNotNull();
         await Assert.That(failure!.Message)
-            .IsEqualTo("CMake selected compiler 'MSVC|19.51.36256.0|C:\\fake\\cl.exe', which does not match the locked profile.");
+            .IsEqualTo("CMake selected compiler 'MSVC|19.51.36256.0|C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36230\\bin\\Hostx64\\x64\\cl.exe' with MSVC toolset '14.51.36230', which does not match locked toolset '14.51.36231'.");
         await Assert.That(File.Exists(fixture.NativeLibrary)).IsFalse();
         await Assert.That(File.Exists(fixture.Stamp)).IsFalse();
     }
@@ -828,8 +843,8 @@ internal sealed class WindowsGenerationCoordinatorTests
                 WindowsGenerationCoordinator.EnsureCompilerMatchesLockedProfile(
                     "MSVC",
                     "19.51.36256.0",
-                    "C:\\fake\\cl.exe",
-                    "19.51.36257");
+                    "C:\\Program Files\\Microsoft Visual Studio\\18\\Enterprise\\VC\\Tools\\MSVC\\14.51.36230\\bin\\Hostx64\\x64\\cl.exe",
+                    "14.51.36231");
             }
 
             var native = Path.Combine(output, "native-build", configuration, descriptor.NativeLibraryName);

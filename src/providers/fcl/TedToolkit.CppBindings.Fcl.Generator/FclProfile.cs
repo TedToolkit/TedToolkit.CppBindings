@@ -24,7 +24,7 @@ public sealed record FclProfile
         ["Octomap"] = "1.10.0",
         ["VcpkgBuiltinBaseline"] = "30ef65cad98f08e7197c9a1656fbd871bcb72f2d",
         ["CMake"] = "4.4.3",
-        ["Msvc"] = "19.51.36257",
+        ["Msvc"] = "14.51.36231",
         ["Triplet"] = "x64-windows",
     });
 

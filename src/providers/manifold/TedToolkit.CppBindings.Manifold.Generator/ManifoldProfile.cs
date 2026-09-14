@@ -32,8 +32,8 @@ public sealed record ManifoldProfile
     /// <summary>Gets the locked CMake version.</summary>
     public string CMake { get; init; } = "4.4.3";
 
-    /// <summary>Gets the locked MSVC version.</summary>
-    public string Msvc { get; init; } = "19.51.36257";
+    /// <summary>Gets the locked MSVC toolset version.</summary>
+    public string Msvc { get; init; } = "14.51.36231";
 
     /// <summary>Gets the unique binding module basename.</summary>
     public string NativeLibraryBaseName { get; init; } = "ted_toolkit_cpp_bindings_manifold";

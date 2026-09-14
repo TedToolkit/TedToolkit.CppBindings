@@ -17,7 +17,7 @@ namespace TedToolkit.CppBindings.Cgal.Generator;
 /// <param name="Mpfr">The installed MPFR version and port revision.</param>
 /// <param name="MpfrAbi">The installed MPFR vcpkg ABI.</param>
 /// <param name="CMake">The resolved CMake version.</param>
-/// <param name="Msvc">The resolved MSVC compiler version.</param>
+/// <param name="Msvc">The resolved MSVC toolset version.</param>
 public sealed record CgalResolvedToolchain(
     string Cgal,
     string CgalAbi,

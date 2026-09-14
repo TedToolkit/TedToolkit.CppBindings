@@ -13,7 +13,7 @@ namespace TedToolkit.CppBindings.Cgal.Generator;
 public sealed record CgalToolchainIdentity
 {
     /// <summary>
-    /// Gets the required MSVC compiler version.
+    /// Gets the required MSVC toolset version.
     /// </summary>
     public required string Msvc { get; init; }
 

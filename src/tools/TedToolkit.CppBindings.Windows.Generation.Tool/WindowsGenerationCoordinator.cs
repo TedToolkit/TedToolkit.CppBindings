@@ -441,7 +441,7 @@ internal sealed partial class WindowsGenerationCoordinator(
         }
 
         var expected = await ReadExpectedToolchainAsync(descriptor, output, cancellationToken).ConfigureAwait(false);
-        EnsureCompilerMatchesLockedProfile(parts[0], parts[1], parts[2], expected.Msvc);
+        EnsureCompilerMatchesLockedProfile(parts[0], parts[1], parts[2], expected.MsvcToolset);
 
         var cmake = await processes.RunAsync(
                 "cmake",
@@ -1075,13 +1075,17 @@ internal sealed partial class WindowsGenerationCoordinator(
         string compilerId,
         string compilerVersion,
         string compilerPath,
-        string expectedMsvc)
+        string expectedMsvcToolset)
     {
+        var actualMsvcToolset = string.Equals(compilerId, "MSVC", StringComparison.Ordinal)
+            ? GetToolsetVersion(compilerPath)
+            : null;
         if (!string.Equals(compilerId, "MSVC", StringComparison.Ordinal)
-            || !string.Equals(compilerVersion, $"{expectedMsvc}.0", StringComparison.Ordinal))
+            || !string.Equals(actualMsvcToolset, expectedMsvcToolset, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"CMake selected compiler '{compilerId}|{compilerVersion}|{compilerPath}', which does not match the locked profile.");
+                $"CMake selected compiler '{compilerId}|{compilerVersion}|{compilerPath}' with MSVC toolset "
+                + $"'{actualMsvcToolset ?? "not-applicable"}', which does not match locked toolset '{expectedMsvcToolset}'.");
         }
     }
 
@@ -1141,7 +1145,7 @@ internal sealed partial class WindowsGenerationCoordinator(
 
     private sealed record OutputManifestEntry(string Path, long Length, string Hash);
 
-    private sealed record ToolchainExpectation(string Msvc, string Cmake);
+    private sealed record ToolchainExpectation(string MsvcToolset, string Cmake);
 
     private sealed record OcctToolchain(string Ninja, string Compiler, string EnvironmentScript);
 

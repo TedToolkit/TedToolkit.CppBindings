@@ -125,7 +125,7 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(firstProvider.Inventory.Toolchain.Cgal).IsEqualTo("6.2");
         await Assert.That(firstProvider.Inventory.Toolchain.CgalAbi).IsNotEmpty();
         await Assert.That(firstProvider.Inventory.Toolchain.CMake).IsEqualTo("4.4.3");
-        await Assert.That(firstProvider.Inventory.Toolchain.Msvc).IsEqualTo("19.51.36257");
+        await Assert.That(firstProvider.Inventory.Toolchain.Msvc).IsEqualTo("14.51.36231");
         await Assert.That(Hash(firstManaged)).IsEqualTo(Hash(secondManaged));
         await Assert.That(Hash(firstNative)).IsEqualTo(Hash(secondNative));
         await Assert.That(firstPlan.NativeExports.SequenceEqual(secondPlan.NativeExports, StringComparer.Ordinal)).IsTrue();
@@ -283,7 +283,7 @@ internal sealed class CgalGenerationProviderTests
         var legacy = current with
         {
             ProfileId = "epick-windows-v1",
-            Toolchain = current.Toolchain with { Msvc = "19.51.36256", },
+            Toolchain = current.Toolchain with { Msvc = "14.51.36230", },
         };
         var file = WriteProfile(legacy);
         InvalidOperationException? failure = null;
@@ -301,9 +301,9 @@ internal sealed class CgalGenerationProviderTests
         }
 
         await Assert.That(current.ProfileId).IsEqualTo("epick-windows-v2");
-        await Assert.That(current.Toolchain.Msvc).IsEqualTo("19.51.36257");
+        await Assert.That(current.Toolchain.Msvc).IsEqualTo("14.51.36231");
         await Assert.That(legacy.ProfileId).IsEqualTo("epick-windows-v1");
-        await Assert.That(legacy.Toolchain.Msvc).IsEqualTo("19.51.36256");
+        await Assert.That(legacy.Toolchain.Msvc).IsEqualTo("14.51.36230");
         await Assert.That(failure).IsNotNull();
         await Assert.That(failure!.Message)
             .Contains("Installed CGAL toolchain does not match finite profile 'epick-windows-v1'");
