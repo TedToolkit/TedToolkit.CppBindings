@@ -84,6 +84,7 @@ internal static class ProviderGenerators
                 CSharpFolder = outputRoot.CreateSubdirectory("csharp"),
                 CppFolder = outputRoot.CreateSubdirectory("cpp"),
                 CommandLineArgs = ["-w",],
+                NativeLibraryVersion = new(8, 0, 1),
             }).BuildAsync().ConfigureAwait(false);
         cancellationToken.ThrowIfCancellationRequested();
         var summary = await pipeline.RunAsync().ConfigureAwait(false);
@@ -106,9 +107,10 @@ internal static class ProviderGenerators
             CSharpNamespace = "TedToolkit.CppBindings.Cgal",
             NativeLibraryBaseName = "ted_toolkit_cpp_bindings_cgal",
             CppVersion = 20,
+            NativeLibraryVersion = new(6, 2),
         };
         var provider = new CgalGenerationProvider(options);
-        var plan = await provider.CreatePlanAsync(cancellationToken).ConfigureAwait(false);
+        var plan = await provider.CreatePlanAsync(options, cancellationToken).ConfigureAwait(false);
         var builder = Pipeline.CreateBuilder();
         builder.Options.PrintLogo = false;
         builder.Options.PrintResults = false;
@@ -153,9 +155,10 @@ internal static class ProviderGenerators
             CSharpNamespace = "TedToolkit.CppBindings.Fcl",
             NativeLibraryBaseName = "ted_toolkit_cpp_bindings_fcl",
             CppVersion = 20,
+            NativeLibraryVersion = new(0, 7, 0),
         };
         var provider = new FclGenerationProvider(vcpkgRoot);
-        var plan = await provider.CreatePlanAsync(cancellationToken).ConfigureAwait(false);
+        var plan = await provider.CreatePlanAsync(options, cancellationToken).ConfigureAwait(false);
         var builder = Pipeline.CreateBuilder();
         builder.Options.PrintLogo = false;
         builder.Options.PrintResults = false;
@@ -197,8 +200,9 @@ internal static class ProviderGenerators
             CSharpNamespace = "TedToolkit.CppBindings.Manifold",
             NativeLibraryBaseName = provider.Profile.NativeLibraryBaseName,
             CppVersion = 20,
+            NativeLibraryVersion = new(3, 5, 2),
         };
-        var plan = await provider.CreatePlanAsync(cancellationToken).ConfigureAwait(false);
+        var plan = await provider.CreatePlanAsync(options, cancellationToken).ConfigureAwait(false);
         var builder = Pipeline.CreateBuilder();
         builder.Options.PrintLogo = false;
         builder.Options.PrintResults = false;

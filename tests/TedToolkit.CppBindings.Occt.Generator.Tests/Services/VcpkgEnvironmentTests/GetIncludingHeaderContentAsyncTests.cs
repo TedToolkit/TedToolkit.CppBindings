@@ -17,6 +17,21 @@ internal sealed class GetIncludingHeaderContentAsyncTests
     private const string TRIPLET = "x64-windows";
 
     /// <summary>
+    /// Verifies the exact installed OCCT package version is read from vcpkg status.
+    /// </summary>
+    /// <returns>A task that completes when the assertion has finished.</returns>
+    [Test]
+    [NotInParallel("VCPKG_ROOT")]
+    public async Task Should_read_the_installed_package_version_Async()
+    {
+        using var fixture = await VcpkgFixture.CreateAsync("Target").ConfigureAwait(false);
+        var environment = new VcpkgEnvironment();
+
+        await Assert.That(environment.GetInstalledPackageVersion(TRIPLET, "opencascade"))
+            .IsEqualTo(new Version(8, 0, 1));
+    }
+
+    /// <summary>
     /// Verifies only distinct requested public headers enter the relay.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
@@ -181,6 +196,13 @@ internal sealed class GetIncludingHeaderContentAsyncTests
             var root = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
             var occtIncludeRoot = Directory.CreateDirectory(
                 Path.Combine(root.FullName, "installed", TRIPLET, "include", "opencascade"));
+            var vcpkgMetadataRoot = Directory.CreateDirectory(
+                Path.Combine(root.FullName, "installed", "vcpkg"));
+            await File.WriteAllTextAsync(
+                    Path.Combine(vcpkgMetadataRoot.FullName, "status"),
+                    $"Package: opencascade\nVersion: 8.0.1\nArchitecture: {TRIPLET}\nStatus: install ok installed\n\n"
+                    + $"Package: opencascade\nFeature: freetype\nArchitecture: {TRIPLET}\nStatus: install ok installed\n\n")
+                .ConfigureAwait(false);
 
             foreach (var headerStem in headerStems)
             {

@@ -23,6 +23,7 @@ internal static class Program
         "plan_failure", "plan_cancellation", "module_failure", "render_failure", "render_cancellation",
         "unsupported_rid", "overlapping_roots", "invalid_basename", "namespace_keyword", "device_path", "reserved_export",
         "export_trailing_lf", "duplicate_export_trailing_lf", "reserved_export_trailing_lf", "namespace_trailing_lf",
+        "unsupported_native_version",
     ];
 
     private static async Task Main(string[] args)
@@ -52,6 +53,7 @@ internal static class Program
             if (scenario == "invalid_basename") options = options with { NativeLibraryBaseName = "fixture.dll" };
             if (scenario == "namespace_keyword") options = options with { CSharpNamespace = "Independent.class" };
             if (scenario == "namespace_trailing_lf") options = options with { CSharpNamespace = "Independent.Generated\n" };
+            if (scenario == "unsupported_native_version") options = options with { NativeLibraryVersion = new(1, 2, 3) };
             var provider = new Provider(scenario);
             Exception? failure = null;
             try
@@ -92,11 +94,13 @@ internal static class Program
                     "overlapping_roots" => "distinct and non-overlapping",
                     "namespace_keyword" or "namespace_trailing_lf" => "portable C# identifiers",
                     "invalid_basename" => "basename",
+                    "unsupported_native_version" => "does not support exact native library version selection",
                     _ => throw new InvalidOperationException("Unclassified negative proof."),
                 };
                 Require(failure!.ToString().Contains(expectedFailure, StringComparison.OrdinalIgnoreCase), $"Wrong failure for {scenario}: {failure}");
                 var registrationFailure = scenario is "unsupported_rid" or "overlapping_roots" or "invalid_basename" or "namespace_keyword" or "namespace_trailing_lf";
-                Require(provider.PlanCalls == (registrationFailure || scenario == "module_failure" ? 0 : 1), $"Wrong plan count for {scenario}.");
+                var skipsLegacyPlan = registrationFailure || scenario is "module_failure" or "unsupported_native_version";
+                Require(provider.PlanCalls == (skipsLegacyPlan ? 0 : 1), $"Wrong plan count for {scenario}.");
                 Require(provider.Prepared != (registrationFailure || scenario == "module_failure"), $"Wrong preparation result for {scenario}.");
             }
             if (valid)
@@ -134,6 +138,7 @@ internal static class Program
             results.Add(new { scenario, passed = true, provider.PlanCalls, provider.RenderCalls, failure = failure?.ToString() });
         }
 
+        await VerifyLegacyInterfaceProviderAsync(root);
         await VerifyNestedSemanticSnapshotAsync();
 
         var first = Manifest(Path.Combine(root, "valid"));
@@ -231,6 +236,50 @@ internal static class Program
         await File.WriteAllTextAsync(Path.Combine(root, "result.json"), JsonSerializer.Serialize(new { passed = true, count = results.Count, results, manifest = first }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
+    private static async Task VerifyLegacyInterfaceProviderAsync(string root)
+    {
+        var folder = Directory.CreateDirectory(Path.Combine(root, "legacy-interface-provider"));
+        var options = new GenerationOptions
+        {
+            CSharpFolder = folder.CreateSubdirectory("managed"),
+            CppFolder = folder.CreateSubdirectory("native"),
+        };
+        var sentinels = new[]
+        {
+            Path.Combine(options.CSharpFolder.FullName, "stale.txt"),
+            Path.Combine(options.CppFolder.FullName, "stale.txt"),
+        };
+        foreach (var sentinel in sentinels)
+        {
+            await File.WriteAllTextAsync(sentinel, "preserve");
+        }
+
+        var implementation = new LegacyInterfaceProvider();
+        IGenerationProvider provider = implementation;
+        var plan = await provider.CreatePlanAsync(options, CancellationToken.None);
+        Require(plan.CSharpSources.Count == 0 && plan.CppSources.Count == 0 && plan.NativeExports.Count == 0,
+            "The default interface overload did not delegate to the legacy plan method.");
+        Require(implementation.PlanCalls == 1, "The legacy plan method was not called exactly once.");
+
+        Exception? failure = null;
+        try
+        {
+            _ = await provider.CreatePlanAsync(
+                options with { NativeLibraryVersion = new(1, 2, 3) },
+                CancellationToken.None);
+        }
+        catch (NotSupportedException exception)
+        {
+            failure = exception;
+        }
+
+        Require(failure is not null
+            && failure.Message.Contains("does not support exact native library version selection", StringComparison.Ordinal),
+            "The default interface overload did not reject an unsupported exact version.");
+        Require(implementation.PlanCalls == 1, "Unsupported selection reached the legacy plan method.");
+        Require(sentinels.All(File.Exists), "Direct plan creation modified existing output.");
+    }
+
     private static async Task VerifyNestedSemanticSnapshotAsync()
     {
         var provider = new Provider("valid");
@@ -278,6 +327,20 @@ internal static class Program
     internal static void Require(bool condition, string message)
     {
         if (!condition) throw new InvalidOperationException(message);
+    }
+}
+
+public sealed class LegacyInterfaceProvider : IGenerationProvider
+{
+    public IReadOnlyList<Type> PreparationModules { get; } = [];
+
+    public int PlanCalls { get; private set; }
+
+    public Task<GenerationPlan> CreatePlanAsync(CancellationToken cancellationToken)
+    {
+        cancellationToken.ThrowIfCancellationRequested();
+        PlanCalls++;
+        return Task.FromResult(new GenerationPlan([], [], []));
     }
 }
 

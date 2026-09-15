@@ -46,8 +46,13 @@ public static class BindingCMakeProjectEmitter
         {
             ValidateFact(package.Name, nameof(definition));
             ValidateFact(package.Arguments, nameof(definition));
-            _ = builder.Append("find_package(").Append(package.Name).Append(' ')
-                .Append(package.Arguments).Append(")\n");
+            _ = builder.Append("find_package(").Append(package.Name).Append(' ');
+            if (package.Version is not null)
+            {
+                _ = builder.Append(package.Version).Append(" EXACT ");
+            }
+
+            _ = builder.Append(package.Arguments).Append(")\n");
         }
 
         if (definition.Packages.Count > 0)

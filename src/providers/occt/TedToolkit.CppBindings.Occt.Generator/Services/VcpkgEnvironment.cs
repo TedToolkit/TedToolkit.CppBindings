@@ -6,6 +6,7 @@
 // -----------------------------------------------------------------------
 
 using System.Diagnostics.CodeAnalysis;
+using System.Text.RegularExpressions;
 
 using Cysharp.Text;
 
@@ -23,6 +24,8 @@ internal sealed class VcpkgEnvironment : IVcpkgEnvironment
     private const string INSTALLED_FOLDER_NAME = "installed";
 
     private const string OCCT_FOLDER_NAME = "opencascade";
+
+    private static readonly Regex StatusBlockSeparator = new("\\r?\\n\\r?\\n", RegexOptions.CultureInvariant);
 
     /// <inheritdoc/>
     public string GetRoot()
@@ -50,6 +53,58 @@ internal sealed class VcpkgEnvironment : IVcpkgEnvironment
     public string GetOcctIncludeFolder(string triplet)
     {
         return Path.Combine(GetIncludeFolder(triplet), OCCT_FOLDER_NAME);
+    }
+
+    /// <summary>
+    /// Gets the installed native package version for one triplet.
+    /// </summary>
+    /// <param name="triplet">The installed vcpkg triplet.</param>
+    /// <param name="packageName">The vcpkg package name.</param>
+    /// <returns>The installed native package version.</returns>
+    /// <exception cref="InvalidOperationException">The package status is absent, malformed, or ambiguous.</exception>
+    internal Version GetInstalledPackageVersion(string triplet, string packageName)
+    {
+        ArgumentException.ThrowIfNullOrWhiteSpace(triplet);
+        ArgumentException.ThrowIfNullOrWhiteSpace(packageName);
+        var statusPath = Path.Combine(GetRoot(), INSTALLED_FOLDER_NAME, "vcpkg", "status");
+        if (!File.Exists(statusPath))
+        {
+            throw new InvalidOperationException($"The vcpkg installed-package status file '{statusPath}' was not found.");
+        }
+
+        var blocks = StatusBlockSeparator.Split(File.ReadAllText(statusPath))
+            .Where(block => HasStatusValue(block, "Package", packageName)
+                && HasStatusValue(block, "Architecture", triplet)
+                && HasStatusValue(block, "Status", "install ok installed")
+                && ReadStatusValue(block, "Version") is not null)
+            .ToArray();
+        if (blocks.Length != 1)
+        {
+            throw new InvalidOperationException(
+                $"Expected one installed {packageName} package for triplet '{triplet}', found {blocks.Length}.");
+        }
+
+        var versionText = ReadStatusValue(blocks[0], "Version");
+        if (Version.TryParse(versionText, out var version))
+        {
+            return version;
+        }
+
+        throw new InvalidOperationException(
+            $"Installed {packageName} version '{versionText}' is not a supported native library version.");
+    }
+
+    private static bool HasStatusValue(string block, string name, string value)
+    {
+        return string.Equals(ReadStatusValue(block, name), value, StringComparison.Ordinal);
+    }
+
+    private static string? ReadStatusValue(string block, string name)
+    {
+        const StringSplitOptions Options = StringSplitOptions.RemoveEmptyEntries | StringSplitOptions.TrimEntries;
+        var prefix = name + ":";
+        return block.Split(['\r', '\n',], Options)
+            .FirstOrDefault(line => line.StartsWith(prefix, StringComparison.Ordinal))?[prefix.Length..].Trim();
     }
 
     /// <inheritdoc/>

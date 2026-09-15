@@ -59,6 +59,15 @@ public record GenerationOptions
     public int CppVersion { get; set; } = 17;
 
     /// <summary>
+    /// Gets the exact version required for the provider's primary native library.
+    /// </summary>
+    /// <remarks>
+    /// When unset, the provider leaves native-library version selection to its existing resolver.
+    /// Providers with finite profiles reject a version that does not match the selected profile.
+    /// </remarks>
+    public Version? NativeLibraryVersion { get; init; }
+
+    /// <summary>
     /// Gets the validated native library artifact basename.
     /// </summary>
     /// <returns>The validated basename.</returns>

@@ -22,7 +22,10 @@ It references only this package and needs neither a provider assembly nor friend
 `CSharpNamespace`, and a portable `NativeLibraryBaseName`. The built-in target is `win-x64`, with
 Cdecl function pointers and the MSVC native ABI. Other runtime identifiers are rejected before
 preparation. `CppVersion` defaults to 17 and is available to the provider's native build description;
-`IsInternal` is available to its managed emitters.
+`IsInternal` is available to its managed emitters. Set `NativeLibraryVersion` to a `System.Version`
+when the provider's primary native package must match exactly. Leaving it unset preserves the
+provider's existing unversioned resolver behavior; it does not promise that every resolver chooses
+the globally newest release.
 
 ## Provider contract
 
@@ -31,6 +34,12 @@ preparation. `CppVersion` defaults to 17 and is available to the provider's nati
 inventories and one exact native export order. Both sides must derive their slot indexes from that
 same order. Preparation and renderer failures or cancellation propagate instead of becoming an
 empty successful plan.
+
+`AddCppGenerators` calls the options-aware `CreatePlanAsync(options, cancellationToken)` overload.
+Existing providers that only implement the cancellation-only overload remain source compatible.
+Their default options-aware implementation delegates when `NativeLibraryVersion` is unset and
+throws `NotSupportedException` when an exact version is requested, so a provider cannot silently
+ignore the selection.
 
 Each `GeneratedSource` has an output-relative path and an asynchronous streaming renderer. Write to
 the supplied `TextWriter`, observe cancellation, and neither retain nor dispose the writer. A provider

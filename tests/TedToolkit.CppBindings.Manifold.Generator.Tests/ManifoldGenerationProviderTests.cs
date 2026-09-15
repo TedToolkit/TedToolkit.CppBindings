@@ -68,6 +68,11 @@ internal sealed class ManifoldGenerationProviderTests
             await Assert.That(source.Value).IsEqualTo(secondNative[source.Key]);
         }
 
+        await Assert.That(firstNative["CMakeLists.txt"])
+            .Contains("find_package(manifold CONFIG REQUIRED)");
+        await Assert.That(firstNative["CMakeLists.txt"])
+            .DoesNotContain(" EXACT ");
+
         var managed = firstManaged["Manifold.Bindings.g.cs"];
         var operation = firstManaged["ManifoldOp.g.cs"];
         var native = firstNative["ManifoldProfileAdapter.cpp"];
@@ -103,6 +108,54 @@ internal sealed class ManifoldGenerationProviderTests
             "TedToolkit.CppBindings.Manifold.Generator.ManifoldGenerationPlan")).IsNull();
         await Assert.That(typeof(ManifoldGenerationProvider).Assembly.GetType(
             "TedToolkit.CppBindings.Manifold.Generator.ManifoldSourceRenderer")).IsNull();
+    }
+
+    /// <summary>
+    /// Verifies exact Manifold selection is emitted and a different native version is rejected.
+    /// </summary>
+    /// <returns>A task that completes when version assertions finish.</returns>
+    [Test]
+    public async Task Should_require_the_exact_selected_native_version_Async()
+    {
+        var provider = new ManifoldGenerationProvider(GetVcpkgRoot());
+        var outputRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
+        try
+        {
+            var options = CreateVersionOptions(new(3, 5, 2), outputRoot);
+            var plan = await provider.CreatePlanAsync(options, CancellationToken.None).ConfigureAwait(false);
+            var native = await RenderAsync(plan.CppSources).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(options.CSharpFolder.FullName, "stale.txt"), "managed")
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(options.CppFolder.FullName, "stale.txt"), "native")
+                .ConfigureAwait(false);
+            InvalidOperationException? failure = null;
+            try
+            {
+                _ = await provider.CreatePlanAsync(
+                        options with { NativeLibraryVersion = new(3, 5, 1) },
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException exception)
+            {
+                failure = exception;
+            }
+
+            await Assert.That(native["CMakeLists.txt"])
+                .Contains("find_package(manifold 3.5.2 EXACT CONFIG REQUIRED)");
+            await Assert.That(failure).IsNotNull();
+            await Assert.That(failure!.Message).Contains("does not match finite profile");
+            await Assert.That(await File.ReadAllTextAsync(
+                    Path.Combine(options.CSharpFolder.FullName, "stale.txt")).ConfigureAwait(false))
+                .IsEqualTo("managed");
+            await Assert.That(await File.ReadAllTextAsync(
+                    Path.Combine(options.CppFolder.FullName, "stale.txt")).ConfigureAwait(false))
+                .IsEqualTo("native");
+        }
+        finally
+        {
+            outputRoot.Delete(true);
+        }
     }
 
     /// <summary>
@@ -331,6 +384,16 @@ internal sealed class ManifoldGenerationProviderTests
     private static DirectoryInfo GetVcpkgRoot()
     {
         return new(Environment.GetEnvironmentVariable("VCPKG_ROOT") is { Length: > 0, } root ? root : @"C:\vcpkg");
+    }
+
+    private static GenerationOptions CreateVersionOptions(Version version, DirectoryInfo outputRoot)
+    {
+        return new()
+        {
+            CSharpFolder = outputRoot.CreateSubdirectory("managed"),
+            CppFolder = outputRoot.CreateSubdirectory("native"),
+            NativeLibraryVersion = version,
+        };
     }
 
     private static string[] ReadPackageHeaders(DirectoryInfo vcpkgRoot)

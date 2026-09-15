@@ -12,4 +12,5 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// </summary>
 /// <param name="Name">The package name.</param>
 /// <param name="Arguments">The arguments following the package name.</param>
-public sealed record BindingCMakePackageDefinition(string Name, string Arguments);
+/// <param name="Version">The optional exact package version.</param>
+public sealed record BindingCMakePackageDefinition(string Name, string Arguments, Version? Version = null);

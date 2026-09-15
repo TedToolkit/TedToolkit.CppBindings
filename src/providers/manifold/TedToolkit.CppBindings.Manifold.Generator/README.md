@@ -16,3 +16,8 @@ represents vcpkg port revision zero, so a nonzero `Port-Version` is rejected. Re
 passes the vcpkg root explicitly. The parameterless provider constructor resolves `VCPKG_ROOT` and
 fails before plan creation when it is not configured. Generated managed and native sources are a
 matched pair and must be built together.
+
+Set `GenerationOptions.NativeLibraryVersion = new Version(3, 5, 2)` to require that primary
+Manifold version exactly; generated CMake then uses `find_package(manifold 3.5.2 EXACT ...)`. A
+different version is rejected by the finite profile before publication. Leaving the option unset
+retains the existing unversioned package lookup.

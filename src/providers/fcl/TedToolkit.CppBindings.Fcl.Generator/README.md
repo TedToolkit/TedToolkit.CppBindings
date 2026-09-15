@@ -11,6 +11,11 @@ Repository generation constructs `FclGenerationProvider` with the vcpkg root and
 `GenerationPlan` through Shared's `AddCppGenerators` pipeline. The parameterless constructor resolves
 `VCPKG_ROOT` and fails before plan creation when it is not configured.
 
+Set `GenerationOptions.NativeLibraryVersion = new Version(0, 7, 0)` to require the profile's native
+FCL version exactly. Generated CMake then uses `find_package(fcl 0.7.0 EXACT ...)`. The vcpkg port
+revision `#5` remains a separate installed-profile check. Leaving the option unset retains the
+existing unversioned package lookup.
+
 FCL supplies only its finite profile facts, header inventory, native algorithm bodies, and CMake
 dependency policy. Shared owns buffer pointer/length projection, validation, conditional `Owned<T>`
 construction, composite-result assembly, native-error catches, function-table slots, bootstrap source,

@@ -44,6 +44,32 @@ internal sealed class BindingCMakeProjectEmitterTests
     }
 
     /// <summary>
+    /// Verifies an explicit native package version is emitted as an exact structured requirement.
+    /// </summary>
+    /// <returns>A task that completes when versioned and unversioned requirements are checked.</returns>
+    [Test]
+    public async Task Should_emit_only_configured_package_versions_as_exact_requirements_Async()
+    {
+        var versioned = new BindingCMakeProjectDefinition(
+            "GeometryBindings",
+            "geometry_bindings",
+            20,
+            [new("Geometry", "CONFIG REQUIRED", new Version(8, 0, 1)),]);
+        var unversioned = new BindingCMakeProjectDefinition(
+            "GeometryBindings",
+            "geometry_bindings",
+            20,
+            [new("Geometry", "CONFIG REQUIRED"),]);
+
+        var versionedProject = BindingCMakeProjectEmitter.Render(versioned, ["Geometry.cpp",]);
+        var unversionedProject = BindingCMakeProjectEmitter.Render(unversioned, ["Geometry.cpp",]);
+
+        await Assert.That(versionedProject).Contains("find_package(Geometry 8.0.1 EXACT CONFIG REQUIRED)");
+        await Assert.That(unversionedProject).Contains("find_package(Geometry CONFIG REQUIRED)");
+        await Assert.That(unversionedProject).DoesNotContain(" EXACT ");
+    }
+
+    /// <summary>
     /// Verifies bounded family/depth grouping and variable-shaped dependency facts.
     /// </summary>
     /// <returns>A task that completes when the emitted unity groups are checked.</returns>

@@ -98,12 +98,12 @@ internal static class FclFiniteProfile
             ]);
     }
 
-    internal static BindingNativeProject CreateNativeProject(FclProfile profile)
+    internal static BindingNativeProject CreateNativeProject(FclProfile profile, Version? nativeLibraryVersion)
     {
         return new(
             "CMakeLists.txt",
             (sources, writer, token) => writer.WriteAsync(
-                RenderCMake(profile.NativeLibraryBaseName, sources).AsMemory(), token));
+                RenderCMake(profile.NativeLibraryBaseName, sources, nativeLibraryVersion).AsMemory(), token));
     }
 
     private const string NativePreamble = """
@@ -230,9 +230,13 @@ internal static class FclFiniteProfile
         *timeOfContact = result.is_collide ? result.time_of_contact : 1.0;
         """;
 
-    private static string RenderCMake(string libraryBaseName, IReadOnlyList<string> sources)
+    private static string RenderCMake(
+        string libraryBaseName,
+        IReadOnlyList<string> sources,
+        Version? nativeLibraryVersion)
     {
         var sourceList = string.Join(" ", sources);
+        var versionRequirement = nativeLibraryVersion is null ? "" : $" {nativeLibraryVersion} EXACT";
         return $$"""
                  cmake_minimum_required(VERSION 3.28)
                  project(TedToolkitCppBindingsFcl LANGUAGES CXX)
@@ -240,7 +244,7 @@ internal static class FclFiniteProfile
                  file(WRITE "${CMAKE_BINARY_DIR}/compiler-identity.txt"
                      "${CMAKE_CXX_COMPILER_ID}|${CMAKE_CXX_COMPILER_VERSION}|${CMAKE_CXX_COMPILER}")
 
-                 find_package(fcl CONFIG REQUIRED)
+                 find_package(fcl{{versionRequirement}} CONFIG REQUIRED)
                  add_library({{libraryBaseName}} SHARED {{sourceList}})
                  target_compile_features({{libraryBaseName}} PRIVATE cxx_std_20)
                  target_compile_options({{libraryBaseName}} PRIVATE /MP1)

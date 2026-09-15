@@ -34,7 +34,17 @@ public abstract class SemanticGenerationProvider : IGenerationProvider
     public Task<GenerationPlan> CreatePlanAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        return CreatePlanCoreAsync(cancellationToken);
+        return CreatePlanCoreAsync(null, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    public Task<GenerationPlan> CreatePlanAsync(
+        in GenerationOptions options,
+        in CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        cancellationToken.ThrowIfCancellationRequested();
+        return CreatePlanCoreAsync(options, cancellationToken);
     }
 
     /// <summary>
@@ -44,9 +54,36 @@ public abstract class SemanticGenerationProvider : IGenerationProvider
     /// <returns>The provider model input; Shared constructs the completed generation plan.</returns>
     protected abstract Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken);
 
-    private async Task<GenerationPlan> CreatePlanCoreAsync(CancellationToken cancellationToken)
+    /// <summary>
+    /// Creates provider roots, renderers, and native metadata using the shared generation options.
+    /// </summary>
+    /// <param name="options">The shared configuration for this plan.</param>
+    /// <param name="cancellationToken">Cancellation for plan creation.</param>
+    /// <returns>The provider model input; Shared constructs the completed generation plan.</returns>
+    /// <exception cref="NotSupportedException">
+    /// A native library version was requested but this provider does not support version selection.
+    /// </exception>
+    protected virtual Task<BindingProviderModel> CreateProviderModelAsync(
+        in GenerationOptions options,
+        in CancellationToken cancellationToken)
     {
-        var providerModel = await CreateProviderModelAsync(cancellationToken).ConfigureAwait(false);
+        ArgumentNullException.ThrowIfNull(options);
+        if (options.NativeLibraryVersion is not null)
+        {
+            throw new NotSupportedException(
+                $"Provider '{GetType().FullName}' does not support exact native library version selection.");
+        }
+
+        return CreateProviderModelAsync(cancellationToken);
+    }
+
+    private async Task<GenerationPlan> CreatePlanCoreAsync(
+        GenerationOptions? options,
+        CancellationToken cancellationToken)
+    {
+        var providerModel = options is null
+            ? await CreateProviderModelAsync(cancellationToken).ConfigureAwait(false)
+            : await CreateProviderModelAsync(options, cancellationToken).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(providerModel);
         cancellationToken.ThrowIfCancellationRequested();
         return SemanticEngine.CreatePlan(providerModel);

@@ -9,6 +9,7 @@ using System.Text.Json;
 
 using Microsoft.Extensions.Options;
 
+using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Services.Rules;
 
@@ -70,7 +71,24 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
     /// <inheritdoc />
     protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
     {
+        return CreateProviderModelAsync(_options.Value.NativeLibraryVersion, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    protected override Task<BindingProviderModel> CreateProviderModelAsync(
+        in GenerationOptions options,
+        in CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return CreateProviderModelAsync(options.NativeLibraryVersion, cancellationToken);
+    }
+
+    private Task<BindingProviderModel> CreateProviderModelAsync(
+        Version? nativeLibraryVersion,
+        in CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateNativeLibraryVersion(nativeLibraryVersion);
         var records = _records.RecordModels.ToArray();
         var catalog = records.ToDictionary(static record => record.Type.CppTypeName, StringComparer.Ordinal);
         var declarations = records.Select(record => new BindingDeclaration(
@@ -119,7 +137,7 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
                 token)),
         ];
         var nativeProject = BindingCMakeProjectEmitter.CreateNativeProject(
-            CreateNativeProjectDefinition(_options.Value));
+            CreateNativeProjectDefinition(_options.Value, nativeLibraryVersion));
         return Task.FromResult(new BindingProviderModel(
             declarations,
             _records.EnumModels,
@@ -136,15 +154,18 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
     /// Creates the OCCT-specific native dependency and compilation facts consumed by Shared.
     /// </summary>
     /// <param name="options">The current provider options.</param>
+    /// <param name="nativeLibraryVersion">The optional exact Open CASCADE version.</param>
     /// <returns>The provider-neutral CMake project definition.</returns>
-    internal static BindingCMakeProjectDefinition CreateNativeProjectDefinition(OcctGenerationOptions options)
+    internal static BindingCMakeProjectDefinition CreateNativeProjectDefinition(
+        OcctGenerationOptions options,
+        Version? nativeLibraryVersion = null)
     {
         ArgumentNullException.ThrowIfNull(options);
         return new(
             "TedToolkitOcctGenerated",
             options.NativeLibraryBaseName,
             options.CppVersion,
-            [new("OpenCASCADE", "CONFIG REQUIRED"),],
+            [new("OpenCASCADE", "CONFIG REQUIRED", nativeLibraryVersion),],
             compileOptions: ["$<$<CXX_COMPILER_ID:MSVC>:/MP1>",],
             includeDirectories: ["${OpenCASCADE_INCLUDE_DIR}",],
             linkLibraries: ["${OpenCASCADE_LIBRARIES}",],
@@ -155,5 +176,28 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
                 new("RUNTIME_OUTPUT_DIRECTORY", "\"${CMAKE_BINARY_DIR}/$<CONFIG>\""),
             ],
             unityBuild: new(32));
+    }
+
+    private void ValidateNativeLibraryVersion(Version? requestedVersion)
+    {
+        if (requestedVersion is null)
+        {
+            return;
+        }
+
+        ValidateInstalledVersion(requestedVersion);
+    }
+
+    private void ValidateInstalledVersion(Version requestedVersion)
+    {
+        var triplet = _options.Value.GetTriplet(_tripletResolver);
+        var installedVersion = _environment.GetInstalledPackageVersion(triplet, "opencascade");
+        if (requestedVersion == installedVersion)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Requested Open CASCADE {requestedVersion} does not match installed opencascade {installedVersion}.");
     }
 }

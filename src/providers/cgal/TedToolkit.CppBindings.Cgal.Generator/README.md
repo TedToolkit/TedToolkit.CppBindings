@@ -13,6 +13,7 @@ var options = new CgalGenerationOptions
     CSharpNamespace = "TedToolkit.CppBindings.Cgal",
     NativeLibraryBaseName = "ted_toolkit_cpp_bindings_cgal",
     CppVersion = 20,
+    NativeLibraryVersion = new Version(6, 2),
 };
 
 builder.AddCgalGenerators(options);
@@ -23,6 +24,9 @@ it also compares that tree with vcpkg's installed CGAL package list so missing, 
 changed package files fail closed. Set `RequireLockedHeaderInventory = false` only when the selected
 vcpkg installation does not provide package-list metadata. The default separately verifies installed
 CGAL/GMP/MPFR versions and vcpkg ABIs plus the pinned CMake and MSVC versions.
+`NativeLibraryVersion` is optional. When set, it must match both the selected finite profile and the
+installed CGAL version, and generated CMake uses `find_package(CGAL 6.2 EXACT ...)`. When omitted,
+the prior unversioned `find_package(CGAL CONFIG REQUIRED)` line is retained.
 
 Pass `ProfileManifestFile` and the matching `ProfileId` to select another explicit version-1 finite
 profile. Its selected headers, closed signatures, source evidence, roots, and declaration
