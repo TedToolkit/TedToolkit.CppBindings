@@ -76,6 +76,13 @@ before its `OcctGenerationProvider` submits the same normalized model. Provider 
 unavoidable library-specific facade or native adapter body, but it cannot own a second plan, output
 writer, complete managed/native renderer, function-table bootstrap, or generic CMake renderer.
 
+Callers may set the provider-neutral `GenerationOptions.NativeLibraryVersion` to require the
+primary native package exactly. Shared carries the structured version into deterministic CMake
+emission and invokes the options-aware provider-plan contract. Each Provider maps it only to its
+primary package and validates installed and finite-profile identity before publication. Omission
+retains unversioned resolver selection. A third-party Provider that has not adopted version
+selection fails explicitly for a non-null version instead of ignoring it.
+
 ## Current CGAL target
 
 The CGAL provider delivers real `TedToolkit.CppBindings.Cgal.Generator`, `.Runtime`, and `.Windows`
@@ -121,6 +128,8 @@ Generator, Clang, or OCCT packages.
   generated declarations in the Windows artifact.
 - Give every provider binding module a unique basename, package only its recursive app-local import
   closure, and fail package-set verification on differing same-name native assets.
+- Keep exact native-library selection provider-neutral in Shared, primary-package-specific in each
+  Provider, and fail before publication when installed or finite-profile identity differs.
 - A GitHub rename is an external operational handoff with maintainer ownership, preflight,
   post-rename evidence, and recovery. It is not a development work item.
 
@@ -147,6 +156,8 @@ ADR-001 remains historical evidence for the superseded loader decision.
 - A public ownership category beyond Value, Owned, and provider-specific Handle is proposed.
 - A provider package requires a native filename that conflicts byte-for-byte with another provider,
   or cannot resolve its app-local import closure from its pinned toolchain and installation.
+- Version ranges, prerelease selectors, automatic native-package installation, or one option that
+  controls multiple native dependencies is proposed.
 - A new OS, ABI, architecture, RID, generic platform package, or analyzer distribution mechanism is
   proposed.
 - A published compatibility baseline makes coordinated identity replacement unacceptable.

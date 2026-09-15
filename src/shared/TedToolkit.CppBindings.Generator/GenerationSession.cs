@@ -46,7 +46,7 @@ internal sealed class GenerationSession(GenerationOptions options, IGenerationPr
     private async Task<GenerationPlan> PrepareAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var providerPlan = await provider.CreatePlanAsync(cancellationToken).ConfigureAwait(false);
+        var providerPlan = await provider.CreatePlanAsync(Options, cancellationToken).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(providerPlan);
         cancellationToken.ThrowIfCancellationRequested();
         var plan = new GenerationPlan(

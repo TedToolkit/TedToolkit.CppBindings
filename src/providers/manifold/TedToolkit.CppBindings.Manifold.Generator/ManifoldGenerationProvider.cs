@@ -7,6 +7,7 @@
 
 using System.Text.Json;
 
+using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Generator.Semantics;
 
 namespace TedToolkit.CppBindings.Manifold.Generator;
@@ -47,7 +48,24 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     /// <inheritdoc />
     protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
     {
+        return CreateProviderModelAsync(null, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    protected override Task<BindingProviderModel> CreateProviderModelAsync(
+        in GenerationOptions options,
+        in CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return CreateProviderModelAsync(options.NativeLibraryVersion, cancellationToken);
+    }
+
+    private Task<BindingProviderModel> CreateProviderModelAsync(
+        Version? nativeLibraryVersion,
+        in CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateNativeLibraryVersion(nativeLibraryVersion);
         var sourceInventory = ManifoldHeaderDiscovery.Resolve(_vcpkgRoot, Profile);
         var sourceDeclarations = Admitted.Select(static value => new
         {
@@ -111,8 +129,22 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
             [],
             ManifoldSemanticProfile.ManagedSourceStem,
             ManifoldSemanticProfile.NativeSourceStem,
-            ManifoldFiniteProfile.CreateNativeProject(Profile),
+            ManifoldFiniteProfile.CreateNativeProject(Profile, nativeLibraryVersion),
             [finiteApi,]));
+    }
+
+    private void ValidateNativeLibraryVersion(Version? requestedVersion)
+    {
+        if (requestedVersion is null
+            || (Version.TryParse(Profile.ManifoldVersion, out var profileVersion)
+                && requestedVersion == profileVersion))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Requested Manifold {requestedVersion} does not match finite profile '{Profile.ProfileId}' "
+            + $"version {Profile.ManifoldVersion}.");
     }
 
     private static BindingSourceDefinition JsonSource(string path, object value)

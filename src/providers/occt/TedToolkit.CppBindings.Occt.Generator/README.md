@@ -23,6 +23,7 @@ var pipeline = await Pipeline.CreateBuilder()
         DeclOptions = [new OcctDeclarationOptions("Geom2d_BSplineCurve")],
         CSharpFolder = output.CreateSubdirectory("csharp"),
         CppFolder = output.CreateSubdirectory("cpp"),
+        NativeLibraryVersion = new Version(8, 0, 1),
     })
     .BuildAsync();
 await pipeline.RunAsync();
@@ -42,6 +43,7 @@ the resulting DLL are one inseparable artifact set.
 | Configure native discovery | `Triplet`, `CommandLineArgs` | An omitted triplet selects a compatible installed one; extra arguments go to Clang. Only the proved `win-x64` runtime profile is supported. |
 | Configure output | Inherited `CSharpFolder`, `CppFolder`, `CSharpNamespace`, `NativeLibraryBaseName`, `IsInternal` | Default namespace is `TedToolkit.CppBindings.Occt`; basename is `ted_toolkit_occt`. Namespace applies to layouts, extensions, enums and loader without changing native identities. |
 | Configure language | Inherited `CppVersion` | Defaults to 17; passed to parsing, probes and emitted CMake. Another language version does not establish another supported ABI. |
+| Select native version | Inherited `NativeLibraryVersion` | Optional exact Open CASCADE version. It must match the installed `opencascade` package for the selected triplet; generated CMake includes the version and `EXACT`. Omission retains unversioned resolution. |
 | Select projected fields | `FieldTypeToGenerate` | Filters modeled fields; native layout still determines storage. |
 | Retained layout option | `GetFieldOffsetByRunning` | Compatibility property, currently unused. Layout comes from Clang and compiler proof. |
 | Discover header selectors | Bundled `OcctHeaderTypeGenerator` | Generates `TedToolkit.CppBindings.Occt.Generator.OcctHeaderType` when installed headers exist. The non-packable SourceGenerators component ships here as analyzer assets, not as consumer lifetime diagnostics. |

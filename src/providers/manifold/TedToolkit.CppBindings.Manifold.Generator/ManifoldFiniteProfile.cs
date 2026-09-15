@@ -159,12 +159,12 @@ internal static class ManifoldFiniteProfile
         };
     }
 
-    internal static BindingNativeProject CreateNativeProject(ManifoldProfile profile)
+    internal static BindingNativeProject CreateNativeProject(ManifoldProfile profile, Version? nativeLibraryVersion)
     {
         return new(
             "CMakeLists.txt",
             (sources, writer, token) => writer.WriteAsync(
-                RenderCMake(profile.NativeLibraryBaseName, sources).AsMemory(), token));
+                RenderCMake(profile.NativeLibraryBaseName, sources, nativeLibraryVersion).AsMemory(), token));
     }
 
     private const string NativePreamble = """
@@ -253,9 +253,13 @@ internal static class ManifoldFiniteProfile
             std::copy(mesh.triVerts.begin(), mesh.triVerts.end(), indexPointer);
         """;
 
-    private static string RenderCMake(string libraryBaseName, IReadOnlyList<string> sources)
+    private static string RenderCMake(
+        string libraryBaseName,
+        IReadOnlyList<string> sources,
+        Version? nativeLibraryVersion)
     {
         var sourceList = string.Join(" ", sources);
+        var versionRequirement = nativeLibraryVersion is null ? "" : $" {nativeLibraryVersion} EXACT";
         return $$"""
                  cmake_minimum_required(VERSION 3.28)
                  project(TedToolkitCppBindingsManifold LANGUAGES CXX)
@@ -263,7 +267,7 @@ internal static class ManifoldFiniteProfile
                  file(WRITE "${CMAKE_BINARY_DIR}/compiler-identity.txt"
                      "${CMAKE_CXX_COMPILER_ID}|${CMAKE_CXX_COMPILER_VERSION}|${CMAKE_CXX_COMPILER}")
 
-                 find_package(manifold CONFIG REQUIRED)
+                 find_package(manifold{{versionRequirement}} CONFIG REQUIRED)
 
                  add_library({{libraryBaseName}} SHARED {{sourceList}})
                  target_compile_features({{libraryBaseName}} PRIVATE cxx_std_20)

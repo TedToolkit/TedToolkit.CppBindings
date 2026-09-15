@@ -7,6 +7,7 @@
 
 using System.Text.Json;
 
+using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Generator.Semantics;
 
 namespace TedToolkit.CppBindings.Cgal.Generator;
@@ -50,7 +51,24 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
     /// <inheritdoc />
     protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
     {
+        return CreateProviderModelAsync(_options.NativeLibraryVersion, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    protected override Task<BindingProviderModel> CreateProviderModelAsync(
+        in GenerationOptions options,
+        in CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return CreateProviderModelAsync(options.NativeLibraryVersion, cancellationToken);
+    }
+
+    private Task<BindingProviderModel> CreateProviderModelAsync(
+        Version? nativeLibraryVersion,
+        in CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateNativeLibraryVersion(nativeLibraryVersion);
         var managedSources = new List<BindingSourceDefinition>()
         {
             JsonSource(
@@ -99,7 +117,7 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
             "TedToolkitCppBindingsCgal",
             _options.NativeLibraryBaseName,
             20,
-            [new("CGAL", "CONFIG REQUIRED"),],
+            [new("CGAL", "CONFIG REQUIRED", nativeLibraryVersion),],
             compileDefinitions: ["CGAL_DEBUG",],
             includeDirectories: ["\"${CMAKE_CURRENT_SOURCE_DIR}\"",],
             linkLibraries: ["CGAL::CGAL",]));
@@ -146,5 +164,28 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
         }
 
         throw new InvalidOperationException("The embedded CGAL profile identity is inconsistent.");
+    }
+
+    private void ValidateNativeLibraryVersion(Version? requestedVersion)
+    {
+        if (requestedVersion is null)
+        {
+            return;
+        }
+
+        RequireVersionMatch(requestedVersion, Profile.CgalVersion, $"finite profile '{Profile.ProfileId}'");
+        RequireVersionMatch(requestedVersion, Inventory.Toolchain.Cgal, "installed CGAL");
+    }
+
+    private static void RequireVersionMatch(Version requestedVersion, string actualVersionText, string source)
+    {
+        if (Version.TryParse(actualVersionText, out var actualVersion)
+            && requestedVersion == actualVersion)
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Requested CGAL {requestedVersion} does not match {source} version {actualVersionText}.");
     }
 }

@@ -80,6 +80,51 @@ internal sealed class FclGenerationProviderTests
             "TedToolkit.CppBindings.Fcl.Generator.FclSourceRenderer")).IsNull();
     }
 
+    /// <summary>Verifies exact FCL selection is emitted and a different native version is rejected.</summary>
+    /// <returns>A task that completes when version assertions finish.</returns>
+    [Test]
+    public async Task Should_require_the_exact_selected_native_version_Async()
+    {
+        var provider = new FclGenerationProvider(GetVcpkgRoot());
+        var outputRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
+        try
+        {
+            var options = CreateVersionOptions(new(0, 7, 0), outputRoot);
+            var plan = await provider.CreatePlanAsync(options, CancellationToken.None).ConfigureAwait(false);
+            var native = await RenderAsync(plan.CppSources).ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(options.CSharpFolder.FullName, "stale.txt"), "managed")
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(options.CppFolder.FullName, "stale.txt"), "native")
+                .ConfigureAwait(false);
+            InvalidOperationException? failure = null;
+            try
+            {
+                _ = await provider.CreatePlanAsync(
+                        options with { NativeLibraryVersion = new(0, 7, 1) },
+                        CancellationToken.None)
+                    .ConfigureAwait(false);
+            }
+            catch (InvalidOperationException exception)
+            {
+                failure = exception;
+            }
+
+            await Assert.That(native["CMakeLists.txt"]).Contains("find_package(fcl 0.7.0 EXACT CONFIG REQUIRED)");
+            await Assert.That(failure).IsNotNull();
+            await Assert.That(failure!.Message).Contains("does not match finite profile");
+            await Assert.That(await File.ReadAllTextAsync(
+                    Path.Combine(options.CSharpFolder.FullName, "stale.txt")).ConfigureAwait(false))
+                .IsEqualTo("managed");
+            await Assert.That(await File.ReadAllTextAsync(
+                    Path.Combine(options.CppFolder.FullName, "stale.txt")).ConfigureAwait(false))
+                .IsEqualTo("native");
+        }
+        finally
+        {
+            outputRoot.Delete(true);
+        }
+    }
+
     /// <summary>Verifies vcpkg is the complete public-header inventory authority.</summary>
     /// <returns>A task that completes when inventory assertions finish.</returns>
     [Test]
@@ -272,6 +317,16 @@ internal sealed class FclGenerationProviderTests
     private static DirectoryInfo GetVcpkgRoot()
     {
         return new(Environment.GetEnvironmentVariable("VCPKG_ROOT") is { Length: > 0, } root ? root : @"C:\vcpkg");
+    }
+
+    private static GenerationOptions CreateVersionOptions(Version version, DirectoryInfo outputRoot)
+    {
+        return new()
+        {
+            CSharpFolder = outputRoot.CreateSubdirectory("managed"),
+            CppFolder = outputRoot.CreateSubdirectory("native"),
+            NativeLibraryVersion = version,
+        };
     }
 
     private static string[] ReadPackageHeaders(DirectoryInfo vcpkgRoot)

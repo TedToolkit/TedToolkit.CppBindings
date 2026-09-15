@@ -185,6 +185,57 @@ internal sealed class CgalGenerationProviderTests
     }
 
     /// <summary>
+    /// Verifies exact CGAL selection is emitted and a different profile version is rejected.
+    /// </summary>
+    /// <returns>A task that completes when version assertions finish.</returns>
+    [Test]
+    public async Task Should_require_the_exact_selected_native_version_Async()
+    {
+        var provider = CreateProvider(nativeLibraryVersion: new Version(6, 2));
+        var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+        var native = await RenderAsync(plan.CppSources).ConfigureAwait(false);
+
+        await Assert.That(native["CMakeLists.txt"]).Contains("find_package(CGAL 6.2 EXACT CONFIG REQUIRED)");
+        var outputRoot = Directory.CreateDirectory(Path.Combine(Path.GetTempPath(), Path.GetRandomFileName()));
+        try
+        {
+            var options = new CgalGenerationOptions()
+            {
+                VcpkgRoot = new(GetVcpkgRoot()),
+                CSharpFolder = outputRoot.CreateSubdirectory("managed"),
+                CppFolder = outputRoot.CreateSubdirectory("native"),
+                NativeLibraryVersion = new(6, 1),
+            };
+            await File.WriteAllTextAsync(Path.Combine(options.CSharpFolder.FullName, "stale.txt"), "managed")
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(options.CppFolder.FullName, "stale.txt"), "native")
+                .ConfigureAwait(false);
+            InvalidOperationException? failure = null;
+            try
+            {
+                _ = await provider.CreatePlanAsync(options, CancellationToken.None).ConfigureAwait(false);
+            }
+            catch (InvalidOperationException exception)
+            {
+                failure = exception;
+            }
+
+            await Assert.That(failure).IsNotNull();
+            await Assert.That(failure!.Message).Contains("does not match finite profile");
+            await Assert.That(await File.ReadAllTextAsync(
+                    Path.Combine(options.CSharpFolder.FullName, "stale.txt")).ConfigureAwait(false))
+                .IsEqualTo("managed");
+            await Assert.That(await File.ReadAllTextAsync(
+                    Path.Combine(options.CppFolder.FullName, "stale.txt")).ConfigureAwait(false))
+                .IsEqualTo("native");
+        }
+        finally
+        {
+            outputRoot.Delete(true);
+        }
+    }
+
+    /// <summary>
     /// Verifies provider-local failures precede the fixed Shared standard catch sequence.
     /// </summary>
     /// <returns>A task that completes when native error emission assertions finish.</returns>
@@ -421,7 +472,8 @@ internal sealed class CgalGenerationProviderTests
         FileInfo? profile = null,
         string? profileId = null,
         bool requireLockedToolchain = true,
-        string? vcpkgRoot = null)
+        string? vcpkgRoot = null,
+        Version? nativeLibraryVersion = null)
     {
         var root = vcpkgRoot ?? GetVcpkgRoot();
         return new(new()
@@ -435,6 +487,7 @@ internal sealed class CgalGenerationProviderTests
             CSharpNamespace = "TedToolkit.CppBindings.Cgal",
             NativeLibraryBaseName = "ted_toolkit_cpp_bindings_cgal",
             CppVersion = 20,
+            NativeLibraryVersion = nativeLibraryVersion,
         });
     }
 

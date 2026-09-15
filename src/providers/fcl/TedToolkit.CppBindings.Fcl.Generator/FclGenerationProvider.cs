@@ -7,6 +7,7 @@
 
 using System.Text.Json;
 
+using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Generator.Semantics;
 
 namespace TedToolkit.CppBindings.Fcl.Generator;
@@ -46,7 +47,24 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
     /// <inheritdoc />
     protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
     {
+        return CreateProviderModelAsync(null, cancellationToken);
+    }
+
+    /// <inheritdoc />
+    protected override Task<BindingProviderModel> CreateProviderModelAsync(
+        in GenerationOptions options,
+        in CancellationToken cancellationToken)
+    {
+        ArgumentNullException.ThrowIfNull(options);
+        return CreateProviderModelAsync(options.NativeLibraryVersion, cancellationToken);
+    }
+
+    private Task<BindingProviderModel> CreateProviderModelAsync(
+        Version? nativeLibraryVersion,
+        in CancellationToken cancellationToken)
+    {
         cancellationToken.ThrowIfCancellationRequested();
+        ValidateNativeLibraryVersion(nativeLibraryVersion);
         var sourceInventory = FclHeaderDiscovery.Resolve(_vcpkgRoot, Profile);
         BindingSourceDefinition[] managedSources =
         [
@@ -103,8 +121,23 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
             [],
             FclSemanticProfile.ManagedSourceStem,
             FclSemanticProfile.NativeSourceStem,
-            FclFiniteProfile.CreateNativeProject(Profile),
+            FclFiniteProfile.CreateNativeProject(Profile, nativeLibraryVersion),
             [finiteApi,]));
+    }
+
+    private void ValidateNativeLibraryVersion(Version? requestedVersion)
+    {
+        var profileVersionText = Profile.Versions["Fcl"].Split('#', 2)[0];
+        if (requestedVersion is null
+            || (Version.TryParse(profileVersionText, out var profileVersion)
+                && requestedVersion == profileVersion))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"Requested FCL {requestedVersion} does not match finite profile '{Profile.ProfileId}' "
+            + $"version {Profile.Versions["Fcl"]}.");
     }
 
     private static BindingSourceDefinition JsonSource(string path, object value)
