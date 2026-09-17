@@ -1784,6 +1784,46 @@ internal sealed class AddTest
     }
 
     /// <summary>
+    /// Verifies template replacement preserves structured managed parameter modifiers.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_preserve_parameter_storage_kind_when_replacing_template_types_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            template <typename TValue>
+            struct Box
+            {
+                TValue Value;
+            };
+
+            struct Owner
+            {
+                Box<int> First;
+                Box<double> Second;
+                void Read(const Box<int>* value);
+            };
+            """);
+        var owner = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Owner");
+        var manager = CreateManager();
+
+        manager.Add(owner);
+
+        var parameter = manager.RecordModels
+            .Single(static record => record.Type.CppTypeName == "Owner")
+            .MethodModels.Single(static method => method.MethodName == "Read")
+            .Parameters.Single();
+        await Assert.That(parameter.Type.CSharpPublicType.StorageKind).IsEqualTo(StorageKind.REF_READONLY);
+        await Assert.That(parameter.Type.CSharpPublicType.Type.ToCode()).IsEqualTo("Box<int>");
+        await Assert.That(parameter.Type.CSharpPublicType.ToCode()).IsEqualTo("ref readonly Box<int>");
+        await Assert.That(parameter.Type.CSharpPInvokeType.PointCounter).IsEqualTo(1);
+        await Assert.That(parameter.Type.CSharpPInvokeType.Type.ToCode()).IsEqualTo("Box<int>");
+        await Assert.That(parameter.Type.CSharpPInvokeType.ToCode()).IsEqualTo("Box<int>*");
+    }
+
+    /// <summary>
     /// Verifies native arguments that collapse to the same C# type retain distinct closed identities.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>

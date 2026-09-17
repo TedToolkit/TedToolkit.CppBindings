@@ -217,7 +217,7 @@ internal sealed class BindingManagedExtensionComposer(
         var returnType = returnsOwnedValue
             ? $"global::TedToolkit.CppBindings.Owned<{resultName}>"
             : resultName;
-        var declaration = CreateMethod(method, returnType, shape);
+        var declaration = CreateMethod(method, new DataType(returnType), shape);
         var callStatements = CreateRecordCallStatements(method, shape, borrowedHandleReceiver);
         if (returnsOwnedValue)
         {
@@ -283,7 +283,7 @@ internal sealed class BindingManagedExtensionComposer(
         var elementType = method.ReturnType.IntrusiveHandleElementType;
         var declaration = CreateMethod(
             method,
-            $"{profile.ManagedOwningIntrusiveHandle}<{elementType}>?",
+            new DataType($"{profile.ManagedOwningIntrusiveHandle}<{elementType}>?"),
             shape);
         shape.NativeParameterTypes.Add(elementType + "*");
         var invocation = "var __result = "
@@ -307,7 +307,7 @@ internal sealed class BindingManagedExtensionComposer(
         var shape = CreateCallShape(method, recordName, borrowedHandleReceiver);
         AddErrorTransport(method, shape);
         var returnType = method.ReturnType.CSharpPublicType.ToCode();
-        var declaration = CreateMethod(method, returnType, shape);
+        var declaration = CreateMethod(method, method.ReturnType.CSharpPublicType, shape);
         var invocation = Invoke(
             method.NativeExportName,
             shape.NativeParameterTypes.Append(method.ReturnType.CSharpPInvokeType.ToCode()),
@@ -332,11 +332,14 @@ internal sealed class BindingManagedExtensionComposer(
 
     private Method ComposeReferenceReturn(MethodModel method, string recordName, bool borrowedHandleReceiver)
     {
-        var returnModifier = IsReferencedValueConst(method.ReturnType) ? "ref readonly " : "ref ";
-        var returnTypeName = GetCSharpValueTypeName(method.ReturnType);
+        var returnType = GetCSharpValueType(method.ReturnType);
+        var returnTypeName = returnType.ToCode();
         var shape = CreateCallShape(method, recordName, borrowedHandleReceiver);
         AddErrorTransport(method, shape);
-        var declaration = CreateMethod(method, returnModifier + returnTypeName, shape);
+        var declaration = CreateMethod(
+            method,
+            IsReferencedValueConst(method.ReturnType) ? returnType.RefReadonly : returnType.Ref,
+            shape);
         declaration.AddRootDescription(new DescriptionRemarks([
             new DescriptionText("The returned reference is borrowed from native storage. "
                                 + "The caller must preserve the native owner and obey the original C++ invalidation rules."),
@@ -354,11 +357,11 @@ internal sealed class BindingManagedExtensionComposer(
         return declaration;
     }
 
-    private Method CreateMethod(MethodModel method, string returnType, CallShape shape)
+    private Method CreateMethod(MethodModel method, DataType returnType, CallShape shape)
     {
         var declaration = Method(
             GetPublicMethodName(method).ToValidIdentifier(),
-            ReturnType(new DataType(returnType))).Public.Static;
+            ReturnType(returnType)).Public.Static;
         AddPublicParameters(declaration, shape);
         AddReceiverTypeParameter(method, declaration);
         return declaration;
@@ -445,10 +448,11 @@ internal sealed class BindingManagedExtensionComposer(
 
         if (isReference || isRecordValue)
         {
-            var referencedTypeName = GetCSharpValueTypeName(parameter.Type);
+            var referencedType = GetCSharpValueType(parameter.Type);
+            var referencedTypeName = referencedType.ToCode();
             var referencedDataType = IsReferencedValueConst(parameter.Type) || isRecordValue
-                ? new DataType(referencedTypeName).In
-                : new DataType(referencedTypeName).Ref;
+                ? referencedType.In
+                : referencedType.Ref;
             var publicParameter = new Parameter(referencedDataType, parameterName);
             shape.PublicParameters.Add(publicParameter);
             var pinvokeType = parameter.Type.CSharpPInvokeType.ToCode();
@@ -459,31 +463,26 @@ internal sealed class BindingManagedExtensionComposer(
             return;
         }
 
-        var publicType = parameter.Type.CSharpPublicType.ToCode();
+        var publicDataType = parameter.Type.CSharpPublicType;
+        var publicType = publicDataType.ToCode();
         var nativeType = parameter.Type.CSharpPInvokeType.ToCode();
         if (firstIndirection is TypeIndirectionKind.PointerIndirection
-            && TryGetParameterModifier(publicType, out var modifier, out var modifiedTypeName))
+            && publicDataType.StorageKind is not StorageKind.NONE)
         {
-            var modifiedType = modifier switch
-            {
-                "ref" => new DataType(modifiedTypeName).Ref,
-                "in" => new DataType(modifiedTypeName).In,
-                "out" => new DataType(modifiedTypeName).Out,
-                _ => new DataType(modifiedTypeName),
-            };
-            var publicParameter = new Parameter(modifiedType, parameterName);
+            var valueTypeName = GetCSharpValueType(parameter.Type).ToCode();
+            var publicParameter = new Parameter(publicDataType, parameterName);
             shape.PublicParameters.Add(publicParameter);
             shape.NativeParameterTypes.Add(nativeType);
             var pointerName = parameterName + "Pointer";
             shape.NativeArguments.Add(pointerName);
-            shape.Pins.Add((modifiedTypeName, pointerName, "&" + parameterName));
+            shape.Pins.Add((valueTypeName, pointerName, "&" + parameterName));
             return;
         }
 
         if (firstIndirection is TypeIndirectionKind.PointerIndirection
             && publicType is "global::System.ReadOnlySpan<byte>")
         {
-            shape.PublicParameters.Add(new Parameter(new DataType(publicType), parameterName));
+            shape.PublicParameters.Add(new Parameter(publicDataType, parameterName));
             shape.NativeParameterTypes.Add(nativeType);
             var pointerName = parameterName + "Pointer";
             shape.NativeArguments.Add(pointerName);
@@ -491,32 +490,11 @@ internal sealed class BindingManagedExtensionComposer(
             return;
         }
 
-        shape.PublicParameters.Add(new Parameter(new DataType(publicType), parameterName));
+        shape.PublicParameters.Add(new Parameter(publicDataType, parameterName));
         shape.NativeParameterTypes.Add(nativeType);
         shape.NativeArguments.Add(string.Equals(publicType, nativeType, StringComparison.Ordinal)
             ? parameterName
             : $"({nativeType}){parameterName}");
-    }
-
-    private static bool TryGetParameterModifier(
-        string value,
-        out string modifier,
-        out string typeName)
-    {
-        foreach (var candidate in new[] { "ref", "in", "out", })
-        {
-            var prefix = candidate + " ";
-            if (value.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                modifier = candidate;
-                typeName = value[prefix.Length..];
-                return true;
-            }
-        }
-
-        modifier = "";
-        typeName = value;
-        return false;
     }
 
     private void AddReceiverTypeParameter(MethodModel method, Method declaration)
@@ -782,18 +760,14 @@ internal sealed class BindingManagedExtensionComposer(
             : type.Transport.ValueIsConst;
     }
 
-    private static string GetCSharpValueTypeName(TypeModel type)
+    private static DataType GetCSharpValueType(TypeModel type)
     {
-        var value = type.CSharpPublicType.ToCode();
-        foreach (var prefix in new[] { "ref readonly ", "ref ", "in ", "out ", })
+        var source = type.CSharpPublicType;
+        return new(source.Type)
         {
-            if (value.StartsWith(prefix, StringComparison.Ordinal))
-            {
-                return value[prefix.Length..];
-            }
-        }
-
-        return value;
+            IsArray = source.IsArray,
+            PointCounter = source.PointCounter,
+        };
     }
 
     private static string JoinLines(IEnumerable<string> lines)

@@ -452,12 +452,26 @@ internal sealed class RecordModelManager(
         HashSet<string> resolved,
         HashSet<string> resolving)
     {
-        type.CSharpPInvokeType = new(ReplaceManagedTemplateReferences(
-            type.CSharpPInvokeType.ToCode(), replacements, resolved, resolving));
-        type.CSharpPublicType = new(ReplaceManagedTemplateReferences(
-            type.CSharpPublicType.ToCode(), replacements, resolved, resolving));
+        type.CSharpPInvokeType = ReplaceManagedTemplateReferences(
+            type.CSharpPInvokeType, replacements, resolved, resolving);
+        type.CSharpPublicType = ReplaceManagedTemplateReferences(
+            type.CSharpPublicType, replacements, resolved, resolving);
         type.IntrusiveHandleElementType = ReplaceManagedTemplateReferences(
             type.IntrusiveHandleElementType, replacements, resolved, resolving);
+    }
+
+    private static DataType ReplaceManagedTemplateReferences(
+        DataType source,
+        IReadOnlyDictionary<string, TemplateProjectionModel> replacements,
+        HashSet<string> resolved,
+        HashSet<string> resolving)
+    {
+        return new(ReplaceManagedTemplateReferences(source.Type.ToCode(), replacements, resolved, resolving))
+        {
+            StorageKind = source.StorageKind,
+            IsArray = source.IsArray,
+            PointCounter = source.PointCounter,
+        };
     }
 
     private static string ReplaceManagedTemplateReferences(

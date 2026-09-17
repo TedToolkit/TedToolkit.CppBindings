@@ -296,8 +296,8 @@ internal sealed class GenerateAsyncTest
     [Test]
     public async Task Should_generate_borrowed_reference_returns_without_copying_Async()
     {
-        var constReference = CreateReferenceType("ref readonly gp_Pnt2d", valueIsConst: true);
-        var mutableReference = CreateReferenceType("ref gp_Pnt2d", valueIsConst: false);
+        var constReference = CreateReferenceType(valueIsConst: true);
+        var mutableReference = CreateReferenceType(valueIsConst: false);
         var record = new RecordModel()
         {
             DescriptionItems = [],
@@ -335,6 +335,89 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).DoesNotContain("Owned<gp_Pnt2d>");
         await Assert.That(code).DoesNotContain("new gp_Pnt2d");
         await Assert.That(code).Contains("return ref *__result;");
+    }
+
+    /// <summary>
+    /// Verifies ref-readonly pointer parameters pin the unmodified element type in generated C#.
+    /// </summary>
+    /// <returns>A task that completes when the generated source has been compiled.</returns>
+    [Test]
+    public async Task Should_generate_valid_fixed_pointer_for_ref_readonly_pointer_parameter_Async()
+    {
+        var voidType = new TypeModel()
+        {
+            CppTypeName = "void",
+            CSharpPInvokeType = DataType.Void,
+            CSharpPublicType = DataType.Void,
+        };
+        var constPointer = new TypeModel()
+        {
+            CppTypeName = "const int*",
+            CppValueTypeName = "int",
+            CSharpPInvokeType = DataType.Int.Pointer,
+            CSharpPublicType = DataType.Int.RefReadonly,
+            Transport = new(
+                valueIsConst: true,
+                [new(TypeIndirectionKind.PointerIndirection, IsConstQualified: false),]),
+        };
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            Bases = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = false,
+            MethodModels =
+            [
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = false,
+                    IsStatic = true,
+                    MethodName = "Read",
+                    NoExceptions = true,
+                    Parameters = [new() { DescriptionItems = [], Name = "value", Type = constPointer, },],
+                    ReturnType = voidType,
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.Value,
+            Size = 1,
+            Alignment = 1,
+            SourceHeader = "Storage.hxx",
+            Type = new()
+            {
+                CppTypeName = "Storage",
+                CSharpPInvokeType = new("Storage"),
+                CSharpPublicType = new("Storage"),
+            },
+        };
+        NativeExportNameBuilder.Assign(record);
+        var code = await OcctEmitterFactory.Managed(
+                record,
+                CreateOptions("LayoutProbe"),
+                nativeFunctionIndices: CreateFunctionIndices(record))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+
+                public static class Probe
+                {
+                    public static bool Check() => true;
+                }
+            }
+            """;
+
+        await Assert.That(code).Contains("ref readonly int @value");
+        await Assert.That(code).Contains("fixed (int* @valuePointer = &@value)");
+        await Assert.That(code).DoesNotContain("fixed (readonly int*");
+        await LayoutTests.AssertCompiledStorageAsync(code, Probe).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -900,14 +983,15 @@ internal sealed class GenerateAsyncTest
             .ToDictionary(static value => value.export, static value => value.index, StringComparer.Ordinal);
     }
 
-    private static TypeModel CreateReferenceType(string publicType, bool valueIsConst)
+    private static TypeModel CreateReferenceType(bool valueIsConst)
     {
+        var publicType = new DataType("gp_Pnt2d");
         return new()
         {
             CppTypeName = valueIsConst ? "const gp_Pnt2d &" : "gp_Pnt2d &",
             CppValueTypeName = "gp_Pnt2d",
-            CSharpPInvokeType = new(publicType),
-            CSharpPublicType = new(publicType),
+            CSharpPInvokeType = new DataType("gp_Pnt2d").Pointer,
+            CSharpPublicType = valueIsConst ? publicType.RefReadonly : publicType.Ref,
             IsRecord = true,
             Transport = new(
                 valueIsConst,
