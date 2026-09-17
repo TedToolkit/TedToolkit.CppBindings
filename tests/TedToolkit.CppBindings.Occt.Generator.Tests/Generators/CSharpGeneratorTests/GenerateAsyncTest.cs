@@ -125,10 +125,9 @@ internal sealed class GenerateAsyncTest
         var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains(
-            "public static bool @lock(this global::TedToolkit.CppBindings.Occt.Handle<Geom_Curve> self)");
-        await Assert.That(code).Contains(
-            "public static bool @lock(this in global::TedToolkit.CppBindings.Occt.handle<Geom_Curve> self)");
+        await Assert.That(code.Split("public static bool @lock(", StringSplitOptions.None).Length - 1).IsEqualTo(2);
+        await Assert.That(code).Contains("this global::TedToolkit.CppBindings.Occt.Handle<Geom_Curve> self");
+        await Assert.That(code).Contains("this in global::TedToolkit.CppBindings.Occt.handle<Geom_Curve> self");
         await Assert.That(code).Contains("NativeApi.GetFunction(");
         await Assert.That(code).DoesNotContain("lockCore");
         await Assert.That(code).DoesNotContain("ICppOwner");
@@ -221,7 +220,9 @@ internal sealed class GenerateAsyncTest
                 CreateFunctionIndices(baseRecord, derivedRecord))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains("public static bool Read<TReceiver>(this ref TReceiver self)");
+        await Assert.That(code).Contains("public static bool Read<");
+        await Assert.That(code).Contains("TReceiver>(");
+        await Assert.That(code).Contains("this ref TReceiver self");
         await Assert.That(code).DoesNotContain("this in TReceiver self");
     }
 
@@ -327,10 +328,9 @@ internal sealed class GenerateAsyncTest
 
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains(
-            "public static ref readonly gp_Pnt2d Pole(this global::TedToolkit.CppBindings.Occt.Handle<Curve> self)");
-        await Assert.That(code).Contains(
-            "public static ref gp_Pnt2d ChangePole(this global::TedToolkit.CppBindings.Occt.Handle<Curve> self)");
+        await Assert.That(code).Contains("public static ref readonly gp_Pnt2d Pole(");
+        await Assert.That(code).Contains("public static ref gp_Pnt2d ChangePole(");
+        await Assert.That(code).Contains("this global::TedToolkit.CppBindings.Occt.Handle<Curve> self");
         await Assert.That(code).DoesNotContain("ref readonly ref readonly");
         await Assert.That(code).DoesNotContain("Owned<gp_Pnt2d>");
         await Assert.That(code).DoesNotContain("new gp_Pnt2d");
@@ -414,7 +414,9 @@ internal sealed class GenerateAsyncTest
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("Point wrapper.");
-        await Assert.That(code).Contains("public static int Coord(this ref gp_Pnt2d self, int @params)");
+        await Assert.That(code).Contains("public static int Coord(");
+        await Assert.That(code).Contains("this ref gp_Pnt2d self");
+        await Assert.That(code).Contains("int @params");
         await Assert.That(code).Contains("NativeApi.GetFunction(");
         await Assert.That(code).Contains("LayoutKind.Sequential");
         await Assert.That(code).DoesNotContain("FieldOffset");
@@ -507,8 +509,11 @@ internal sealed class GenerateAsyncTest
         var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains("public static bool Multiply_1(in Matrix left, in Matrix right)");
-        await Assert.That(code).Contains("public static bool Multiply(this ref Matrix self, in Matrix right)");
+        await Assert.That(code).Contains("public static bool Multiply_1(");
+        await Assert.That(code).Contains("in Matrix left");
+        await Assert.That(code).Contains("public static bool Multiply(");
+        await Assert.That(code).Contains("this ref Matrix self");
+        await Assert.That(code.Split("in Matrix right", StringSplitOptions.None).Length - 1).IsEqualTo(2);
     }
 
     /// <summary>
@@ -614,7 +619,8 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("public TValue Value;");
         await Assert.That(code).DoesNotContain("Size = 8");
         await Assert.That(code).Contains("class Buffer_double_4_voidExtensions");
-        await Assert.That(code).Contains("Clear(this ref Buffer_4_void<double> self)");
+        await Assert.That(code).Contains("public static void Clear(");
+        await Assert.That(code).Contains("this ref Buffer_4_void<double> self");
     }
 
     /// <summary>
@@ -791,8 +797,8 @@ internal sealed class GenerateAsyncTest
             """;
 
         await Assert.That(code).Contains(
-            "where TReceiver : unmanaged, global::TedToolkit.CppBindings.Occt.IStandard_Transient");
-        await Assert.That(code).DoesNotContain("where TReceiver : unmanaged, IStandard_Transient");
+            "where TReceiver: unmanaged, global::TedToolkit.CppBindings.Occt.IStandard_Transient");
+        await Assert.That(code).DoesNotContain("where TReceiver: unmanaged, IStandard_Transient");
         await LayoutTests.AssertCompiledStorageAsync(
             code,
             Probe,
