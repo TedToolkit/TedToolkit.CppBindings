@@ -677,7 +677,205 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).DoesNotContain("global::TedToolkit.CppBindings.Occt.Owned");
     }
 
-    private static IOptions<OcctGenerationOptions> CreateOptions(string cSharpNamespace = "TedToolkit.CppBindings.Occt")
+    /// <summary>
+    /// Verifies custom namespaces keep generic root receiver constraints bound to the runtime interface.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_use_runtime_root_interface_for_custom_namespace_generic_receivers_Async()
+    {
+        var boolType = new TypeModel()
+        {
+            CppTypeName = "bool",
+            CSharpPInvokeType = DataType.Bool,
+            CSharpPublicType = DataType.Bool,
+        };
+        var root = new RecordModel()
+        {
+            DescriptionItems = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = true,
+            MethodModels =
+            [
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = true,
+                    IsStatic = false,
+                    MethodName = "IsAlive",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = boolType,
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
+            Size = 8,
+            SourceHeader = "Standard_Transient.hxx",
+            Type = new()
+            {
+                CppTypeName = "Standard_Transient",
+                CSharpPInvokeType = new("Standard_Transient"),
+                CSharpPublicType = new("Standard_Transient"),
+            },
+        };
+        var derived = new RecordModel()
+        {
+            Bases =
+            [
+                new()
+                {
+                    Base = root,
+                    IsPublic = true,
+                    IsVirtual = false,
+                    PointerAdjustment = PointerAdjustmentKind.Identity,
+                },
+            ],
+            DescriptionItems = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = true,
+            MethodModels = [],
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
+            Size = 8,
+            SourceHeader = "Derived.hxx",
+            Type = new()
+            {
+                CppTypeName = "Derived",
+                CSharpPInvokeType = new("Derived"),
+                CSharpPublicType = new("Derived"),
+            },
+        };
+        NativeExportNameBuilder.Assign(root);
+        var catalog = new Dictionary<string, RecordModel>(StringComparer.Ordinal)
+        {
+            [root.Type.CppTypeName] = root,
+            [derived.Type.CppTypeName] = derived,
+        };
+
+        var rootCode = await OcctEmitterFactory.Managed(
+                root,
+                CreateOptions("Independent.Generated"),
+                catalog,
+                CreateFunctionIndices(root, derived))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var derivedCode = await OcctEmitterFactory.Managed(
+                derived,
+                CreateOptions("Independent.Generated"),
+                catalog,
+                CreateFunctionIndices(root, derived))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var code = rootCode + derivedCode;
+        const string Probe = """
+            global using System;
+
+            namespace Independent.Generated
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+            }
+
+            namespace LayoutProbe
+            {
+                public static class Probe
+                {
+                    public static bool Check() =>
+                        typeof(TedToolkit.CppBindings.Occt.IStandard_Transient)
+                            .IsAssignableFrom(typeof(Independent.Generated.Standard_Transient));
+                }
+            }
+            """;
+
+        await Assert.That(code).Contains(
+            "where TReceiver : unmanaged, global::TedToolkit.CppBindings.Occt.IStandard_Transient");
+        await Assert.That(code).DoesNotContain("where TReceiver : unmanaged, IStandard_Transient");
+        await LayoutTests.AssertCompiledStorageAsync(
+            code,
+            Probe,
+            "Independent.Generated.Standard_Transient").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies internal generation does not expose interfaces or extensions with internal record signatures.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_keep_all_record_api_internal_when_internal_generation_is_requested_Async()
+    {
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = false,
+            MethodModels =
+            [
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = true,
+                    IsStatic = false,
+                    MethodName = "Read",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = new()
+                    {
+                        CppTypeName = "bool",
+                        CSharpPInvokeType = DataType.Bool,
+                        CSharpPublicType = DataType.Bool,
+                    },
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.Value,
+            Size = 8,
+            SourceHeader = "Storage.hxx",
+            Type = new()
+            {
+                CppTypeName = "Storage",
+                CSharpPInvokeType = new("Storage"),
+                CSharpPublicType = new("Storage"),
+            },
+        };
+        NativeExportNameBuilder.Assign(record);
+
+        var code = await OcctEmitterFactory.Managed(
+                record,
+                CreateOptions("LayoutProbe", isInternal: true),
+                nativeFunctionIndices: CreateFunctionIndices(record))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+
+                public static class Probe
+                {
+                    public static bool Check() =>
+                        !typeof(Storage).IsPublic
+                        && !typeof(IStorage).IsPublic
+                        && !typeof(StorageExtensions).IsPublic;
+                }
+            }
+            """;
+
+        await Assert.That(code).Contains("internal unsafe struct Storage");
+        await Assert.That(code).Contains("internal unsafe interface IStorage");
+        await Assert.That(code).Contains("internal static unsafe class StorageExtensions");
+        await LayoutTests.AssertCompiledStorageAsync(code, Probe).ConfigureAwait(false);
+    }
+
+    private static IOptions<OcctGenerationOptions> CreateOptions(
+        string cSharpNamespace = "TedToolkit.CppBindings.Occt",
+        bool isInternal = false)
     {
         return Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
@@ -685,6 +883,7 @@ internal sealed class GenerateAsyncTest
             CSharpFolder = new(Path.GetTempPath()),
             CppFolder = new(Path.GetTempPath()),
             CSharpNamespace = cSharpNamespace,
+            IsInternal = isInternal,
         });
     }
 

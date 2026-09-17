@@ -110,7 +110,10 @@ public sealed class BindingManagedEmitter(
         var interfaceDeclaration = Interface(recordDecl.TemplateProjection?.FamilyName is { } familyName
                 ? "I" + familyName
                 : recordDecl.Type.CSharpInterfaceName)
-            .Public.Unsafe;
+            .Unsafe;
+        interfaceDeclaration = emissionProfile.IsInternal
+            ? interfaceDeclaration.Internal
+            : interfaceDeclaration.Public;
         AddTemplateParameters(interfaceDeclaration);
         structDeclaration?.AddBaseType(new DataType(interfaceName));
         foreach (var baseRelation in recordDecl.Bases.Where(relation =>
@@ -595,7 +598,8 @@ public sealed class BindingManagedEmitter(
         var recordName = recordDecl.Type.CSharpTypeName;
         var extensionName = recordDecl.TemplateProjection?.FixedTypeName ?? recordName;
         var builder = new StringBuilder("\n\nnamespace ").Append(emissionProfile.CSharpNamespace)
-            .Append("\n{\n    public static unsafe class ")
+            .Append("\n{\n    ").Append(emissionProfile.IsInternal ? "internal" : "public")
+            .Append(" static unsafe class ")
             .Append(extensionName).Append("Extensions\n    {\n");
         foreach (var method in methods)
         {
@@ -1243,7 +1247,7 @@ public sealed class BindingManagedEmitter(
         }
 
         _ = builder.Append("\n            where TReceiver : unmanaged, ")
-            .Append(recordDecl.Type.CSharpInterfaceName);
+            .Append(GetManagedInterfaceName(recordDecl));
         if (recordDecl.ObjectKind is NativeObjectKind.IntrusiveHandle
             && recordDecl.Type.CSharpInterfaceName != emissionProfile.IntrusiveRootInterfaceName)
         {
@@ -1287,6 +1291,13 @@ public sealed class BindingManagedEmitter(
                ?? Array.Empty<RecordModel>();
     }
 
+    private string GetManagedInterfaceName(RecordModel record)
+    {
+        return record.Type.CSharpInterfaceName == emissionProfile.IntrusiveRootInterfaceName
+            ? emissionProfile.ManagedIntrusiveRootInterface
+            : record.Type.CSharpInterfaceName;
+    }
+
     private static bool TryGetInheritancePath(
         RecordModel derived,
         RecordModel target,
@@ -1316,7 +1327,7 @@ public sealed class BindingManagedEmitter(
         _ = builder.Append("        private static ").Append(recordName)
             .Append("* AdjustReceiver<TReceiver>(TReceiver* pointer)\n")
             .Append("            where TReceiver : unmanaged, ")
-            .Append(recordDecl.Type.CSharpInterfaceName).Append("\n        {\n")
+            .Append(GetManagedInterfaceName(recordDecl)).Append("\n        {\n")
             .Append("            if (typeof(TReceiver) == typeof(").Append(recordName)
             .Append("))\n            {\n                return (").Append(recordName)
             .Append("*)pointer;\n            }\n");
