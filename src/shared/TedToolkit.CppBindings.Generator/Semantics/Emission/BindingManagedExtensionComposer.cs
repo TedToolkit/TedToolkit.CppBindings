@@ -542,14 +542,18 @@ internal sealed class BindingManagedExtensionComposer(
             var pointerExpression = $"({derived.Type.CSharpTypeName}*)pointer";
             foreach (var step in path)
             {
-                pointerExpression = step.Relation.PointerAdjustment is PointerAdjustmentKind.Identity
-                    ? $"({step.Relation.Base.Type.CSharpTypeName}*){pointerExpression}"
-                    : $"((delegate* unmanaged[Cdecl]<{step.Derived.Type.CSharpTypeName}*, "
-                      + $"{step.Relation.Base.Type.CSharpTypeName}*>)"
-                      + GetNativeFunctionExpression(NativeExportNameBuilder.GetPointerAdjustmentName(
-                          step.Derived, step.Relation.Base))
-                      + $")({pointerExpression})";
+                if (step.Relation.PointerAdjustment is PointerAdjustmentKind.Identity)
+                {
+                    continue;
+                }
+
+                pointerExpression = "((delegate* unmanaged[Cdecl]<void*, void*>)"
+                                    + GetNativeFunctionExpression(NativeExportNameBuilder.GetPointerAdjustmentName(
+                                        step.Derived, step.Relation.Base))
+                                    + $")({pointerExpression})";
             }
+
+            pointerExpression = $"({recordName}*){pointerExpression}";
 
             statements.Add(
                 $"if (typeof(TReceiver) == typeof({derived.Type.CSharpTypeName}))\n"

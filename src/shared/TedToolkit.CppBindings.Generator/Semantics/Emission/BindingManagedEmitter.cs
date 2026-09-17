@@ -36,6 +36,21 @@ public sealed class BindingManagedEmitter(
     {
         cancellationToken.ThrowIfCancellationRequested();
         var nameSpace = NameSpace(emissionProfile.CSharpNamespace);
+        AddTo(nameSpace);
+        return File()
+            .AddNameSpace(nameSpace)
+            .ToCode();
+    }
+
+    /// <summary>
+    /// Adds this record's managed declarations to an existing namespace.
+    /// </summary>
+    /// <param name="nameSpace">The namespace shared by one managed source group.</param>
+    /// <exception cref="ArgumentNullException"><paramref name="nameSpace"/> is <see langword="null"/>.</exception>
+    /// <exception cref="NotSupportedException">The record requires an unproved managed alignment.</exception>
+    internal void AddTo(NameSpace nameSpace)
+    {
+        ArgumentNullException.ThrowIfNull(nameSpace);
         if (!generateRepresentation)
         {
             new BindingManagedExtensionComposer(
@@ -44,7 +59,7 @@ public sealed class BindingManagedEmitter(
                     recordCatalog,
                     nativeFunctionIndices)
                 .AddTo(nameSpace);
-            return File().AddNameSpace(nameSpace).ToCode();
+            return;
         }
 
         var templateProjection = recordDecl.TemplateProjection;
@@ -91,10 +106,6 @@ public sealed class BindingManagedEmitter(
                 recordCatalog,
                 nativeFunctionIndices)
             .AddTo(nameSpace);
-
-        return File()
-            .AddNameSpace(nameSpace)
-            .ToCode();
     }
 
     private void GenerateInterfaces(NameSpace nameSpace, TypeDeclaration? structDeclaration)

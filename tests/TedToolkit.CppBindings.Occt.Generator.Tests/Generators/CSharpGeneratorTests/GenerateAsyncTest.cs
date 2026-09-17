@@ -227,6 +227,113 @@ internal sealed class GenerateAsyncTest
     }
 
     /// <summary>
+    /// Verifies mixed inheritance paths do not require an ungenerated intermediate managed type.
+    /// </summary>
+    /// <returns>A task that completes when the generated source has been compiled.</returns>
+    [Test]
+    public async Task Should_skip_unmanaged_intermediate_types_in_pointer_adjustments_Async()
+    {
+        static RecordModel CreateRecord(string name)
+        {
+            return new()
+            {
+                DescriptionItems = [],
+                Bases = [],
+                FieldModels = [],
+                IsAbstract = false,
+                UsesIntrusiveReferenceCounting = false,
+                MethodModels = [],
+                ObjectKind = NativeObjectKind.Value,
+                Size = 4,
+                Alignment = 4,
+                SourceHeader = name + ".hxx",
+                Type = new()
+                {
+                    CppTypeName = name,
+                    CSharpPInvokeType = new(name),
+                    CSharpPublicType = new(name),
+                    IsRecord = true,
+                },
+            };
+        }
+
+        var boolType = new TypeModel()
+        {
+            CppTypeName = "bool",
+            CSharpPInvokeType = DataType.Bool,
+            CSharpPublicType = DataType.Bool,
+        };
+        var baseRecord = CreateRecord("Base");
+        baseRecord.MethodModels =
+        [
+            new()
+            {
+                DescriptionItems = [],
+                IsConst = true,
+                IsStatic = false,
+                MethodName = "Read",
+                NoExceptions = true,
+                Parameters = [],
+                ReturnType = boolType,
+                ReturnTypeDescriptionItems = [],
+                Type = MethodModelType.NORMAL,
+            },
+        ];
+        var hiddenIntermediate = CreateRecord("HiddenIntermediate");
+        hiddenIntermediate.Bases =
+        [
+            new()
+            {
+                Base = baseRecord,
+                IsPublic = true,
+                IsVirtual = false,
+                PointerAdjustment = PointerAdjustmentKind.NativeAdjust,
+            },
+        ];
+        var derivedRecord = CreateRecord("Derived");
+        derivedRecord.Bases =
+        [
+            new()
+            {
+                Base = hiddenIntermediate,
+                IsPublic = true,
+                IsVirtual = false,
+                PointerAdjustment = PointerAdjustmentKind.Identity,
+            },
+        ];
+        NativeExportNameBuilder.Assign(baseRecord);
+        var catalog = new Dictionary<string, RecordModel>(StringComparer.Ordinal)
+        {
+            [baseRecord.Type.CppTypeName] = baseRecord,
+            [derivedRecord.Type.CppTypeName] = derivedRecord,
+        };
+        var indices = CreateFunctionIndices(baseRecord, hiddenIntermediate, derivedRecord);
+        var baseCode = await OcctEmitterFactory.Managed(baseRecord, CreateOptions("LayoutProbe"), catalog, indices)
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var derivedCode = await OcctEmitterFactory.Managed(derivedRecord, CreateOptions("LayoutProbe"), catalog, indices)
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+
+                public static class Probe
+                {
+                    public static bool Check() => typeof(Derived).IsValueType;
+                }
+            }
+            """;
+
+        await Assert.That(baseCode).Contains("delegate* unmanaged[Cdecl]<void*, void*>");
+        await Assert.That(baseCode).DoesNotContain("HiddenIntermediate");
+        await LayoutTests.AssertCompiledStorageAsync(baseCode + derivedCode, Probe, "LayoutProbe.Derived")
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
     /// Verifies an owning OCCT handle result preserves the native null state.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
