@@ -161,10 +161,10 @@ internal sealed class CgalGenerationProviderTests
         await Assert.That(managed["Point_2.g.cs"]).Contains("NativeApi.GetFunction");
         await Assert.That(native["TedToolkit_CppBindings_Cgal_Point_2.cpp"])
             .Contains("extern \"C\" double Cgal_Point2_Cartesian");
-        await Assert.That(managed["Point_2.g.cs"])
-            .Contains("public static ref readonly double X(this in Point_2 self)");
-        await Assert.That(managed["Segment_2.g.cs"])
-            .Contains("public static ref readonly Point_2 Source(this in Segment_2 self)");
+        await Assert.That(managed["Point_2.g.cs"]).Contains("public static ref readonly double X(");
+        await Assert.That(managed["Point_2.g.cs"]).Contains("this in Point_2 self");
+        await Assert.That(managed["Segment_2.g.cs"]).Contains("public static ref readonly Point_2 Source(");
+        await Assert.That(managed["Segment_2.g.cs"]).Contains("this in Segment_2 self");
         await Assert.That(managed["Point_2.g.cs"]).DoesNotContain("public double StorageX");
         await Assert.That(managed["Segment_2.g.cs"]).DoesNotContain("public Point_2 StorageSource");
         await Assert.That(plan.NativeExports).Contains("Cgal_Point2_Create");

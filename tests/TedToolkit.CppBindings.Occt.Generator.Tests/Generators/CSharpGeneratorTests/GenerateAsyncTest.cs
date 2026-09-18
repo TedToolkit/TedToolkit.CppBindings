@@ -125,10 +125,9 @@ internal sealed class GenerateAsyncTest
         var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains(
-            "public static bool @lock(this global::TedToolkit.CppBindings.Occt.Handle<Geom_Curve> self)");
-        await Assert.That(code).Contains(
-            "public static bool @lock(this in global::TedToolkit.CppBindings.Occt.handle<Geom_Curve> self)");
+        await Assert.That(code.Split("public static bool @lock(", StringSplitOptions.None).Length - 1).IsEqualTo(2);
+        await Assert.That(code).Contains("this global::TedToolkit.CppBindings.Occt.Handle<Geom_Curve> self");
+        await Assert.That(code).Contains("this in global::TedToolkit.CppBindings.Occt.handle<Geom_Curve> self");
         await Assert.That(code).Contains("NativeApi.GetFunction(");
         await Assert.That(code).DoesNotContain("lockCore");
         await Assert.That(code).DoesNotContain("ICppOwner");
@@ -221,8 +220,117 @@ internal sealed class GenerateAsyncTest
                 CreateFunctionIndices(baseRecord, derivedRecord))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains("public static bool Read<TReceiver>(this ref TReceiver self)");
+        await Assert.That(code).Contains("public static bool Read<");
+        await Assert.That(code).Contains("TReceiver>(");
+        await Assert.That(code).Contains("this ref TReceiver self");
         await Assert.That(code).DoesNotContain("this in TReceiver self");
+    }
+
+    /// <summary>
+    /// Verifies mixed inheritance paths do not require an ungenerated intermediate managed type.
+    /// </summary>
+    /// <returns>A task that completes when the generated source has been compiled.</returns>
+    [Test]
+    public async Task Should_skip_unmanaged_intermediate_types_in_pointer_adjustments_Async()
+    {
+        static RecordModel CreateRecord(string name)
+        {
+            return new()
+            {
+                DescriptionItems = [],
+                Bases = [],
+                FieldModels = [],
+                IsAbstract = false,
+                UsesIntrusiveReferenceCounting = false,
+                MethodModels = [],
+                ObjectKind = NativeObjectKind.Value,
+                Size = 4,
+                Alignment = 4,
+                SourceHeader = name + ".hxx",
+                Type = new()
+                {
+                    CppTypeName = name,
+                    CSharpPInvokeType = new(name),
+                    CSharpPublicType = new(name),
+                    IsRecord = true,
+                },
+            };
+        }
+
+        var boolType = new TypeModel()
+        {
+            CppTypeName = "bool",
+            CSharpPInvokeType = DataType.Bool,
+            CSharpPublicType = DataType.Bool,
+        };
+        var baseRecord = CreateRecord("Base");
+        baseRecord.MethodModels =
+        [
+            new()
+            {
+                DescriptionItems = [],
+                IsConst = true,
+                IsStatic = false,
+                MethodName = "Read",
+                NoExceptions = true,
+                Parameters = [],
+                ReturnType = boolType,
+                ReturnTypeDescriptionItems = [],
+                Type = MethodModelType.NORMAL,
+            },
+        ];
+        var hiddenIntermediate = CreateRecord("HiddenIntermediate");
+        hiddenIntermediate.Bases =
+        [
+            new()
+            {
+                Base = baseRecord,
+                IsPublic = true,
+                IsVirtual = false,
+                PointerAdjustment = PointerAdjustmentKind.NativeAdjust,
+            },
+        ];
+        var derivedRecord = CreateRecord("Derived");
+        derivedRecord.Bases =
+        [
+            new()
+            {
+                Base = hiddenIntermediate,
+                IsPublic = true,
+                IsVirtual = false,
+                PointerAdjustment = PointerAdjustmentKind.Identity,
+            },
+        ];
+        NativeExportNameBuilder.Assign(baseRecord);
+        var catalog = new Dictionary<string, RecordModel>(StringComparer.Ordinal)
+        {
+            [baseRecord.Type.CppTypeName] = baseRecord,
+            [derivedRecord.Type.CppTypeName] = derivedRecord,
+        };
+        var indices = CreateFunctionIndices(baseRecord, hiddenIntermediate, derivedRecord);
+        var baseCode = await OcctEmitterFactory.Managed(baseRecord, CreateOptions("LayoutProbe"), catalog, indices)
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var derivedCode = await OcctEmitterFactory.Managed(derivedRecord, CreateOptions("LayoutProbe"), catalog, indices)
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+
+                public static class Probe
+                {
+                    public static bool Check() => typeof(Derived).IsValueType;
+                }
+            }
+            """;
+
+        await Assert.That(baseCode).Contains("delegate* unmanaged[Cdecl]<void*, void*>");
+        await Assert.That(baseCode).DoesNotContain("HiddenIntermediate");
+        await LayoutTests.AssertCompiledStorageAsync(baseCode + derivedCode, Probe, "LayoutProbe.Derived")
+            .ConfigureAwait(false);
     }
 
     /// <summary>
@@ -295,8 +403,8 @@ internal sealed class GenerateAsyncTest
     [Test]
     public async Task Should_generate_borrowed_reference_returns_without_copying_Async()
     {
-        var constReference = CreateReferenceType("ref readonly gp_Pnt2d", valueIsConst: true);
-        var mutableReference = CreateReferenceType("ref gp_Pnt2d", valueIsConst: false);
+        var constReference = CreateReferenceType(valueIsConst: true);
+        var mutableReference = CreateReferenceType(valueIsConst: false);
         var record = new RecordModel()
         {
             DescriptionItems = [],
@@ -327,14 +435,96 @@ internal sealed class GenerateAsyncTest
 
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains(
-            "public static ref readonly gp_Pnt2d Pole(this global::TedToolkit.CppBindings.Occt.Handle<Curve> self)");
-        await Assert.That(code).Contains(
-            "public static ref gp_Pnt2d ChangePole(this global::TedToolkit.CppBindings.Occt.Handle<Curve> self)");
+        await Assert.That(code).Contains("public static ref readonly gp_Pnt2d Pole(");
+        await Assert.That(code).Contains("public static ref gp_Pnt2d ChangePole(");
+        await Assert.That(code).Contains("this global::TedToolkit.CppBindings.Occt.Handle<Curve> self");
         await Assert.That(code).DoesNotContain("ref readonly ref readonly");
         await Assert.That(code).DoesNotContain("Owned<gp_Pnt2d>");
         await Assert.That(code).DoesNotContain("new gp_Pnt2d");
         await Assert.That(code).Contains("return ref *__result;");
+    }
+
+    /// <summary>
+    /// Verifies ref-readonly pointer parameters pin the unmodified element type in generated C#.
+    /// </summary>
+    /// <returns>A task that completes when the generated source has been compiled.</returns>
+    [Test]
+    public async Task Should_generate_valid_fixed_pointer_for_ref_readonly_pointer_parameter_Async()
+    {
+        var voidType = new TypeModel()
+        {
+            CppTypeName = "void",
+            CSharpPInvokeType = DataType.Void,
+            CSharpPublicType = DataType.Void,
+        };
+        var constPointer = new TypeModel()
+        {
+            CppTypeName = "const int*",
+            CppValueTypeName = "int",
+            CSharpPInvokeType = DataType.Int.Pointer,
+            CSharpPublicType = DataType.Int.RefReadonly,
+            Transport = new(
+                valueIsConst: true,
+                [new(TypeIndirectionKind.PointerIndirection, IsConstQualified: false),]),
+        };
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            Bases = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = false,
+            MethodModels =
+            [
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = false,
+                    IsStatic = true,
+                    MethodName = "Read",
+                    NoExceptions = true,
+                    Parameters = [new() { DescriptionItems = [], Name = "value", Type = constPointer, },],
+                    ReturnType = voidType,
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.Value,
+            Size = 1,
+            Alignment = 1,
+            SourceHeader = "Storage.hxx",
+            Type = new()
+            {
+                CppTypeName = "Storage",
+                CSharpPInvokeType = new("Storage"),
+                CSharpPublicType = new("Storage"),
+            },
+        };
+        NativeExportNameBuilder.Assign(record);
+        var code = await OcctEmitterFactory.Managed(
+                record,
+                CreateOptions("LayoutProbe"),
+                nativeFunctionIndices: CreateFunctionIndices(record))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+
+                public static class Probe
+                {
+                    public static bool Check() => true;
+                }
+            }
+            """;
+
+        await Assert.That(code).Contains("ref readonly int @value");
+        await Assert.That(code).Contains("fixed (int* @valuePointer = &@value)");
+        await Assert.That(code).DoesNotContain("fixed (readonly int*");
+        await LayoutTests.AssertCompiledStorageAsync(code, Probe).ConfigureAwait(false);
     }
 
     /// <summary>
@@ -414,7 +604,9 @@ internal sealed class GenerateAsyncTest
         var code = await generator.GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
         await Assert.That(code).Contains("Point wrapper.");
-        await Assert.That(code).Contains("public static int Coord(this ref gp_Pnt2d self, int @params)");
+        await Assert.That(code).Contains("public static int Coord(");
+        await Assert.That(code).Contains("this ref gp_Pnt2d self");
+        await Assert.That(code).Contains("int @params");
         await Assert.That(code).Contains("NativeApi.GetFunction(");
         await Assert.That(code).Contains("LayoutKind.Sequential");
         await Assert.That(code).DoesNotContain("FieldOffset");
@@ -507,8 +699,11 @@ internal sealed class GenerateAsyncTest
         var code = await OcctEmitterFactory.Managed(record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
             .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
 
-        await Assert.That(code).Contains("public static bool Multiply_1(in Matrix left, in Matrix right)");
-        await Assert.That(code).Contains("public static bool Multiply(this ref Matrix self, in Matrix right)");
+        await Assert.That(code).Contains("public static bool Multiply_1(");
+        await Assert.That(code).Contains("in Matrix left");
+        await Assert.That(code).Contains("public static bool Multiply(");
+        await Assert.That(code).Contains("this ref Matrix self");
+        await Assert.That(code.Split("in Matrix right", StringSplitOptions.None).Length - 1).IsEqualTo(2);
     }
 
     /// <summary>
@@ -614,7 +809,8 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("public TValue Value;");
         await Assert.That(code).DoesNotContain("Size = 8");
         await Assert.That(code).Contains("class Buffer_double_4_voidExtensions");
-        await Assert.That(code).Contains("Clear(this ref Buffer_4_void<double> self)");
+        await Assert.That(code).Contains("public static void Clear(");
+        await Assert.That(code).Contains("this ref Buffer_4_void<double> self");
     }
 
     /// <summary>
@@ -677,7 +873,205 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).DoesNotContain("global::TedToolkit.CppBindings.Occt.Owned");
     }
 
-    private static IOptions<OcctGenerationOptions> CreateOptions(string cSharpNamespace = "TedToolkit.CppBindings.Occt")
+    /// <summary>
+    /// Verifies custom namespaces keep generic root receiver constraints bound to the runtime interface.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_use_runtime_root_interface_for_custom_namespace_generic_receivers_Async()
+    {
+        var boolType = new TypeModel()
+        {
+            CppTypeName = "bool",
+            CSharpPInvokeType = DataType.Bool,
+            CSharpPublicType = DataType.Bool,
+        };
+        var root = new RecordModel()
+        {
+            DescriptionItems = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = true,
+            MethodModels =
+            [
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = true,
+                    IsStatic = false,
+                    MethodName = "IsAlive",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = boolType,
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
+            Size = 8,
+            SourceHeader = "Standard_Transient.hxx",
+            Type = new()
+            {
+                CppTypeName = "Standard_Transient",
+                CSharpPInvokeType = new("Standard_Transient"),
+                CSharpPublicType = new("Standard_Transient"),
+            },
+        };
+        var derived = new RecordModel()
+        {
+            Bases =
+            [
+                new()
+                {
+                    Base = root,
+                    IsPublic = true,
+                    IsVirtual = false,
+                    PointerAdjustment = PointerAdjustmentKind.Identity,
+                },
+            ],
+            DescriptionItems = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = true,
+            MethodModels = [],
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
+            Size = 8,
+            SourceHeader = "Derived.hxx",
+            Type = new()
+            {
+                CppTypeName = "Derived",
+                CSharpPInvokeType = new("Derived"),
+                CSharpPublicType = new("Derived"),
+            },
+        };
+        NativeExportNameBuilder.Assign(root);
+        var catalog = new Dictionary<string, RecordModel>(StringComparer.Ordinal)
+        {
+            [root.Type.CppTypeName] = root,
+            [derived.Type.CppTypeName] = derived,
+        };
+
+        var rootCode = await OcctEmitterFactory.Managed(
+                root,
+                CreateOptions("Independent.Generated"),
+                catalog,
+                CreateFunctionIndices(root, derived))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var derivedCode = await OcctEmitterFactory.Managed(
+                derived,
+                CreateOptions("Independent.Generated"),
+                catalog,
+                CreateFunctionIndices(root, derived))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var code = rootCode + derivedCode;
+        const string Probe = """
+            global using System;
+
+            namespace Independent.Generated
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+            }
+
+            namespace LayoutProbe
+            {
+                public static class Probe
+                {
+                    public static bool Check() =>
+                        typeof(TedToolkit.CppBindings.Occt.IStandard_Transient)
+                            .IsAssignableFrom(typeof(Independent.Generated.Standard_Transient));
+                }
+            }
+            """;
+
+        await Assert.That(code).Contains(
+            "where TReceiver: unmanaged, global::TedToolkit.CppBindings.Occt.IStandard_Transient");
+        await Assert.That(code).DoesNotContain("where TReceiver: unmanaged, IStandard_Transient");
+        await LayoutTests.AssertCompiledStorageAsync(
+            code,
+            Probe,
+            "Independent.Generated.Standard_Transient").ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies internal generation does not expose interfaces or extensions with internal record signatures.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_keep_all_record_api_internal_when_internal_generation_is_requested_Async()
+    {
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = false,
+            MethodModels =
+            [
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = true,
+                    IsStatic = false,
+                    MethodName = "Read",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = new()
+                    {
+                        CppTypeName = "bool",
+                        CSharpPInvokeType = DataType.Bool,
+                        CSharpPublicType = DataType.Bool,
+                    },
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.Value,
+            Size = 8,
+            SourceHeader = "Storage.hxx",
+            Type = new()
+            {
+                CppTypeName = "Storage",
+                CSharpPInvokeType = new("Storage"),
+                CSharpPublicType = new("Storage"),
+            },
+        };
+        NativeExportNameBuilder.Assign(record);
+
+        var code = await OcctEmitterFactory.Managed(
+                record,
+                CreateOptions("LayoutProbe", isInternal: true),
+                nativeFunctionIndices: CreateFunctionIndices(record))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+
+                public static class Probe
+                {
+                    public static bool Check() =>
+                        !typeof(Storage).IsPublic
+                        && !typeof(IStorage).IsPublic
+                        && !typeof(StorageExtensions).IsPublic;
+                }
+            }
+            """;
+
+        await Assert.That(code).Contains("internal unsafe struct Storage");
+        await Assert.That(code).Contains("internal unsafe interface IStorage");
+        await Assert.That(code).Contains("internal static unsafe class StorageExtensions");
+        await LayoutTests.AssertCompiledStorageAsync(code, Probe).ConfigureAwait(false);
+    }
+
+    private static IOptions<OcctGenerationOptions> CreateOptions(
+        string cSharpNamespace = "TedToolkit.CppBindings.Occt",
+        bool isInternal = false)
     {
         return Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
         {
@@ -685,6 +1079,7 @@ internal sealed class GenerateAsyncTest
             CSharpFolder = new(Path.GetTempPath()),
             CppFolder = new(Path.GetTempPath()),
             CSharpNamespace = cSharpNamespace,
+            IsInternal = isInternal,
         });
     }
 
@@ -695,14 +1090,15 @@ internal sealed class GenerateAsyncTest
             .ToDictionary(static value => value.export, static value => value.index, StringComparer.Ordinal);
     }
 
-    private static TypeModel CreateReferenceType(string publicType, bool valueIsConst)
+    private static TypeModel CreateReferenceType(bool valueIsConst)
     {
+        var publicType = new DataType("gp_Pnt2d");
         return new()
         {
             CppTypeName = valueIsConst ? "const gp_Pnt2d &" : "gp_Pnt2d &",
             CppValueTypeName = "gp_Pnt2d",
-            CSharpPInvokeType = new(publicType),
-            CSharpPublicType = new(publicType),
+            CSharpPInvokeType = new DataType("gp_Pnt2d").Pointer,
+            CSharpPublicType = valueIsConst ? publicType.RefReadonly : publicType.Ref,
             IsRecord = true,
             Transport = new(
                 valueIsConst,

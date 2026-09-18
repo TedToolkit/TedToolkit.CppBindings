@@ -63,6 +63,11 @@ internal sealed class CgalResultProjectionCompatibilityTests
 
     private static string Normalize(string value)
     {
-        return value.Replace("\r\n", "\n", StringComparison.Ordinal).TrimEnd();
+        return string.Join(
+            "\n",
+            value.Replace("\r\n", "\n", StringComparison.Ordinal)
+                .Split('\n')
+                .Select(static line => line.TrimEnd()))
+            .TrimEnd();
     }
 }

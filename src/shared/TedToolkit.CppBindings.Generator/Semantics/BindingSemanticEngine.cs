@@ -8,6 +8,9 @@
 using System.Collections.ObjectModel;
 
 using TedToolkit.CppBindings.Generator.Generators;
+using TedToolkit.RoslynHelper.Generators.Syntaxes;
+
+using static TedToolkit.RoslynHelper.Generators.SourceComposer;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;
 
@@ -453,18 +456,22 @@ public sealed class BindingSemanticEngine
         await ManagedEmissionSlots.WaitAsync(cancellationToken).ConfigureAwait(false);
         try
         {
+            var nameSpace = NameSpace(emissionProfile.CSharpNamespace);
             for (var index = 0; index < declarations.Length; index++)
             {
+                cancellationToken.ThrowIfCancellationRequested();
                 var declaration = declarations[index];
-                var code = await new BindingManagedEmitter(
+                new BindingManagedEmitter(
                         declaration.Source.Record,
                         emissionProfile,
                         catalog,
                         slots,
                         index is 0)
-                    .GenerateAsync(cancellationToken).ConfigureAwait(false);
-                await writer.WriteAsync(code.AsMemory(), cancellationToken).ConfigureAwait(false);
+                    .AddTo(nameSpace);
             }
+
+            var code = File().AddNameSpace(nameSpace).ToCode();
+            await writer.WriteAsync(code.AsMemory(), cancellationToken).ConfigureAwait(false);
         }
         finally
         {
