@@ -360,7 +360,7 @@ internal sealed class BindingManagedExtensionComposer(
     private Method CreateMethod(MethodModel method, DataType returnType, CallShape shape)
     {
         var declaration = Method(
-            GetPublicMethodName(method).ToValidIdentifier(),
+            GetPublicMethodName(method, shape).ToValidIdentifier(),
             ReturnType(returnType)).Public.Static;
         AddPublicParameters(declaration, shape);
         AddReceiverTypeParameter(method, declaration);
@@ -390,28 +390,20 @@ internal sealed class BindingManagedExtensionComposer(
         CallShape shape)
     {
         var receiverType = UsesGenericReceiver ? "TReceiver" : recordName;
-        Parameter receiver;
-        if (borrowedHandleReceiver)
-        {
-            receiver = new Parameter(
-                new DataType($"{profile.ManagedBorrowedIntrusiveHandle}<{receiverType}>").In,
-                "self").This;
-        }
-        else
-        {
-            receiver = record.ObjectKind switch
+        var receiverDataType = borrowedHandleReceiver
+            ? new DataType($"{profile.ManagedBorrowedIntrusiveHandle}<{receiverType}>").In
+            : record.ObjectKind switch
             {
-                NativeObjectKind.IntrusiveHandle => new Parameter(
-                    new DataType($"{profile.ManagedOwningIntrusiveHandle}<{receiverType}>"), "self").This,
-                NativeObjectKind.Owned => new Parameter(
-                    new DataType($"global::TedToolkit.CppBindings.Owned<{receiverType}>"), "self").This,
-                _ when UsesGenericReceiver => new Parameter(new DataType(receiverType).Ref, "self").This,
-                _ when method.IsConst => new Parameter(new DataType(receiverType).In, "self").This,
-                _ => new Parameter(new DataType(receiverType).Ref, "self").This,
+                NativeObjectKind.IntrusiveHandle => new DataType(
+                    $"{profile.ManagedOwningIntrusiveHandle}<{receiverType}>"),
+                NativeObjectKind.Owned => new DataType(
+                    $"global::TedToolkit.CppBindings.Owned<{receiverType}>"),
+                _ when UsesGenericReceiver => new DataType(receiverType).Ref,
+                _ when method.IsConst => new DataType(receiverType).In,
+                _ => new DataType(receiverType).Ref,
             };
-        }
 
-        shape.PublicParameters.Add(receiver);
+        AddPublicParameter(shape, receiverDataType, "self", isReceiver: true);
         shape.NativeParameterTypes.Add(recordName + "*");
         shape.NativeArguments.Add(UsesGenericReceiver ? "AdjustReceiver(selfPointer)" : "selfPointer");
         shape.Pins.Add((receiverType, "selfPointer",
@@ -437,7 +429,7 @@ internal sealed class BindingManagedExtensionComposer(
             var ownerName = parameterRecord.ObjectKind is NativeObjectKind.Owned
                 ? "global::TedToolkit.CppBindings.Owned"
                 : profile.ManagedOwningIntrusiveHandle;
-            shape.PublicParameters.Add(new Parameter(new DataType($"{ownerName}<{ownerTypeName}>"), parameterName));
+            AddPublicParameter(shape, new DataType($"{ownerName}<{ownerTypeName}>"), parameterName);
             shape.NativeParameterTypes.Add(ownerTypeName + "*");
             var pointerName = parameterName + "Pointer";
             shape.NativeArguments.Add(pointerName);
@@ -453,8 +445,7 @@ internal sealed class BindingManagedExtensionComposer(
             var referencedDataType = IsReferencedValueConst(parameter.Type) || isRecordValue
                 ? referencedType.In
                 : referencedType.Ref;
-            var publicParameter = new Parameter(referencedDataType, parameterName);
-            shape.PublicParameters.Add(publicParameter);
+            AddPublicParameter(shape, referencedDataType, parameterName);
             var pinvokeType = parameter.Type.CSharpPInvokeType.ToCode();
             shape.NativeParameterTypes.Add(pinvokeType.EndsWith('*') ? pinvokeType : referencedTypeName + "*");
             var pointerName = parameterName + "Pointer";
@@ -470,8 +461,7 @@ internal sealed class BindingManagedExtensionComposer(
             && publicDataType.StorageKind is not StorageKind.NONE)
         {
             var valueTypeName = GetCSharpValueType(parameter.Type).ToCode();
-            var publicParameter = new Parameter(publicDataType, parameterName);
-            shape.PublicParameters.Add(publicParameter);
+            AddPublicParameter(shape, publicDataType, parameterName);
             shape.NativeParameterTypes.Add(nativeType);
             var pointerName = parameterName + "Pointer";
             shape.NativeArguments.Add(pointerName);
@@ -482,7 +472,7 @@ internal sealed class BindingManagedExtensionComposer(
         if (firstIndirection is TypeIndirectionKind.PointerIndirection
             && publicType is "global::System.ReadOnlySpan<byte>")
         {
-            shape.PublicParameters.Add(new Parameter(publicDataType, parameterName));
+            AddPublicParameter(shape, publicDataType, parameterName);
             shape.NativeParameterTypes.Add(nativeType);
             var pointerName = parameterName + "Pointer";
             shape.NativeArguments.Add(pointerName);
@@ -490,7 +480,7 @@ internal sealed class BindingManagedExtensionComposer(
             return;
         }
 
-        shape.PublicParameters.Add(new Parameter(publicDataType, parameterName));
+        AddPublicParameter(shape, publicDataType, parameterName);
         shape.NativeParameterTypes.Add(nativeType);
         shape.NativeArguments.Add(string.Equals(publicType, nativeType, StringComparison.Ordinal)
             ? parameterName
@@ -567,7 +557,7 @@ internal sealed class BindingManagedExtensionComposer(
         return declaration;
     }
 
-    private string GetPublicMethodName(MethodModel method)
+    private string GetPublicMethodName(MethodModel method, CallShape shape)
     {
         if (!method.IsStatic || method.Parameters.Count is 0)
         {
@@ -577,16 +567,19 @@ internal sealed class BindingManagedExtensionComposer(
         var conflictsWithInstance = record.MethodModels.Any(candidate =>
             !candidate.IsStatic
             && string.Equals(candidate.MethodName, method.MethodName, StringComparison.Ordinal)
-            && candidate.Parameters.Count + 1 == method.Parameters.Count
-            && string.Equals(
-                method.Parameters[0].Type.CppValueTypeName,
-                record.Type.CppTypeName,
-                StringComparison.Ordinal)
-            && candidate.Parameters.Select(static parameter => parameter.Type.CSharpPInvokeType.ToCode())
-                .SequenceEqual(method.Parameters.Skip(1)
-                    .Select(static parameter => parameter.Type.CSharpPInvokeType.ToCode()),
-                    StringComparer.Ordinal));
+            && GetInstanceCallShapes(candidate).Any(candidateShape =>
+                candidateShape.PublicParameterSignatures.SequenceEqual(shape.PublicParameterSignatures)));
         return conflictsWithInstance ? method.MethodName + "_1" : method.MethodName;
+    }
+
+    private IEnumerable<CallShape> GetInstanceCallShapes(MethodModel method)
+    {
+        var recordName = record.Type.CSharpTypeName;
+        yield return CreateCallShape(method, recordName, borrowedHandleReceiver: false);
+        if (record.ObjectKind is NativeObjectKind.IntrusiveHandle)
+        {
+            yield return CreateCallShape(method, recordName, borrowedHandleReceiver: true);
+        }
     }
 
     private static void AddErrorTransport(MethodModel method, CallShape shape)
@@ -646,6 +639,17 @@ internal sealed class BindingManagedExtensionComposer(
         {
             declaration.AddParameter(parameter);
         }
+    }
+
+    private static void AddPublicParameter(
+        CallShape shape,
+        DataType type,
+        string name,
+        bool isReceiver = false)
+    {
+        var parameter = new Parameter(type, name);
+        shape.PublicParameters.Add(isReceiver ? parameter.This : parameter);
+        shape.PublicParameterSignatures.Add(ManagedParameterSignature.Create(type));
     }
 
     private string GetDeleteExportName()
@@ -789,6 +793,8 @@ internal sealed class BindingManagedExtensionComposer(
     {
         internal List<Parameter> PublicParameters { get; } = [];
 
+        internal List<ManagedParameterSignature> PublicParameterSignatures { get; } = [];
+
         internal List<string> NativeParameterTypes { get; } = [];
 
         internal List<string> NativeArguments { get; } = [];
@@ -796,5 +802,18 @@ internal sealed class BindingManagedExtensionComposer(
         internal List<(string Type, string Name, string Expression)> Pins { get; } = [];
 
         internal List<string> ParameterOwners { get; } = [];
+    }
+
+    private readonly record struct ManagedParameterSignature(string TypeName, bool IsByReference)
+    {
+        internal static ManagedParameterSignature Create(DataType type)
+        {
+            var valueType = new DataType(type.Type)
+            {
+                IsArray = type.IsArray,
+                PointCounter = type.PointCounter,
+            };
+            return new(valueType.ToCode(), type.StorageKind is not StorageKind.NONE);
+        }
     }
 }
