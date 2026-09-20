@@ -707,6 +707,98 @@ internal sealed class GenerateAsyncTest
     }
 
     /// <summary>
+    /// Verifies a static intrusive-handle parameter is renamed when it collides with a borrowed receiver overload.
+    /// </summary>
+    /// <returns>A task that completes when the assertion sequence has finished.</returns>
+    [Test]
+    public async Task Should_number_static_method_when_handle_parameter_collides_with_borrowed_receiver_Async()
+    {
+        var boolType = new TypeModel()
+        {
+            CppTypeName = "bool",
+            CSharpPInvokeType = DataType.Bool,
+            CSharpPublicType = DataType.Bool,
+        };
+        var handleReference = new TypeModel()
+        {
+            CppTypeName = "const intrusive_handle<ProgressSink> &",
+            CppValueTypeName = "intrusive_handle<ProgressSink>",
+            CSharpPInvokeType = new("global::TedToolkit.CppBindings.Occt.handle<ProgressSink>"),
+            CSharpPublicType = new("global::TedToolkit.CppBindings.Occt.handle<ProgressSink>"),
+            IsIntrusiveHandle = true,
+            IsRecord = true,
+            IntrusiveHandleElementCppType = "ProgressSink",
+            IntrusiveHandleElementType = "ProgressSink",
+            Transport = new(
+                valueIsConst: true,
+                [new(TypeIndirectionKind.LValueReference, IsConstQualified: false),]),
+        };
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            FieldModels = [],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = true,
+            MethodModels =
+            [
+                new MethodModel()
+                {
+                    DescriptionItems = [],
+                    IsConst = false,
+                    IsStatic = true,
+                    MethodName = "Start",
+                    NoExceptions = true,
+                    Parameters =
+                    [
+                        new ParameterModel()
+                        {
+                            DescriptionItems = [],
+                            Name = "progress",
+                            Type = handleReference,
+                        },
+                    ],
+                    ReturnType = boolType,
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+                new MethodModel()
+                {
+                    DescriptionItems = [],
+                    IsConst = true,
+                    IsStatic = false,
+                    MethodName = "Start",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = boolType,
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NORMAL,
+                },
+            ],
+            ObjectKind = NativeObjectKind.IntrusiveHandle,
+            Size = 8,
+            SourceHeader = "ProgressSink.hxx",
+            Type = new()
+            {
+                CppTypeName = "ProgressSink",
+                CSharpPInvokeType = new("ProgressSink"),
+                CSharpPublicType = new("ProgressSink"),
+            },
+        };
+        NativeExportNameBuilder.Assign(record);
+
+        var code = await OcctEmitterFactory.Managed(
+                record, CreateOptions(), nativeFunctionIndices: CreateFunctionIndices(record))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+
+        await Assert.That(code).Contains("public static bool Start_1(");
+        await Assert.That(code).Contains("in global::TedToolkit.CppBindings.Occt.handle<ProgressSink> progress");
+        await Assert.That(code).Contains(
+            "this global::TedToolkit.CppBindings.Occt.Handle<ProgressSink> self");
+        await Assert.That(code).Contains(
+            "this in global::TedToolkit.CppBindings.Occt.handle<ProgressSink> self");
+    }
+
+    /// <summary>
     /// Verifies mixed template projections emit one generic layout and exact closed native operations.
     /// </summary>
     /// <returns>A task that completes when the assertion sequence has finished.</returns>
