@@ -576,10 +576,12 @@ internal sealed class BindingManagedExtensionComposer(
     {
         var recordName = record.Type.CSharpTypeName;
         yield return CreateCallShape(method, recordName, borrowedHandleReceiver: false);
-        if (record.ObjectKind is NativeObjectKind.IntrusiveHandle)
+        if (record.ObjectKind is not NativeObjectKind.IntrusiveHandle)
         {
-            yield return CreateCallShape(method, recordName, borrowedHandleReceiver: true);
+            yield break;
         }
+
+        yield return CreateCallShape(method, recordName, borrowedHandleReceiver: true);
     }
 
     private static void AddErrorTransport(MethodModel method, CallShape shape)
