@@ -10,6 +10,7 @@ using Microsoft.Extensions.Options;
 using ModularPipelines.Configuration;
 using ModularPipelines.Context;
 
+using TedToolkit.ModularPipelines;
 using TedToolkit.ModularPipelines.Constants;
 using TedToolkit.ModularPipelines.Modules;
 using TedToolkit.ModularPipelines.Options;
@@ -89,6 +90,25 @@ public sealed class WindowsBindingsModule(
                     cancellationToken)
                 .ConfigureAwait(false);
         }
+
+        var report = Path.Combine(root.FullName, "output", "occt-package-verification");
+        await BuildProcess.RunAsync(
+                "pwsh",
+                [
+                    "-NoProfile", "-File", Path.Combine(root.FullName, "Build", "VerifyWindowsPackage.ps1"),
+                    "-ReportDirectory", report,
+                ],
+                root.FullName,
+                cancellationToken)
+            .ConfigureAwait(false);
+
+        var package = Directory.GetFiles(
+                Path.Combine(report, "feed"), "TedToolkit.CppBindings.Occt.Windows.*.nupkg")
+            .Single();
+        var nugetFolder = context.GetNugetFolder().Path;
+        Directory.CreateDirectory(nugetFolder);
+        System.IO.Compression.ZipFile.ExtractToDirectory(
+            package, Path.Combine(nugetFolder, Path.GetFileNameWithoutExtension(package)));
 
         return true;
     }
