@@ -33,7 +33,6 @@ Assert-NativeBuildDiskBoundary -Path $report -Phase 'OCCT packaging' -ScratchRoo
 $projects = [ordered]@{
     'TedToolkit.CppBindings.Runtime' = 'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj'
     'TedToolkit.CppBindings.Occt.Runtime' = 'src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj'
-    'TedToolkit.CppBindings.Analyzers' = 'src/tools/TedToolkit.CppBindings.Analyzers/TedToolkit.CppBindings.Analyzers.csproj'
     'TedToolkit.CppBindings.Occt.Windows' = 'src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj'
 }
 foreach ($name in $projects.Keys) {
@@ -120,4 +119,4 @@ if ($LASTEXITCODE -ne 0 -or (Get-Content -LiteralPath $runLog -Raw) -notmatch 's
     BuildArguments = $arguments
     RunLog = $runLog
 } | ConvertTo-Json -Depth 5 | Set-Content -LiteralPath (Join-Path $report 'result.json') -Encoding utf8
-Write-Output "Packed Windows bindings with direct diagnostics and real native calls passed: $report"
+Write-Output "Packed Windows bindings with real native calls passed: $report"

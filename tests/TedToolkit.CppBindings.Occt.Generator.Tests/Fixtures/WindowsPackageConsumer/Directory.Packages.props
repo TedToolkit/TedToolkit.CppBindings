@@ -4,7 +4,6 @@
     <PackageVersionUnderTest Condition="'$(PackageVersionUnderTest)' == ''">1.0.0</PackageVersionUnderTest>
   </PropertyGroup>
   <ItemGroup>
-    <PackageVersion Include="TedToolkit.CppBindings.Analyzers" Version="$(PackageVersionUnderTest)" />
     <PackageVersion Include="TedToolkit.CppBindings.Occt.Windows" Version="$(PackageVersionUnderTest)" />
   </ItemGroup>
 </Project>

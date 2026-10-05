@@ -136,8 +136,8 @@ The independent generic package consumer proves the public provider boundary, no
 `pwsh -NoProfile -File Build/VerifyOcctGeneratorPackage.ps1` packs and consumes this provider in an
 isolated project, checks header source-generator assets and public identities, and compares two
 real-header generation runs. After a successful Release solution build,
-`pwsh -NoProfile -File Build/VerifyWindowsPackage.ps1` consumes the matching Windows package and
-its direct analyzer package through the native smoke test without generating code in the consumer.
+`pwsh -NoProfile -File Build/VerifyWindowsPackage.ps1` consumes the matching Windows package
+through the native smoke test without generating code in the consumer.
 
 [Repository overview](../../../../README.md) · [Runtime](../TedToolkit.CppBindings.Occt.Runtime/README.md)
 · [Platform architecture](../../../../docs/architecture/cpp-bindings-platform.md)

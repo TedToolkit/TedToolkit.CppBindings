@@ -10,6 +10,5 @@
   </PropertyGroup>
   <ItemGroup>
     <PackageReference Include="TedToolkit.CppBindings.Occt.Windows" />
-    <PackageReference Include="TedToolkit.CppBindings.Analyzers" PrivateAssets="all" />
   </ItemGroup>
 </Project>
