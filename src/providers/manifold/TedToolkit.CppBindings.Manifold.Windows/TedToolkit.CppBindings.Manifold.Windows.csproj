@@ -12,7 +12,6 @@
     <Title>TedToolkit Manifold Windows bindings</Title>
     <Description>Generated finite-profile Manifold bindings for the locked Windows x64 native artifact.</Description>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\..\output\providers\manifold</GeneratedRoot>
     <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>

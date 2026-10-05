@@ -10,7 +10,6 @@
     <Title>TedToolkit FCL Windows bindings</Title>
     <Description>Generated finite-profile FCL bindings for the locked Windows x64 native artifact.</Description>
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
-    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\..\output\providers\fcl</GeneratedRoot>
     <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
