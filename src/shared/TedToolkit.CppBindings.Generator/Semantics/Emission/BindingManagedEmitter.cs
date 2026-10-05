@@ -51,14 +51,14 @@ public sealed class BindingManagedEmitter(
     internal void AddTo(NameSpace nameSpace)
     {
         ArgumentNullException.ThrowIfNull(nameSpace);
+        var operations = new BindingManagedExtensionComposer(
+            recordDecl,
+            emissionProfile,
+            recordCatalog,
+            nativeFunctionIndices);
         if (!generateRepresentation)
         {
-            new BindingManagedExtensionComposer(
-                    recordDecl,
-                    emissionProfile,
-                    recordCatalog,
-                    nativeFunctionIndices)
-                .AddTo(nameSpace);
+            operations.AddTo(nameSpace);
             return;
         }
 
@@ -98,19 +98,9 @@ public sealed class BindingManagedEmitter(
             ? structDeclaration.Internal
             : structDeclaration.Public;
         GenerateFields(structDeclaration);
-        var extensions = new BindingManagedExtensionComposer(
-            recordDecl,
-            emissionProfile,
-            recordCatalog,
-            nativeFunctionIndices);
-        if (templateProjection is null)
-        {
-            extensions.AddConstructorsTo(structDeclaration);
-        }
-
         nameSpace.AddMember(structDeclaration);
         GenerateInterfaces(nameSpace, structDeclaration);
-        extensions.AddTo(nameSpace);
+        operations.AddTo(nameSpace, templateProjection is null ? structDeclaration : null);
     }
 
     private void GenerateInterfaces(NameSpace nameSpace, TypeDeclaration? structDeclaration)

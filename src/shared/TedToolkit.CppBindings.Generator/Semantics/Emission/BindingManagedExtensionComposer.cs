@@ -29,19 +29,6 @@ internal sealed class BindingManagedExtensionComposer(
 {
     private bool? _usesGenericReceiver;
 
-    /// <summary>
-    /// Adds native constructor factories to a concrete managed layout.
-    /// </summary>
-    /// <param name="declaration">The generated layout declaration.</param>
-    internal void AddConstructorsTo(TypeDeclaration declaration)
-    {
-        ArgumentNullException.ThrowIfNull(declaration);
-        foreach (var method in record.MethodModels.Where(IsSupportedConstructor))
-        {
-            declaration.AddMember(ComposeConstructor(method, record.Type.CSharpTypeName));
-        }
-    }
-
     private bool UsesGenericReceiver
     {
         get
@@ -56,11 +43,13 @@ internal sealed class BindingManagedExtensionComposer(
     /// Adds the applicable extension container to the generated namespace.
     /// </summary>
     /// <param name="nameSpace">The generated namespace.</param>
-    internal void AddTo(NameSpace nameSpace)
+    /// <param name="concreteLayout">The layout that owns concrete constructor factories, if any.</param>
+    internal void AddTo(NameSpace nameSpace, TypeDeclaration? concreteLayout = null)
     {
         ArgumentNullException.ThrowIfNull(nameSpace);
         var methods = record.MethodModels.Where(method =>
-                (record.TemplateProjection is not null && IsSupportedConstructor(method))
+                ((concreteLayout is not null || record.TemplateProjection is not null)
+                 && IsSupportedConstructor(method))
                 || (method.Type is MethodModelType.NORMAL
                     && (GetFirstIndirection(method.ReturnType) is TypeIndirectionKind.LValueReference
                         || (method.ReturnType.IsIntrusiveHandle
@@ -80,19 +69,26 @@ internal sealed class BindingManagedExtensionComposer(
         var extensionName = record.TemplateProjection?.FixedTypeName ?? recordName;
         var declaration = Class(extensionName + "Extensions").Static.Unsafe;
         declaration = profile.IsInternal ? declaration.Internal : declaration.Public;
+        var hasExtensions = false;
         foreach (var method in methods)
         {
             if (method.Type is MethodModelType.NEW)
             {
-                declaration.AddMember(ComposeConstructor(method, recordName));
+                (concreteLayout ?? declaration).AddMember(ComposeConstructor(method, recordName));
                 continue;
             }
 
+            hasExtensions = true;
             declaration.AddMember(ComposeExtension(method, recordName, borrowedHandleReceiver: false));
             if (!method.IsStatic && record.ObjectKind is NativeObjectKind.IntrusiveHandle)
             {
                 declaration.AddMember(ComposeExtension(method, recordName, borrowedHandleReceiver: true));
             }
+        }
+
+        if (!hasExtensions && concreteLayout is not null)
+        {
+            return;
         }
 
         if (UsesGenericReceiver)

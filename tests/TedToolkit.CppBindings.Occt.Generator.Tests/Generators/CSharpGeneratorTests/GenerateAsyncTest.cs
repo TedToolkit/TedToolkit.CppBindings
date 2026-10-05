@@ -963,6 +963,23 @@ internal sealed class GenerateAsyncTest
                     DescriptionItems = [],
                     IsConst = false,
                     IsStatic = false,
+                    MethodName = "New",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = new()
+                    {
+                        CppTypeName = "void",
+                        CSharpPInvokeType = DataType.Void,
+                        CSharpPublicType = DataType.Void,
+                    },
+                    ReturnTypeDescriptionItems = [],
+                    Type = MethodModelType.NEW,
+                },
+                new()
+                {
+                    DescriptionItems = [],
+                    IsConst = false,
+                    IsStatic = false,
                     MethodName = "Clear",
                     NoExceptions = true,
                     Parameters = [],
@@ -996,8 +1013,13 @@ internal sealed class GenerateAsyncTest
         await Assert.That(code).Contains("public TValue Value;");
         await Assert.That(code).DoesNotContain("Size = 8");
         await Assert.That(code).Contains("class Buffer_double_4_voidExtensions");
+        await Assert.That(code).Contains("public static Buffer_4_void<double> Create(");
         await Assert.That(code).Contains("public static void Clear(");
         await Assert.That(code).Contains("this ref Buffer_4_void<double> self");
+        var root = await CSharpSyntaxTree.ParseText(code).GetRootAsync().ConfigureAwait(false);
+        var extensions = root.DescendantNodes().OfType<ClassDeclarationSyntax>().Single();
+        await Assert.That(extensions.Members.OfType<MethodDeclarationSyntax>()
+            .Any(static method => method.Identifier.ValueText == "Create")).IsTrue();
     }
 
     /// <summary>
