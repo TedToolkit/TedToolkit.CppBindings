@@ -17,8 +17,8 @@ vcpkg, GMP, MPFR, Clang, CMake, or Visual Studio installed.
 ```csharp
 using TedToolkit.CppBindings.Cgal;
 
-var origin = Point_2Extensions.Create(0, 0);
-var point = Point_2Extensions.Create(3, 4);
+var origin = Point_2.Create(0, 0);
+var point = Point_2.Create(3, 4);
 var squaredDistance = CgalKernel.SquaredDistance(origin, point); // 25
 ```
 

@@ -29,6 +29,19 @@ internal sealed class BindingManagedExtensionComposer(
 {
     private bool? _usesGenericReceiver;
 
+    /// <summary>
+    /// Adds native constructor factories to a concrete managed layout.
+    /// </summary>
+    /// <param name="declaration">The generated layout declaration.</param>
+    internal void AddConstructorsTo(TypeDeclaration declaration)
+    {
+        ArgumentNullException.ThrowIfNull(declaration);
+        foreach (var method in record.MethodModels.Where(IsSupportedConstructor))
+        {
+            declaration.AddMember(ComposeConstructor(method, record.Type.CSharpTypeName));
+        }
+    }
+
     private bool UsesGenericReceiver
     {
         get
@@ -47,10 +60,7 @@ internal sealed class BindingManagedExtensionComposer(
     {
         ArgumentNullException.ThrowIfNull(nameSpace);
         var methods = record.MethodModels.Where(method =>
-                (method.Type is MethodModelType.NEW
-                 && !record.IsAbstract
-                 && (record.ObjectKind is NativeObjectKind.Value
-                     || record.MethodModels.Any(static candidate => candidate.Type is MethodModelType.DELETE)))
+                (record.TemplateProjection is not null && IsSupportedConstructor(method))
                 || (method.Type is MethodModelType.NORMAL
                     && (GetFirstIndirection(method.ReturnType) is TypeIndirectionKind.LValueReference
                         || (method.ReturnType.IsIntrusiveHandle
@@ -91,6 +101,14 @@ internal sealed class BindingManagedExtensionComposer(
         }
 
         nameSpace.AddMember(declaration);
+    }
+
+    private bool IsSupportedConstructor(MethodModel method)
+    {
+        return method.Type is MethodModelType.NEW
+               && !record.IsAbstract
+               && (record.ObjectKind is NativeObjectKind.Value
+                   || record.MethodModels.Any(static candidate => candidate.Type is MethodModelType.DELETE));
     }
 
     private Method ComposeConstructor(MethodModel method, string recordName)

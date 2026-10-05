@@ -20,7 +20,7 @@ that local feed:
 ```csharp
 using TedToolkit.CppBindings.Occt;
 
-var point = gp_Pnt2dExtensions.Create(1.25, 2.5);
+var point = gp_Pnt2d.Create(1.25, 2.5);
 point.SetCoord(3.5, 4.75);
 ```
 

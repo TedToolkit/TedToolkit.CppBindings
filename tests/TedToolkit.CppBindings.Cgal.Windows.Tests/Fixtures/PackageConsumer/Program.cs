@@ -7,20 +7,20 @@ if (args.Length != 1)
     return 1;
 }
 
-var origin2 = Point_2Extensions.Create(0, 0);
-var point2 = Point_2Extensions.Create(3, 4);
+var origin2 = Point_2.Create(0, 0);
+var point2 = Point_2.Create(3, 4);
 var squaredDistance2 = CgalKernel.SquaredDistance(origin2, point2);
 
-var origin3 = Point_3Extensions.Create(0, 0, 0);
-var point3 = Point_3Extensions.Create(1, 2, 2);
+var origin3 = Point_3.Create(0, 0, 0);
+var point3 = Point_3.Create(1, 2, 2);
 var squaredDistance3 = CgalKernel.SquaredDistance(origin3, point3);
 
-var horizontal = Segment_2Extensions.Create(
-    Point_2Extensions.Create(-1, 0),
-    Point_2Extensions.Create(2, 0));
-var vertical = Segment_2Extensions.Create(
-    Point_2Extensions.Create(1, -1),
-    Point_2Extensions.Create(1, 1));
+var horizontal = Segment_2.Create(
+    Point_2.Create(-1, 0),
+    Point_2.Create(2, 0));
+var vertical = Segment_2.Create(
+    Point_2.Create(1, -1),
+    Point_2.Create(1, 1));
 var intersection = CgalKernel.Intersect(horizontal, vertical);
 if (!intersection.TryGetPoint(out var intersectionPoint))
 {
@@ -28,8 +28,8 @@ if (!intersection.TryGetPoint(out var intersectionPoint))
 }
 
 var disjoint = CgalKernel.Intersect(
-    Segment_2Extensions.Create(Point_2Extensions.Create(0, 0), Point_2Extensions.Create(1, 0)),
-    Segment_2Extensions.Create(Point_2Extensions.Create(0, 1), Point_2Extensions.Create(1, 1)));
+    Segment_2.Create(Point_2.Create(0, 0), Point_2.Create(1, 0)),
+    Segment_2.Create(Point_2.Create(0, 1), Point_2.Create(1, 1)));
 
 CgalPreconditionException? precondition = null;
 try

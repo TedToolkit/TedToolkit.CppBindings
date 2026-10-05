@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using Microsoft.CodeAnalysis.CSharp;
+using Microsoft.CodeAnalysis.CSharp.Syntax;
 using Microsoft.Extensions.Options;
 
 using TedToolkit.CppBindings.Generator.Semantics;
@@ -19,6 +21,99 @@ namespace TedToolkit.CppBindings.Occt.Generator.Tests.Generators.CSharpGenerator
 /// </summary>
 internal sealed class GenerateAsyncTest
 {
+    /// <summary>
+    /// Verifies a concrete layout declares its own native construction factory.
+    /// </summary>
+    /// <returns>A task representing the assertions.</returns>
+    [Test]
+    public async Task Should_put_create_on_concrete_layout_Async()
+    {
+        var record = new RecordModel()
+        {
+            DescriptionItems = [],
+            FieldModels =
+            [
+                new FieldModel()
+                {
+                    DescriptionItems = [],
+                    Name = "value",
+                    Offset = 0,
+                    Size = 8,
+                    Alignment = 8,
+                    Type = new()
+                    {
+                        CppTypeName = "double",
+                        CSharpPInvokeType = DataType.Double,
+                        CSharpPublicType = DataType.Double,
+                    },
+                },
+            ],
+            MethodModels =
+            [
+                new MethodModel()
+                {
+                    DescriptionItems = [],
+                    ReturnTypeDescriptionItems = [],
+                    IsConst = false,
+                    IsStatic = false,
+                    MethodName = "New",
+                    NoExceptions = true,
+                    Parameters = [],
+                    ReturnType = new()
+                    {
+                        CppTypeName = "void",
+                        CSharpPInvokeType = DataType.Void,
+                        CSharpPublicType = DataType.Void,
+                    },
+                    Type = MethodModelType.NEW,
+                },
+            ],
+            IsAbstract = false,
+            UsesIntrusiveReferenceCounting = false,
+            ObjectKind = NativeObjectKind.Value,
+            Size = 8,
+            Alignment = 8,
+            SourceHeader = "Point.hxx",
+            Type = new()
+            {
+                CppTypeName = "Point",
+                CSharpPInvokeType = new("Point"),
+                CSharpPublicType = new("Point"),
+            },
+        };
+        NativeExportNameBuilder.Assign(record);
+
+        var code = await OcctEmitterFactory.Managed(
+                record, CreateOptions("LayoutProbe"), nativeFunctionIndices: CreateFunctionIndices(record))
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        var root = await CSharpSyntaxTree.ParseText(code).GetRootAsync().ConfigureAwait(false);
+        var declarations = root.DescendantNodes().ToArray();
+        var layout = declarations.OfType<StructDeclarationSyntax>().Single();
+
+        await Assert.That(layout.Members.OfType<MethodDeclarationSyntax>()
+            .Any(static method => method.Identifier.ValueText == "Create")).IsTrue();
+        await Assert.That(declarations.OfType<ClassDeclarationSyntax>().Any()).IsFalse();
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => 0;
+                }
+
+                public static class Probe
+                {
+                    public static bool Check()
+                    {
+                        global::System.Func<Point> factory = Point.Create;
+                        return factory is not null;
+                    }
+                }
+            }
+            """;
+        await LayoutTests.AssertCompiledStorageAsync(code, Probe, "LayoutProbe.Point").ConfigureAwait(false);
+    }
+
     /// <summary>
     /// Verifies omitted native base interfaces do not erase the proved intrusive handle constraint.
     /// </summary>
