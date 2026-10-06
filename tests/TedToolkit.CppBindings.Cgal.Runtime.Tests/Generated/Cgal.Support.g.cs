@@ -8,6 +8,9 @@ namespace TedToolkit.CppBindings.Cgal.Runtime.Tests;
 [StructLayout(LayoutKind.Sequential)]
 public readonly struct Point_2
 {
+    public static Point_2 Create(double x, double y)
+        => new(x, y);
+
     internal Point_2(double x, double y)
     {
         X = x;
@@ -27,6 +30,9 @@ public readonly struct Point_3
 [StructLayout(LayoutKind.Sequential)]
 public readonly struct Segment_2
 {
+    public static Segment_2 Create(Point_2 source, Point_2 target)
+        => new(source, target);
+
     internal Segment_2(Point_2 source, Point_2 target)
     {
         Source = source;
@@ -46,18 +52,6 @@ internal struct Segment_2_Intersection_Transport
     internal double AY;
     internal double BX;
     internal double BY;
-}
-
-public static class Point_2Extensions
-{
-    public static Point_2 Create(double x, double y)
-        => new(x, y);
-}
-
-public static class Segment_2Extensions
-{
-    public static Segment_2 Create(Point_2 source, Point_2 target)
-        => new(source, target);
 }
 
 internal static class Kernel_APIExtensions
