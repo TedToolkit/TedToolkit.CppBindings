@@ -11,17 +11,16 @@ vcpkg, Clang, or CMake.
 ## Use
 
 This .NET 8 package is unreleased. After a maintainer builds and packs it locally, reference it from
-that local feed together with the opt-in diagnostics package:
+that local feed:
 
 ```xml
 <PackageReference Include="TedToolkit.CppBindings.Occt.Windows" Version="1.0.0" />
-<PackageReference Include="TedToolkit.CppBindings.Analyzers" Version="1.0.0" PrivateAssets="all" />
 ```
 
 ```csharp
 using TedToolkit.CppBindings.Occt;
 
-var point = gp_Pnt2dExtensions.Create(1.25, 2.5);
+var point = gp_Pnt2d.Create(1.25, 2.5);
 point.SetCoord(3.5, 4.75);
 ```
 
@@ -29,7 +28,6 @@ The namespace has no platform suffix. Value layouts, generic `Owned<T>`, owning 
 and non-owning `handle<T>` retain their separate native semantics. Borrowed references require the
 original owner to remain alive and obey the native invalidation rules. See the
 [Runtime contracts](../TedToolkit.CppBindings.Occt.Runtime/README.md) for lifetime obligations.
-Consumer diagnostics are a direct opt-in dependency; this package does not embed them.
 
 ## Supported surface
 

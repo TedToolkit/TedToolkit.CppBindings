@@ -63,14 +63,14 @@ namespace TedToolkit.CppBindings.Cgal.Runtime.Tests
     0 => new(Segment_2IntersectionKind.None, default, default),
     1 => new(
         Segment_2IntersectionKind.Point,
-        Point_2Extensions.Create(value.AX, value.AY),
+        Point_2.Create(value.AX, value.AY),
         default),
     2 => new(
         Segment_2IntersectionKind.Segment,
         default,
-        Segment_2Extensions.Create(
-            Point_2Extensions.Create(value.AX, value.AY),
-            Point_2Extensions.Create(value.BX, value.BY))),
+        Segment_2.Create(
+            Point_2.Create(value.AX, value.AY),
+            Point_2.Create(value.BX, value.BY))),
     _ => throw new CgalUnknownResultException(
         $"Native CGAL intersection returned undeclared alternative tag {value.Tag}."),
 };

@@ -14,11 +14,11 @@ if (args.Length != 1)
     return 1;
 }
 
-var cgalOrigin = Point_2Extensions.Create(0, 0);
-var cgalPoint = Point_2Extensions.Create(3, 4);
+var cgalOrigin = Point_2.Create(0, 0);
+var cgalPoint = Point_2.Create(3, 4);
 var squaredDistance = CgalKernel.SquaredDistance(cgalOrigin, cgalPoint);
 
-var occtPoint = gp_Pnt2dExtensions.Create(7, 11);
+var occtPoint = gp_Pnt2d.Create(7, 11);
 var occtX = occtPoint.X();
 var occtY = occtPoint.Y();
 if (squaredDistance != 25 || occtX != 7 || occtY != 11)

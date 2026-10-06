@@ -162,7 +162,11 @@ layouts are rejected before paired callable emission and reported at the narrowe
 C++ inheritance is represented by generated C# interfaces. Generated instance operations are
 extension methods over their semantic receiver: `in T` for const values, `ref T` for mutable
 values, `Handle<T>` for transient objects, and `Owned<T>` for non-transient RAII objects. Exact
-layout structs contain representation only and never implement `IDisposable` or declare lifetime
+layout structs declare static `Create` factories for supported concrete C++ constructors. These
+factories preserve the layout and return the appropriate value, `Handle<T>`, or `Owned<T>`.
+Projected generic template families keep specialization-specific factories in their extension
+containers because a shared generic layout cannot bind one static method to multiple native
+specializations. Layout structs never implement `IDisposable` or declare instance lifetime
 operations.
 
 The Model records every direct base relation and classifies its pointer conversion once. A sole,
