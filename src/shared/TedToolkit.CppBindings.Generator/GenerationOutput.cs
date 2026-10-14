@@ -17,6 +17,8 @@ namespace TedToolkit.CppBindings.Generator;
 /// </summary>
 internal static class GenerationOutput
 {
+    private static readonly UTF8Encoding Utf8WithoutBom = new(encoderShouldEmitUTF8Identifier: false);
+
     private static readonly Regex Identifier = new(@"\A[A-Za-z_][A-Za-z0-9_]*\z", RegexOptions.CultureInvariant);
 
     private static readonly Regex DeviceName = new(
@@ -167,23 +169,12 @@ internal static class GenerationOutput
         cancellationToken.ThrowIfCancellationRequested();
         var path = Resolve(root, source.RelativePath);
         path.ParentDirectory!.Value.Create();
-        var stream = path.Open(new FileStreamOptions()
-        {
-            Mode = FileMode.Create,
-            Access = FileAccess.Write,
-            Share = FileShare.Read,
-            BufferSize = 4096,
-            Options = FileOptions.Asynchronous,
-        });
-        await using (stream.ConfigureAwait(false))
-        {
-            var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
-            await using (writer.ConfigureAwait(false))
-            {
-                await source.RenderAsync(writer, cancellationToken).ConfigureAwait(false);
-                cancellationToken.ThrowIfCancellationRequested();
-            }
-        }
+        var stream = new FileStream(path.FullName, FileMode.Create, FileAccess.Write, FileShare.Read, 4096, useAsync: true);
+        await using var streamLifetime = stream.ConfigureAwait(false);
+        var writer = new StreamWriter(stream, Utf8WithoutBom);
+        await using var writerLifetime = writer.ConfigureAwait(false);
+        await source.RenderAsync(writer, cancellationToken).ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
     }
 
     private static FilePath Resolve(in DirectoryPath root, string relativePath)
