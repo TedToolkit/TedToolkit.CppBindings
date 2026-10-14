@@ -8,6 +8,8 @@
 using System.Text;
 using System.Text.RegularExpressions;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
@@ -49,10 +51,10 @@ internal static class GenerationOutput
             throw new ArgumentException("The generated namespace must contain portable C# identifiers.", nameof(options));
         }
 
-        ArgumentNullException.ThrowIfNull(options.CSharpFolder);
-        ArgumentNullException.ThrowIfNull(options.CppFolder);
-        var managed = Path.TrimEndingDirectorySeparator(options.CSharpFolder.FullName);
-        var native = Path.TrimEndingDirectorySeparator(options.CppFolder.FullName);
+        ArgumentNullException.ThrowIfNull(options.CSharpFolder.FullName, nameof(options.CSharpFolder));
+        ArgumentNullException.ThrowIfNull(options.CppFolder.FullName, nameof(options.CppFolder));
+        var managed = options.CSharpFolder.TrimEndingDirectorySeparator().FullName;
+        var native = options.CppFolder.TrimEndingDirectorySeparator().FullName;
         ValidateRoot(managed);
         ValidateRoot(native);
         if (!managed.Equals(native, StringComparison.OrdinalIgnoreCase)
@@ -71,7 +73,7 @@ internal static class GenerationOutput
     /// <param name="root">The dedicated language output root.</param>
     /// <param name="sources">The complete source inventory including core support files.</param>
     /// <exception cref="InvalidOperationException">Two output paths collide.</exception>
-    internal static void ValidateSources(DirectoryInfo root, IReadOnlyList<GeneratedSource> sources)
+    internal static void ValidateSources(in DirectoryPath root, IReadOnlyList<GeneratedSource> sources)
     {
         var paths = new HashSet<string>(StringComparer.OrdinalIgnoreCase);
         foreach (var source in sources)
@@ -79,7 +81,7 @@ internal static class GenerationOutput
             ArgumentNullException.ThrowIfNull(source);
             ArgumentNullException.ThrowIfNull(source.RenderAsync);
             var path = Resolve(root, source.RelativePath);
-            if (!paths.Add(path))
+            if (!paths.Add(path.FullName))
             {
                 throw new InvalidOperationException($"Generated source path collision: '{source.RelativePath}'.");
             }
@@ -119,11 +121,11 @@ internal static class GenerationOutput
     /// Clears a dedicated root after rejecting filesystem links.
     /// </summary>
     /// <param name="root">The validated output directory.</param>
-    internal static void Clean(DirectoryInfo root)
+    internal static void Clean(in DirectoryPath root)
     {
         ValidateRoot(root.FullName);
         root.Create();
-        var entries = root.GetFileSystemInfos();
+        var entries = new DirectoryInfo(root.FullName).GetFileSystemInfos();
         foreach (var entry in entries)
         {
             RejectLinks(entry);
@@ -150,7 +152,7 @@ internal static class GenerationOutput
     /// <param name="cancellationToken">The pipeline cancellation token.</param>
     /// <returns>The completion of every selected renderer and file write.</returns>
     internal static Task PublishAsync(
-        DirectoryInfo root,
+        DirectoryPath root,
         IReadOnlyList<GeneratedSource> sources,
         CancellationToken cancellationToken)
     {
@@ -158,14 +160,21 @@ internal static class GenerationOutput
     }
 
     private static async Task WriteAsync(
-        DirectoryInfo root,
+        DirectoryPath root,
         GeneratedSource source,
         CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
         var path = Resolve(root, source.RelativePath);
-        _ = Directory.CreateDirectory(Path.GetDirectoryName(path)!);
-        var stream = new FileStream(path, FileMode.Create, FileAccess.Write, FileShare.Read, 4096, useAsync: true);
+        path.ParentDirectory!.Value.Create();
+        var stream = path.Open(new FileStreamOptions()
+        {
+            Mode = FileMode.Create,
+            Access = FileAccess.Write,
+            Share = FileShare.Read,
+            BufferSize = 4096,
+            Options = FileOptions.Asynchronous,
+        });
         await using (stream.ConfigureAwait(false))
         {
             var writer = new StreamWriter(stream, new UTF8Encoding(encoderShouldEmitUTF8Identifier: false));
@@ -177,7 +186,7 @@ internal static class GenerationOutput
         }
     }
 
-    private static string Resolve(DirectoryInfo root, string relativePath)
+    private static FilePath Resolve(in DirectoryPath root, string relativePath)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(relativePath);
         var segments = relativePath.Replace('\\', '/').Split('/');
@@ -190,17 +199,17 @@ internal static class GenerationOutput
             throw new InvalidOperationException($"Invalid output-relative source path: '{relativePath}'.");
         }
 
-        var path = Path.GetFullPath(Path.Combine(root.FullName, Path.Combine(segments)));
-        if (!IsBelow(path, Path.TrimEndingDirectorySeparator(root.FullName)))
+        var path = (root / new FilePath(Path.Combine(segments))).GetFullPath();
+        if (!IsBelow(path.FullName, root.TrimEndingDirectorySeparator().FullName))
         {
             throw new InvalidOperationException($"Generated source escapes its output root: '{relativePath}'.");
         }
 
-        for (var directory = new DirectoryInfo(Path.GetDirectoryName(path)!); directory is not null; directory = directory.Parent)
+        for (var directory = path.ParentDirectory; directory is not null; directory = directory.Value.Parent)
         {
-            if (directory.Exists && (directory.Attributes & FileAttributes.ReparsePoint) != 0)
+            if (directory.Value.Exists && (directory.Value.Attributes & FileAttributes.ReparsePoint) != 0)
             {
-                throw new InvalidOperationException($"Generated source traverses a filesystem link: '{directory.FullName}'.");
+                throw new InvalidOperationException($"Generated source traverses a filesystem link: '{directory.Value.FullName}'.");
             }
         }
 

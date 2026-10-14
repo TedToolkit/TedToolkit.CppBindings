@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Windows.Generation.Tool;
 
 internal static class GenerationCommandLine
@@ -54,7 +56,7 @@ internal static class GenerationCommandLine
 
 internal sealed record WindowsGenerationOptions(
     string Provider,
-    DirectoryInfo RepositoryRoot,
-    DirectoryInfo OutputRoot,
-    DirectoryInfo VcpkgRoot,
+    DirectoryPath RepositoryRoot,
+    DirectoryPath OutputRoot,
+    DirectoryPath VcpkgRoot,
     string Configuration);

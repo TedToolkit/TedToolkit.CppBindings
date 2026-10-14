@@ -8,6 +8,8 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Cgal.Generator;
 
 /// <summary>
@@ -26,15 +28,15 @@ internal static partial class CgalProfileDiscovery
     internal static CgalGenerationInventory Resolve(CgalGenerationOptions options, CgalProfileManifest profile)
     {
         ValidateProfile(profile);
-        var includeRoot = Path.Combine(options.VcpkgRoot.FullName, "installed", profile.Triplet, "include");
-        var cgalRoot = Path.Combine(includeRoot, "CGAL");
-        if (!Directory.Exists(cgalRoot))
+        var includeRoot = options.VcpkgRoot / "installed" / profile.Triplet / "include";
+        var cgalRoot = includeRoot / "CGAL";
+        if (!cgalRoot.Exists)
         {
             throw new DirectoryNotFoundException($"CGAL public headers were not found beneath '{cgalRoot}'.");
         }
 
-        var installed = Directory.EnumerateFiles(cgalRoot, "*", SearchOption.AllDirectories)
-            .Select(path => Path.GetRelativePath(includeRoot, path).Replace('\\', '/'))
+        var installed = cgalRoot.EnumerateFiles("*", SearchOption.AllDirectories)
+            .Select(path => path.GetRelativePath(includeRoot).FullName.Replace('\\', '/'))
             .Order(StringComparer.Ordinal)
             .ToArray();
         if (options.RequireLockedHeaderInventory
@@ -46,7 +48,7 @@ internal static partial class CgalProfileDiscovery
                 "The installed CGAL public-header inventory does not match the vcpkg package list.");
         }
 
-        var reachable = CloseHeaderIncludes(includeRoot, profile.SelectedHeaders);
+        var reachable = CloseHeaderIncludes(includeRoot.FullName, profile.SelectedHeaders);
         var declarationCatalog = profile.Declarations.ToDictionary(static item => item.Id, StringComparer.Ordinal);
         foreach (var declaration in profile.Declarations)
         {
@@ -61,10 +63,10 @@ internal static partial class CgalProfileDiscovery
         }
 
         var selectedCandidates = profile.Declarations.OrderBy(static item => item.Id, StringComparer.Ordinal)
-            .Select(item => Classify(item, includeRoot, reachable))
+            .Select(item => Classify(item, includeRoot.FullName, reachable))
             .ToArray();
         var compilerDeclarations = CgalCompilerDiscovery.Discover(
-                includeRoot,
+                includeRoot.FullName,
                 profile.SelectedHeaders,
                 reachable,
                 profile);
@@ -127,17 +129,17 @@ internal static partial class CgalProfileDiscovery
         return reachable.Contains(header) ? "reachable-dependency" : "not-reachable-from-finite-profile";
     }
 
-    private static string[] ResolveVcpkgPackageHeaders(DirectoryInfo vcpkgRoot, string triplet)
+    private static string[] ResolveVcpkgPackageHeaders(in DirectoryPath vcpkgRoot, string triplet)
     {
-        var infoRoot = Path.Combine(vcpkgRoot.FullName, "installed", "vcpkg", "info");
-        if (!Directory.Exists(infoRoot))
+        var infoRoot = vcpkgRoot / "installed" / "vcpkg" / "info";
+        if (!infoRoot.Exists)
         {
             throw new InvalidOperationException($"The vcpkg installed-package list directory '{infoRoot}' was not found.");
         }
 
         var suffix = $"_{triplet}.list";
-        var packageLists = Directory.EnumerateFiles(infoRoot, "cgal_*.list", SearchOption.TopDirectoryOnly)
-            .Where(path => Path.GetFileName(path).EndsWith(suffix, StringComparison.Ordinal))
+        var packageLists = infoRoot.EnumerateFiles("cgal_*.list", SearchOption.TopDirectoryOnly)
+            .Where(path => path.Name.EndsWith(suffix, StringComparison.Ordinal))
             .ToArray();
         if (packageLists.Length != 1)
         {
@@ -146,7 +148,7 @@ internal static partial class CgalProfileDiscovery
         }
 
         var includePrefix = $"{triplet}/include/";
-        var headers = File.ReadLines(packageLists[0])
+        var headers = packageLists[0].ReadLines()
             .Select(static line => line.Replace('\\', '/'))
             .Where(line => line.StartsWith(includePrefix + "CGAL/", StringComparison.Ordinal)
                 && !line.EndsWith('/'))
@@ -267,10 +269,10 @@ internal static partial class CgalProfileDiscovery
             proof);
     }
 
-    private static CgalResolvedToolchain ResolveToolchain(DirectoryInfo vcpkgRoot, string triplet)
+    private static CgalResolvedToolchain ResolveToolchain(in DirectoryPath vcpkgRoot, string triplet)
     {
-        var statusPath = Path.Combine(vcpkgRoot.FullName, "installed", "vcpkg", "status");
-        var status = File.ReadAllText(statusPath);
+        var statusPath = vcpkgRoot / "installed" / "vcpkg" / new FileName("status");
+        var status = statusPath.ReadAllText();
         var cgal = ReadPackage(status, "cgal", triplet);
         var gmp = ReadPackage(status, "gmp", triplet);
         var mpfr = ReadPackage(status, "mpfr", triplet);

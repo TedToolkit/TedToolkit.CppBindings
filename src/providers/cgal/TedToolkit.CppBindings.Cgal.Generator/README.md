@@ -5,11 +5,13 @@ pipeline. The default `epick-windows-v2` profile targets CGAL 6.2 from vcpkg `x6
 matched managed/native sources plus deterministic coverage inventories.
 
 ```csharp
+using TedToolkit.FileSystem;
+
 var options = new CgalGenerationOptions
 {
-    VcpkgRoot = new DirectoryInfo(@"C:\vcpkg"),
-    CSharpFolder = new DirectoryInfo("generated/csharp"),
-    CppFolder = new DirectoryInfo("generated/cpp"),
+    VcpkgRoot = new DirectoryPath(@"C:\vcpkg"),
+    CSharpFolder = new DirectoryPath("generated/csharp"),
+    CppFolder = new DirectoryPath("generated/cpp"),
     CSharpNamespace = "TedToolkit.CppBindings.Cgal",
     NativeLibraryBaseName = "ted_toolkit_cpp_bindings_cgal",
     CppVersion = 20,

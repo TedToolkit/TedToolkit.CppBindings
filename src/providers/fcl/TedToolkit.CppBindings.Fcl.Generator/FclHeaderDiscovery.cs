@@ -7,6 +7,8 @@
 
 using System.Text.RegularExpressions;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Fcl.Generator;
 
 /// <summary>Resolves the installed FCL public-header boundary.</summary>
@@ -17,18 +19,18 @@ internal static partial class FclHeaderDiscovery
     /// <summary>Resolves and validates the deterministic installed source inventory.</summary>
     /// <exception cref="DirectoryNotFoundException">The installed FCL header tree is absent.</exception>
     /// <exception cref="InvalidOperationException">The package identity or header inventory is inconsistent.</exception>
-    internal static IReadOnlyList<FclSourceDisposition> Resolve(DirectoryInfo vcpkgRoot, FclProfile profile)
+    internal static IReadOnlyList<FclSourceDisposition> Resolve(in DirectoryPath vcpkgRoot, FclProfile profile)
     {
         var triplet = profile.Versions["Triplet"];
-        var includeRoot = Path.Combine(vcpkgRoot.FullName, "installed", triplet, "include");
-        var fclRoot = Path.Combine(includeRoot, "fcl");
-        if (!Directory.Exists(fclRoot))
+        var includeRoot = vcpkgRoot / "installed" / triplet / "include";
+        var fclRoot = includeRoot / "fcl";
+        if (!fclRoot.Exists)
         {
             throw new DirectoryNotFoundException($"FCL public headers were not found beneath '{fclRoot}'.");
         }
 
-        var installed = Directory.EnumerateFiles(fclRoot, "*", SearchOption.AllDirectories)
-            .Select(path => Normalize(Path.GetRelativePath(includeRoot, path)))
+        var installed = fclRoot.EnumerateFiles("*", SearchOption.AllDirectories)
+            .Select(path => Normalize(path.GetRelativePath(includeRoot).FullName))
             .Order(StringComparer.Ordinal)
             .ToArray();
         var identity = ParseIdentity(profile.Versions["Fcl"]);
@@ -40,7 +42,7 @@ internal static partial class FclHeaderDiscovery
                 "The installed FCL public-header inventory does not match the vcpkg package list.");
         }
 
-        var reachable = CloseIncludes(includeRoot, fclRoot);
+        var reachable = CloseIncludes(includeRoot.FullName, fclRoot.FullName);
         return Array.AsReadOnly(installed.Select(header => new FclSourceDisposition(
                 header,
                 GetDisposition(header, reachable)))
@@ -66,17 +68,17 @@ internal static partial class FclHeaderDiscovery
     }
 
     private static void ValidatePackageStatus(
-        DirectoryInfo vcpkgRoot,
+        in DirectoryPath vcpkgRoot,
         string triplet,
         FclPackageIdentity identity)
     {
-        var statusPath = Path.Combine(vcpkgRoot.FullName, "installed", "vcpkg", "status");
-        if (!File.Exists(statusPath))
+        var statusPath = vcpkgRoot / "installed" / "vcpkg" / new FileName("status");
+        if (!statusPath.Exists)
         {
             throw new InvalidOperationException($"The vcpkg installed-package status file '{statusPath}' was not found.");
         }
 
-        var blocks = PackageStatusBlock().Matches(File.ReadAllText(statusPath))
+        var blocks = PackageStatusBlock().Matches(statusPath.ReadAllText())
             .Select(static match => match.Groups["body"].Value)
             .Where(body => HasStatusValue(body, "Architecture", triplet)
                 && HasStatusValue(body, "Version", identity.Version)
@@ -109,28 +111,28 @@ internal static partial class FclHeaderDiscovery
             RegexOptions.CultureInvariant);
     }
 
-    private static string[] ResolvePackageHeaders(DirectoryInfo vcpkgRoot, string triplet, string version)
+    private static string[] ResolvePackageHeaders(in DirectoryPath vcpkgRoot, string triplet, string version)
     {
-        var infoRoot = Path.Combine(vcpkgRoot.FullName, "installed", "vcpkg", "info");
-        if (!Directory.Exists(infoRoot))
+        var infoRoot = vcpkgRoot / "installed" / "vcpkg" / "info";
+        if (!infoRoot.Exists)
         {
             throw new InvalidOperationException(
                 $"The vcpkg installed-package list directory '{infoRoot}' was not found.");
         }
 
         var suffix = $"_{triplet}.list";
-        var lists = Directory.EnumerateFiles(infoRoot, "fcl_*.list", SearchOption.TopDirectoryOnly)
-            .Where(path => Path.GetFileName(path).EndsWith(suffix, StringComparison.Ordinal))
+        var lists = infoRoot.EnumerateFiles("fcl_*.list", SearchOption.TopDirectoryOnly)
+            .Where(path => path.Name.EndsWith(suffix, StringComparison.Ordinal))
             .ToArray();
         var expectedName = $"fcl_{version}_{triplet}.list";
-        if (lists.Length != 1 || !string.Equals(Path.GetFileName(lists[0]), expectedName, StringComparison.Ordinal))
+        if (lists.Length != 1 || !string.Equals(lists[0].Name, expectedName, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Expected the installed FCL package list '{expectedName}', found {lists.Length} candidate(s).");
         }
 
         var includePrefix = $"{triplet}/include/";
-        var headers = File.ReadLines(lists[0])
+        var headers = lists[0].ReadLines()
             .Select(Normalize)
             .Where(line => line.StartsWith(includePrefix + "fcl/", StringComparison.Ordinal)
                 && !line.EndsWith('/'))

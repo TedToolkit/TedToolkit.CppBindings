@@ -15,14 +15,15 @@ is Windows x64, MSVC ABI, a compatible Clang parser/probe, and CMake 3.28 or lat
 ```csharp
 using ModularPipelines;
 using TedToolkit.CppBindings.Occt.Generator;
+using TedToolkit.FileSystem;
 
-var output = new DirectoryInfo("output/generated");
+var output = new DirectoryPath("output/generated");
 var pipeline = await Pipeline.CreateBuilder()
     .AddOcctGenerators(new OcctGenerationOptions
     {
         DeclOptions = [new OcctDeclarationOptions("Geom2d_BSplineCurve")],
-        CSharpFolder = output.CreateSubdirectory("csharp"),
-        CppFolder = output.CreateSubdirectory("cpp"),
+        CSharpFolder = output / "csharp",
+        CppFolder = output / "cpp",
         NativeLibraryVersion = new Version(8, 0, 1),
     })
     .BuildAsync();

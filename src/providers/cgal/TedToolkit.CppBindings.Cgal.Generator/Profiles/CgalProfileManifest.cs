@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Cgal.Generator;
 
 /// <summary>
@@ -71,9 +73,9 @@ public sealed record CgalProfileManifest
     /// </summary>
     /// <param name="file">The JSON profile document.</param>
     /// <returns>A detached immutable profile.</returns>
-    public static CgalProfileManifest Load(FileInfo file)
+    public static CgalProfileManifest Load(in FilePath file)
     {
-        ArgumentNullException.ThrowIfNull(file);
+        ArgumentNullException.ThrowIfNull(file.FullName, nameof(file));
         return CgalProfileResources.LoadManifest(file);
     }
 }
