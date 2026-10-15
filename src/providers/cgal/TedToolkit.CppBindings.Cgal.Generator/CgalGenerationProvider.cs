@@ -30,7 +30,7 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
         _options = options;
         Profile = options.ProfileManifestFile is null
             ? CgalProfileManifest.LoadDefault()
-            : CgalProfileManifest.Load(options.ProfileManifestFile);
+            : CgalProfileManifest.Load(options.ProfileManifestFile.Value);
         ValidateOptions();
         Inventory = CgalProfileDiscovery.Resolve(options, Profile);
     }

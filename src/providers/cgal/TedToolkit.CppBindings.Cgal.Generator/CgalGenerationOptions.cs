@@ -7,6 +7,8 @@
 
 using TedToolkit.CppBindings.Generator;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Cgal.Generator;
 
 /// <summary>
@@ -22,7 +24,14 @@ public sealed record CgalGenerationOptions : GenerationOptions
     /// <summary>
     /// Gets the vcpkg root that supplies the locked CGAL installation.
     /// </summary>
-    public required DirectoryInfo VcpkgRoot { get; init; }
+    public required DirectoryPath VcpkgRoot
+    {
+        get;
+        init
+        {
+            field = value.FullName is null ? value : value.GetFullPath();
+        }
+    }
 
     /// <summary>
     /// Gets the finite profile identifier.
@@ -32,7 +41,14 @@ public sealed record CgalGenerationOptions : GenerationOptions
     /// <summary>
     /// Gets an explicit finite profile document. When absent, the embedded default profile is used.
     /// </summary>
-    public FileInfo? ProfileManifestFile { get; init; }
+    public FilePath? ProfileManifestFile
+    {
+        get;
+        init
+        {
+            field = value is { FullName: not null, } file ? file.GetFullPath() : value;
+        }
+    }
 
     /// <summary>
     /// Gets a value indicating whether the installed public-header set must equal the vcpkg package list.

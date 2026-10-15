@@ -10,6 +10,8 @@ using System.Text.Json;
 using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Generator.Semantics;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Fcl.Generator;
 
 /// <summary>Supplies the finite FCL profile to the provider-neutral Shared semantic engine.</summary>
@@ -21,7 +23,7 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
         "FclContinuousCollision.Query", "FclContinuousCollisionResult",
     ];
 
-    private readonly DirectoryInfo _vcpkgRoot;
+    private readonly DirectoryPath _vcpkgRoot;
 
     /// <summary>Initializes a provider using the process <c>VCPKG_ROOT</c>.</summary>
     public FclGenerationProvider()
@@ -31,11 +33,11 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
 
     /// <summary>Initializes a provider from the selected vcpkg installation.</summary>
     /// <param name="vcpkgRoot">The vcpkg root that supplies the locked FCL package.</param>
-    public FclGenerationProvider(DirectoryInfo vcpkgRoot)
+    public FclGenerationProvider(in DirectoryPath vcpkgRoot)
         : base(FclSemanticProfile.Create())
     {
-        ArgumentNullException.ThrowIfNull(vcpkgRoot);
-        _vcpkgRoot = vcpkgRoot;
+        ArgumentNullException.ThrowIfNull(vcpkgRoot.FullName, nameof(vcpkgRoot));
+        _vcpkgRoot = vcpkgRoot.GetFullPath();
     }
 
     /// <summary>Gets the finite profile.</summary>
@@ -146,7 +148,7 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
         return new(path, (writer, token) => writer.WriteAsync(text.AsMemory(), token));
     }
 
-    private static DirectoryInfo ResolveVcpkgRoot()
+    private static DirectoryPath ResolveVcpkgRoot()
     {
         var path = Environment.GetEnvironmentVariable("VCPKG_ROOT");
         if (string.IsNullOrWhiteSpace(path))
@@ -155,6 +157,6 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
                 "VCPKG_ROOT is required when a vcpkg root is not supplied explicitly.");
         }
 
-        return new DirectoryInfo(path);
+        return new DirectoryPath(path).GetFullPath();
     }
 }

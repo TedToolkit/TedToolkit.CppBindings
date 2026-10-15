@@ -19,6 +19,7 @@ using ModularPipelines.Context;
 using ModularPipelines.Modules;
 
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
+using TedToolkit.FileSystem;
 
 namespace TedToolkit.CppBindings.Occt.Generator;
 
@@ -289,11 +290,10 @@ public sealed class OcctParseModule : Module<bool>
         {
         }
 
-        var reportPath = Path.Combine(
-            _generationOptions.Value.CppFolder.Parent?.FullName
-            ?? _generationOptions.Value.CppFolder.FullName,
-            "unsupported-headers.txt");
-        File.WriteAllLines(reportPath, excludedHeaders.Order(StringComparer.Ordinal));
+        var outputDirectory = _generationOptions.Value.CppFolder.TrimEndingDirectorySeparator();
+        var reportDirectory = outputDirectory.Parent ?? outputDirectory;
+        var reportPath = reportDirectory / new FileName("unsupported-headers.txt");
+        reportPath.WriteAllLines(excludedHeaders.Order(StringComparer.Ordinal));
 
         var builder = new System.Text.StringBuilder();
         foreach (var path in headerPaths.Where(path => !excludedHeaders.Contains(Path.GetFileName(path)!)))

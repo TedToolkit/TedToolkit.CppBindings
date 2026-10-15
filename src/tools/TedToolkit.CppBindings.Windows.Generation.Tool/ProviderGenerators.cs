@@ -16,6 +16,8 @@ using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Manifold.Generator;
 using TedToolkit.CppBindings.Occt.Generator;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Windows.Generation.Tool;
 
 internal interface IGenerationOperations
@@ -41,8 +43,8 @@ internal static class ProviderGenerators
 {
     internal static async Task GenerateAsync(
         string provider,
-        DirectoryInfo outputRoot,
-        DirectoryInfo vcpkgRoot,
+        DirectoryPath outputRoot,
+        DirectoryPath vcpkgRoot,
         CancellationToken cancellationToken)
     {
         switch (provider)
@@ -65,8 +67,8 @@ internal static class ProviderGenerators
     }
 
     private static async Task GenerateOcctAsync(
-        DirectoryInfo outputRoot,
-        DirectoryInfo vcpkgRoot,
+        DirectoryPath outputRoot,
+        DirectoryPath vcpkgRoot,
         CancellationToken cancellationToken)
     {
         using var environment = ProcessEnvironment.Override("VCPKG_ROOT", vcpkgRoot.FullName);
@@ -81,8 +83,8 @@ internal static class ProviderGenerators
             {
                 DeclOptions = [],
                 GenerateAllPublicHeaders = true,
-                CSharpFolder = outputRoot.CreateSubdirectory("csharp"),
-                CppFolder = outputRoot.CreateSubdirectory("cpp"),
+                CSharpFolder = outputRoot / "csharp",
+                CppFolder = outputRoot / "cpp",
                 CommandLineArgs = ["-w",],
                 NativeLibraryVersion = new(8, 0, 1),
             }).BuildAsync().ConfigureAwait(false);
@@ -95,15 +97,15 @@ internal static class ProviderGenerators
     }
 
     private static async Task GenerateCgalAsync(
-        DirectoryInfo outputRoot,
-        DirectoryInfo vcpkgRoot,
+        DirectoryPath outputRoot,
+        DirectoryPath vcpkgRoot,
         CancellationToken cancellationToken)
     {
         var options = new CgalGenerationOptions
         {
             VcpkgRoot = vcpkgRoot,
-            CSharpFolder = outputRoot.CreateSubdirectory("csharp"),
-            CppFolder = outputRoot.CreateSubdirectory("cpp"),
+            CSharpFolder = outputRoot / "csharp",
+            CppFolder = outputRoot / "cpp",
             CSharpNamespace = "TedToolkit.CppBindings.Cgal",
             NativeLibraryBaseName = "ted_toolkit_cpp_bindings_cgal",
             CppVersion = 20,
@@ -136,22 +138,21 @@ internal static class ProviderGenerators
             NativeExportCount = plan.NativeExports.Count,
             provider.Inventory.Toolchain,
         };
-        await File.WriteAllTextAsync(
-                Path.Combine(outputRoot.FullName, "generation-result.json"),
+        await (outputRoot / new FileName("generation-result.json")).WriteAllTextAsync(
                 JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }),
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
     private static async Task GenerateFclAsync(
-        DirectoryInfo outputRoot,
-        DirectoryInfo vcpkgRoot,
+        DirectoryPath outputRoot,
+        DirectoryPath vcpkgRoot,
         CancellationToken cancellationToken)
     {
         var options = new GenerationOptions
         {
-            CSharpFolder = outputRoot.CreateSubdirectory("csharp"),
-            CppFolder = outputRoot.CreateSubdirectory("cpp"),
+            CSharpFolder = outputRoot / "csharp",
+            CppFolder = outputRoot / "cpp",
             CSharpNamespace = "TedToolkit.CppBindings.Fcl",
             NativeLibraryBaseName = "ted_toolkit_cpp_bindings_fcl",
             CppVersion = 20,
@@ -180,23 +181,22 @@ internal static class ProviderGenerators
             NativeFunctionCount = plan.NativeExports.Count,
             Toolchain = provider.Profile.Versions,
         };
-        await File.WriteAllTextAsync(
-                Path.Combine(outputRoot.FullName, "generation-result.json"),
+        await (outputRoot / new FileName("generation-result.json")).WriteAllTextAsync(
                 JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }) + "\n",
                 cancellationToken)
             .ConfigureAwait(false);
     }
 
     private static async Task GenerateManifoldAsync(
-        DirectoryInfo outputRoot,
-        DirectoryInfo vcpkgRoot,
+        DirectoryPath outputRoot,
+        DirectoryPath vcpkgRoot,
         CancellationToken cancellationToken)
     {
         var provider = new ManifoldGenerationProvider(vcpkgRoot);
         var options = new GenerationOptions
         {
-            CSharpFolder = outputRoot.CreateSubdirectory("csharp"),
-            CppFolder = outputRoot.CreateSubdirectory("cpp"),
+            CSharpFolder = outputRoot / "csharp",
+            CppFolder = outputRoot / "cpp",
             CSharpNamespace = "TedToolkit.CppBindings.Manifold",
             NativeLibraryBaseName = provider.Profile.NativeLibraryBaseName,
             CppVersion = 20,
@@ -229,8 +229,7 @@ internal static class ProviderGenerators
                 provider.Profile.Triplet,
             },
         };
-        await File.WriteAllTextAsync(
-                Path.Combine(outputRoot.FullName, "generation-result.json"),
+        await (outputRoot / new FileName("generation-result.json")).WriteAllTextAsync(
                 JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }) + "\n",
                 cancellationToken)
             .ConfigureAwait(false);

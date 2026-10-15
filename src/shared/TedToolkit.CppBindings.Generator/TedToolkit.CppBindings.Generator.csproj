@@ -9,6 +9,7 @@
     <PackageReference Include="ModularPipelines" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="TedToolkit.RoslynHelper" />
+    <PackageReference Include="TedToolkit.FileSystem" />
   </ItemGroup>
   <Target Name="ExcludePublicModuleHelpers" BeforeTargets="CoreCompile">
     <ItemGroup>

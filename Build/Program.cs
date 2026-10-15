@@ -4,25 +4,28 @@ using ModularPipelines.Extensions;
 
 using Sourcy.DotNet;
 
+using TedToolkit.FileSystem;
 using TedToolkit.ModularPipelines;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
-var repositoryDirectory = Projects.Build.Directory?.Parent
+var buildDirectory = Projects.Build.Directory?.ToPath()
+    ?? throw new InvalidOperationException("Unable to resolve the Build project directory.");
+var repositoryDirectory = buildDirectory.TrimEndingDirectorySeparator().Parent
     ?? throw new InvalidOperationException("Unable to resolve the repository directory from the Build project.");
-var solution = new FileInfo(Path.Combine(repositoryDirectory.FullName, "TedToolkit.CppBindings.slnx"));
+var solution = repositoryDirectory / new FileName("TedToolkit.CppBindings.slnx");
 
 var pipeline = new TedPipeline(
     new()
     {
         BuildFiles =
         [
-            solution,
+            solution.ToFileInfo(),
         ],
-        Solution = solution,
+        Solution = solution.ToFileInfo(),
         TestFiles = [],
     },
-    new FileInfo(Path.Combine(Projects.Build.Directory!.FullName, "appsettings.json")));
+    (buildDirectory / new FileName("appsettings.json")).ToFileInfo());
 
 await pipeline
     .ExecuteAsync(static builder => builder

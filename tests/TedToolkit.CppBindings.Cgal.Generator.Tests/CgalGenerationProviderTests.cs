@@ -12,6 +12,8 @@ using System.Text.Json;
 using TedToolkit.CppBindings.Cgal.Generator;
 using TedToolkit.CppBindings.Generator;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Cgal.Generator.Tests;
 
 /// <summary>
@@ -469,7 +471,7 @@ internal sealed class CgalGenerationProviderTests
     }
 
     private static CgalGenerationProvider CreateProvider(
-        FileInfo? profile = null,
+        FilePath? profile = null,
         string? profileId = null,
         bool requireLockedToolchain = true,
         string? vcpkgRoot = null,
@@ -529,10 +531,10 @@ internal sealed class CgalGenerationProviderTests
             .ToArray();
     }
 
-    private static FileInfo WriteProfile(CgalProfileManifest profile)
+    private static FilePath WriteProfile(CgalProfileManifest profile)
     {
-        var file = new FileInfo(Path.Combine(Path.GetTempPath(), $"tedtoolkit-cgal-{Guid.NewGuid():N}.json"));
-        File.WriteAllText(file.FullName, JsonSerializer.Serialize(profile, ProfileJsonOptions));
+        var file = DirectoryPath.Temp / new FileName($"tedtoolkit-cgal-{Guid.NewGuid():N}.json");
+        file.WriteAllText(JsonSerializer.Serialize(profile, ProfileJsonOptions));
         return file;
     }
 

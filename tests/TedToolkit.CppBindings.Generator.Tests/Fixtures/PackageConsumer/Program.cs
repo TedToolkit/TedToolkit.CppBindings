@@ -119,9 +119,18 @@ internal static class Program
                 Require(native.Contains("extern \"C\" int Alpha(") && native.Contains("extern \"C\" int Zebra("),
                     "Shared did not emit matching native method bodies.");
                 Require(table.IndexOf("&Alpha", StringComparison.Ordinal) < table.IndexOf("&Zebra", StringComparison.Ordinal), "Shared did not assign deterministic export order.");
-                Require(loader.Contains("namespace Independent.Generated;") && loader.Contains("neutral_fixture"), "Shared configuration was ignored.");
+                var loaderSyntax = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(loader).GetRoot();
+                Require(loaderSyntax.DescendantNodes()
+                    .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.BaseNamespaceDeclarationSyntax>()
+                    .Any(declaration => declaration.Name.ToString() == options.CSharpNamespace)
+                    && loader.Contains("neutral_fixture"), "Shared configuration was ignored.");
                 Require(!loader.Contains("Occt") && !table.Contains("Occt"), "Core emitted provider knowledge.");
-                Require(loader.Contains("NativeLibrary.Load") && loader.Contains("GetFunction(int index)"), "Loader semantics changed.");
+                Require(loader.Contains("NativeLibrary.Load") && loaderSyntax.DescendantNodes()
+                    .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.MethodDeclarationSyntax>()
+                    .Any(method => method.Identifier.ValueText == "GetFunction"
+                        && method.ParameterList.Parameters.Count == 1
+                        && method.ParameterList.Parameters[0].Type?.ToString() == "int"
+                        && method.ParameterList.Parameters[0].Identifier.ValueText == "index"), "Loader semantics changed.");
                 Require(!loader.Contains("fingerprint") && !loader.Contains("manifest") && !loader.Contains("Dispose"), "Unexpected loading protocol.");
             }
             else if (scenario is "render_failure" or "render_cancellation")

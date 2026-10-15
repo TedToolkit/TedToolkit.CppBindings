@@ -8,6 +8,8 @@
 using System.Reflection;
 using System.Text.Json;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Cgal.Generator;
 
 /// <summary>
@@ -46,7 +48,7 @@ internal static class CgalProfileResources
     /// <param name="file">The profile file.</param>
     /// <returns>The detached immutable profile.</returns>
     /// <exception cref="FileNotFoundException">The explicit profile does not exist.</exception>
-    internal static CgalProfileManifest LoadManifest(FileInfo file)
+    internal static CgalProfileManifest LoadManifest(in FilePath file)
     {
         if (!file.Exists)
         {

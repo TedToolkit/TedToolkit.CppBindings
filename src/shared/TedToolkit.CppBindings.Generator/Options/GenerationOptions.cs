@@ -5,6 +5,8 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
@@ -20,12 +22,26 @@ public record GenerationOptions
     /// <summary>
     /// Gets the output folder for generated C# sources.
     /// </summary>
-    public required DirectoryInfo CSharpFolder { get; init; }
+    public required DirectoryPath CSharpFolder
+    {
+        get;
+        init
+        {
+            field = value.FullName is null ? value : value.GetFullPath();
+        }
+    }
 
     /// <summary>
     /// Gets the output folder for generated C++ sources.
     /// </summary>
-    public required DirectoryInfo CppFolder { get; init; }
+    public required DirectoryPath CppFolder
+    {
+        get;
+        init
+        {
+            field = value.FullName is null ? value : value.GetFullPath();
+        }
+    }
 
     /// <summary>
     /// Gets the portable basename for the generated native library artifact.

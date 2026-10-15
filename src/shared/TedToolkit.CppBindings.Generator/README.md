@@ -18,8 +18,26 @@ provider uses the shared semantic extension boundary. Register its preparation m
 the [independent packed consumer](../../../tests/TedToolkit.CppBindings.Generator.Tests/Fixtures/PackageConsumer/Program.cs).
 It references only this package and needs neither a provider assembly nor friend access.
 
-`GenerationOptions` supplies dedicated, non-overlapping `CSharpFolder` and `CppFolder` directories,
-`CSharpNamespace`, and a portable `NativeLibraryBaseName`. The built-in target is `win-x64`, with
+`GenerationOptions` supplies dedicated, non-overlapping `CSharpFolder` and `CppFolder` directories as
+`DirectoryPath` values from `TedToolkit.FileSystem`. Relative paths are resolved when the options
+are initialized. For example:
+
+```csharp
+using TedToolkit.CppBindings.Generator;
+using TedToolkit.FileSystem;
+
+var options = new GenerationOptions
+{
+    CSharpFolder = new DirectoryPath("generated/csharp"),
+    CppFolder = new DirectoryPath("generated/cpp"),
+};
+```
+
+Existing `DirectoryInfo` inputs can be assigned through FileSystem's implicit conversion; reading
+the properties now returns `DirectoryPath`. Provider vcpkg roots use `DirectoryPath`, and explicit
+CGAL profile documents use `FilePath`. This changes the public API types, so existing compiled
+consumers must be rebuilt. The other settings include
+`CSharpNamespace` and a portable `NativeLibraryBaseName`. The built-in target is `win-x64`, with
 Cdecl function pointers and the MSVC native ABI. Other runtime identifiers are rejected before
 preparation. `CppVersion` defaults to 17 and is available to the provider's native build description;
 `IsInternal` is available to its managed emitters. Set `NativeLibraryVersion` to a `System.Version`

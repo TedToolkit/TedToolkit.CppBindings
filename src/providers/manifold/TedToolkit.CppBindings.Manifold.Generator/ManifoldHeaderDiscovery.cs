@@ -7,6 +7,8 @@
 
 using System.Text.RegularExpressions;
 
+using TedToolkit.FileSystem;
+
 namespace TedToolkit.CppBindings.Manifold.Generator;
 
 /// <summary>Resolves the installed Manifold public-header boundary.</summary>
@@ -18,19 +20,19 @@ internal static partial class ManifoldHeaderDiscovery
     /// <exception cref="DirectoryNotFoundException">The installed Manifold header tree is absent.</exception>
     /// <exception cref="InvalidOperationException">The package identity or header inventory is inconsistent.</exception>
     internal static IReadOnlyList<ManifoldSourceDisposition> Resolve(
-        DirectoryInfo vcpkgRoot,
+        in DirectoryPath vcpkgRoot,
         ManifoldProfile profile)
     {
-        var includeRoot = Path.Combine(vcpkgRoot.FullName, "installed", profile.Triplet, "include");
-        var manifoldRoot = Path.Combine(includeRoot, "manifold");
-        if (!Directory.Exists(manifoldRoot))
+        var includeRoot = vcpkgRoot / "installed" / profile.Triplet / "include";
+        var manifoldRoot = includeRoot / "manifold";
+        if (!manifoldRoot.Exists)
         {
             throw new DirectoryNotFoundException(
                 $"Manifold public headers were not found beneath '{manifoldRoot}'.");
         }
 
-        var installed = Directory.EnumerateFiles(manifoldRoot, "*", SearchOption.AllDirectories)
-            .Select(path => Normalize(Path.GetRelativePath(includeRoot, path)))
+        var installed = manifoldRoot.EnumerateFiles("*", SearchOption.AllDirectories)
+            .Select(path => Normalize(path.GetRelativePath(includeRoot).FullName))
             .Order(StringComparer.Ordinal)
             .ToArray();
         ValidatePackageStatus(vcpkgRoot, profile);
@@ -42,22 +44,22 @@ internal static partial class ManifoldHeaderDiscovery
         }
 
         var roots = ProfileRoots.ToHashSet(StringComparer.Ordinal);
-        var reachable = CloseIncludes(includeRoot, manifoldRoot, ProfileRoots);
+        var reachable = CloseIncludes(includeRoot.FullName, manifoldRoot.FullName, ProfileRoots);
         return Array.AsReadOnly(installed.Select(header => new ManifoldSourceDisposition(
                 header,
                 GetDisposition(header, roots, reachable)))
             .ToArray());
     }
 
-    private static void ValidatePackageStatus(DirectoryInfo vcpkgRoot, ManifoldProfile profile)
+    private static void ValidatePackageStatus(in DirectoryPath vcpkgRoot, ManifoldProfile profile)
     {
-        var statusPath = Path.Combine(vcpkgRoot.FullName, "installed", "vcpkg", "status");
-        if (!File.Exists(statusPath))
+        var statusPath = vcpkgRoot / "installed" / "vcpkg" / new FileName("status");
+        if (!statusPath.Exists)
         {
             throw new InvalidOperationException($"The vcpkg installed-package status file '{statusPath}' was not found.");
         }
 
-        var blocks = PackageStatusBlock().Matches(File.ReadAllText(statusPath))
+        var blocks = PackageStatusBlock().Matches(statusPath.ReadAllText())
             .Select(static match => match.Groups["body"].Value)
             .Where(body => HasStatusValue(body, "Architecture", profile.Triplet)
                 && HasStatusValue(body, "Version", profile.ManifoldVersion)
@@ -96,28 +98,28 @@ internal static partial class ManifoldHeaderDiscovery
             : "not-reachable-from-finite-profile";
     }
 
-    private static string[] ResolvePackageHeaders(DirectoryInfo vcpkgRoot, ManifoldProfile profile)
+    private static string[] ResolvePackageHeaders(in DirectoryPath vcpkgRoot, ManifoldProfile profile)
     {
-        var infoRoot = Path.Combine(vcpkgRoot.FullName, "installed", "vcpkg", "info");
-        if (!Directory.Exists(infoRoot))
+        var infoRoot = vcpkgRoot / "installed" / "vcpkg" / "info";
+        if (!infoRoot.Exists)
         {
             throw new InvalidOperationException(
                 $"The vcpkg installed-package list directory '{infoRoot}' was not found.");
         }
 
         var suffix = $"_{profile.Triplet}.list";
-        var lists = Directory.EnumerateFiles(infoRoot, "manifold_*.list", SearchOption.TopDirectoryOnly)
-            .Where(path => Path.GetFileName(path).EndsWith(suffix, StringComparison.Ordinal))
+        var lists = infoRoot.EnumerateFiles("manifold_*.list", SearchOption.TopDirectoryOnly)
+            .Where(path => path.Name.EndsWith(suffix, StringComparison.Ordinal))
             .ToArray();
         var expectedName = $"manifold_{profile.ManifoldVersion}_{profile.Triplet}.list";
-        if (lists.Length != 1 || !string.Equals(Path.GetFileName(lists[0]), expectedName, StringComparison.Ordinal))
+        if (lists.Length != 1 || !string.Equals(lists[0].Name, expectedName, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
                 $"Expected the installed Manifold package list '{expectedName}', found {lists.Length} candidate(s).");
         }
 
         var includePrefix = $"{profile.Triplet}/include/";
-        var headers = File.ReadLines(lists[0])
+        var headers = lists[0].ReadLines()
             .Select(Normalize)
             .Where(line => line.StartsWith(includePrefix + "manifold/", StringComparison.Ordinal)
                 && !line.EndsWith('/'))

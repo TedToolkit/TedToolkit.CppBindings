@@ -11,6 +11,7 @@ using System.Text.RegularExpressions;
 using Cysharp.Text;
 
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
+using TedToolkit.FileSystem;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Services;
 
@@ -46,13 +47,13 @@ internal sealed class VcpkgEnvironment : IVcpkgEnvironment
     /// <inheritdoc/>
     public string GetIncludeFolder(string triplet)
     {
-        return Path.Combine(GetRoot(), INSTALLED_FOLDER_NAME, triplet, "include");
+        return (new DirectoryPath(GetRoot()) / INSTALLED_FOLDER_NAME / triplet / "include").FullName;
     }
 
     /// <inheritdoc/>
     public string GetOcctIncludeFolder(string triplet)
     {
-        return Path.Combine(GetIncludeFolder(triplet), OCCT_FOLDER_NAME);
+        return (new DirectoryPath(GetIncludeFolder(triplet)) / OCCT_FOLDER_NAME).FullName;
     }
 
     /// <summary>
@@ -66,13 +67,13 @@ internal sealed class VcpkgEnvironment : IVcpkgEnvironment
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(triplet);
         ArgumentException.ThrowIfNullOrWhiteSpace(packageName);
-        var statusPath = Path.Combine(GetRoot(), INSTALLED_FOLDER_NAME, "vcpkg", "status");
-        if (!File.Exists(statusPath))
+        var statusPath = new DirectoryPath(GetRoot()) / INSTALLED_FOLDER_NAME / "vcpkg" / new FileName("status");
+        if (!statusPath.Exists)
         {
             throw new InvalidOperationException($"The vcpkg installed-package status file '{statusPath}' was not found.");
         }
 
-        var blocks = StatusBlockSeparator.Split(File.ReadAllText(statusPath))
+        var blocks = StatusBlockSeparator.Split(statusPath.ReadAllText())
             .Where(block => HasStatusValue(block, "Package", packageName)
                 && HasStatusValue(block, "Architecture", triplet)
                 && HasStatusValue(block, "Status", "install ok installed")
@@ -134,8 +135,8 @@ internal sealed class VcpkgEnvironment : IVcpkgEnvironment
                     + "Expected [A-Za-z_][A-Za-z0-9_]*.");
             }
 
-            var headerPath = Path.Combine(occtIncludeFolder, $"{targetStem}.hxx");
-            if (!File.Exists(headerPath))
+            var headerPath = new DirectoryPath(occtIncludeFolder) / new FileName($"{targetStem}.hxx");
+            if (!headerPath.Exists)
             {
                 throw new InvalidOperationException(
                     $"Target '{targetStem}' does not have a public header below OCCT include root "
