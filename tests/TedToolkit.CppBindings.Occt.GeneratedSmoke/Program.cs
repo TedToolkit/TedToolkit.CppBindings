@@ -135,9 +135,18 @@ internal static class MemoryBrepProbe
             throw new InvalidOperationException("A constructed vertex was reported as null.");
         }
 
-        using var buffer = std_basic_stringbuf_char.Create();
-        using var output = std_basic_ostream_char.Create(buffer);
+        var streams = CreateOutput();
+        using var buffer = streams.Buffer;
+        using var output = streams.Output;
+        var bufferAddress = Address(buffer);
+        var outputAddress = Address(output);
         using var progress = Message_ProgressRange.Create();
+        CollectAndChurn();
+        if (Address(buffer) != bufferAddress || Address(output) != outputAddress)
+        {
+            throw new InvalidOperationException("Native stream storage moved after construction.");
+        }
+
         BRepToolsExtensions.Write(shape, output, progress);
         using var text = buffer.str();
         var bytes = new byte[checked((int)text.size())];
@@ -150,7 +159,14 @@ internal static class MemoryBrepProbe
         }
 
         using var input = std_basic_istream_char.Create(buffer);
+        var inputAddress = Address(input);
         using var restored = TopoDS_Shape.Create();
+        CollectAndChurn();
+        if (Address(buffer) != bufferAddress || Address(input) != inputAddress)
+        {
+            throw new InvalidOperationException("Native input storage moved after construction.");
+        }
+
         BRepToolsExtensions.Read(restored, input, in builder, progress);
         if (restored.IsNull() || restored.ShapeType() != TopAbs_ShapeEnum.TopAbs_VERTEX)
         {
@@ -167,7 +183,46 @@ internal static class MemoryBrepProbe
             throw new InvalidOperationException("Memory BREP round-trip changed the vertex coordinates.");
         }
 
-        Console.WriteLine("Memory BREP round-trip preserved vertex topology and coordinates.");
+        Console.WriteLine("Memory BREP round-trip preserved vertex topology and coordinates across compacting GC.");
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static (Owned<std_basic_stringbuf_char> Buffer, Owned<std_basic_ostream_char> Output) CreateOutput()
+    {
+        var buffer = std_basic_stringbuf_char.Create();
+        try
+        {
+            return (buffer, std_basic_ostream_char.Create(buffer));
+        }
+        catch
+        {
+            buffer.Dispose();
+            throw;
+        }
+    }
+
+    [MethodImpl(MethodImplOptions.NoInlining)]
+    private static unsafe nint Address<T>(Owned<T> owner)
+        where T : unmanaged, ICppRaii
+    {
+        fixed (T* pointer = &owner.Value)
+        {
+            return (nint)pointer;
+        }
+    }
+
+    private static void CollectAndChurn()
+    {
+        GC.Collect(2, GCCollectionMode.Forced, blocking: true, compacting: true);
+        GC.WaitForPendingFinalizers();
+        var blocks = new byte[2048][];
+        for (var index = 0; index < blocks.Length; index++)
+        {
+            blocks[index] = new byte[4096];
+            blocks[index].AsSpan().Fill(0xcc);
+        }
+
+        GC.KeepAlive(blocks);
     }
 }
 

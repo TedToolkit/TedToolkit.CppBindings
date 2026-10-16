@@ -158,6 +158,8 @@ internal sealed class RecordModelManager(
             Alignment = clang.Type_getAlignOf(type),
             IsAbstract = record.IsAbstract,
             UsesIntrusiveReferenceCounting = false,
+            RequiresStableAddress = projectedType.CppTypeName is "std::ios_base"
+                || projectedType.CppTypeName.StartsWith("std::basic_streambuf<", StringComparison.Ordinal),
         };
         _recordNames.Add(key, result);
         projectedType.ReferencedRecord = result;

@@ -150,6 +150,11 @@ public sealed class BindingManagedEmitter(
             interfaceDeclaration.AddBaseType(new DataType("global::TedToolkit.CppBindings.ICppRaii"));
         }
 
+        if (recordDecl.RequiresStableAddress)
+        {
+            interfaceDeclaration.AddBaseType(new DataType("global::TedToolkit.CppBindings.ICppStableAddress"));
+        }
+
         nameSpace.AddMember(interfaceDeclaration);
     }
 

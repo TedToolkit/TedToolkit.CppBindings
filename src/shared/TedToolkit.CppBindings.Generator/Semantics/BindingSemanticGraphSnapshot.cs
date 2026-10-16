@@ -69,6 +69,7 @@ internal sealed class BindingSemanticGraphSnapshot
             DescriptionItems = CloneRootDescriptions(source.DescriptionItems),
             IsAbstract = source.IsAbstract,
             UsesIntrusiveReferenceCounting = source.UsesIntrusiveReferenceCounting,
+            RequiresStableAddress = source.RequiresStableAddress,
             SourceHeader = source.SourceHeader,
             UsesAllocatorPlacementNew = source.UsesAllocatorPlacementNew,
             Type = type,
