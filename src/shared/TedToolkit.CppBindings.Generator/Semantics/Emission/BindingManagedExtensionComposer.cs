@@ -27,6 +27,10 @@ internal sealed class BindingManagedExtensionComposer(
     IReadOnlyDictionary<string, RecordModel>? recordCatalog,
     IReadOnlyDictionary<string, int>? nativeFunctionIndices)
 {
+    private readonly Dictionary<string, RecordModel> _parameterAdjustmentRecords = new(StringComparer.Ordinal);
+
+    private readonly HashSet<MethodModel> _concreteParameterMethods = [];
+
     private bool? _usesGenericReceiver;
 
     private bool UsesGenericReceiver
@@ -65,6 +69,7 @@ internal sealed class BindingManagedExtensionComposer(
             return;
         }
 
+        PreserveDistinctOverloadSignatures(methods);
         var recordName = record.Type.CSharpTypeName;
         var extensionName = record.TemplateProjection?.FixedTypeName ?? recordName;
         var declaration = Class(extensionName + "Extensions").Static.Unsafe;
@@ -86,14 +91,20 @@ internal sealed class BindingManagedExtensionComposer(
             }
         }
 
+        if (UsesGenericReceiver)
+        {
+            declaration.AddMember(ComposePointerAdjustment(record, "AdjustReceiver"));
+        }
+
+        foreach (var (helperName, parameterRecord) in _parameterAdjustmentRecords.OrderBy(static pair => pair.Key, StringComparer.Ordinal))
+        {
+            declaration.AddMember(ComposePointerAdjustment(parameterRecord, helperName));
+            concreteLayout?.AddMember(ComposePointerAdjustment(parameterRecord, helperName));
+        }
+
         if (!hasExtensions && concreteLayout is not null)
         {
             return;
-        }
-
-        if (UsesGenericReceiver)
-        {
-            declaration.AddMember(ComposePointerAdjustment(recordName));
         }
 
         nameSpace.AddMember(declaration);
@@ -109,7 +120,7 @@ internal sealed class BindingManagedExtensionComposer(
 
     private Method ComposeConstructor(MethodModel method, string recordName)
     {
-        var shape = new CallShape();
+        var shape = new CallShape() { AllowGenericParameters = !_concreteParameterMethods.Contains(method), };
         foreach (var parameter in method.Parameters)
         {
             AddParameter(parameter, shape);
@@ -176,7 +187,7 @@ internal sealed class BindingManagedExtensionComposer(
                 "{",
                 "    if (!constructed)",
                 "    {",
-                "        GC.SuppressFinalize(__result);",
+                "        global::System.GC.SuppressFinalize(__result);",
                 "    }",
                 "}",
             ]);
@@ -260,7 +271,7 @@ internal sealed class BindingManagedExtensionComposer(
                 "{",
                 "    if (!constructed)",
                 "    {",
-                "        GC.SuppressFinalize(__result);",
+                "        global::System.GC.SuppressFinalize(__result);",
                 "    }",
                 "}",
             ])));
@@ -321,10 +332,13 @@ internal sealed class BindingManagedExtensionComposer(
         var shape = CreateCallShape(method, recordName, borrowedHandleReceiver);
         AddErrorTransport(method, shape);
         var returnType = method.ReturnType.CSharpPublicType.ToCode();
+
+        // C++ bool occupies one byte; upper return-register bits are unspecified.
+        var nativeReturnType = returnType is "bool" ? "byte" : method.ReturnType.CSharpPInvokeType.ToCode();
         var declaration = CreateMethod(method, method.ReturnType.CSharpPublicType, shape);
         var invocation = Invoke(
             method.NativeExportName,
-            shape.NativeParameterTypes.Append(method.ReturnType.CSharpPInvokeType.ToCode()),
+            shape.NativeParameterTypes.Append(nativeReturnType),
             shape.NativeArguments);
         var call = method.IsReturnVoid ? invocation : "var __result = " + invocation;
         var statements = new List<string>() { call, };
@@ -333,11 +347,10 @@ internal sealed class BindingManagedExtensionComposer(
         AddErrorCheck(method, statements);
         if (!method.IsReturnVoid)
         {
-            var pinvokeReturnType = method.ReturnType.CSharpPInvokeType.ToCode();
-            var cast = string.Equals(returnType, pinvokeReturnType, StringComparison.Ordinal)
+            var cast = string.Equals(returnType, nativeReturnType, StringComparison.Ordinal)
                 ? ""
                 : $"({returnType})";
-            statements.Add($"return {cast}__result;");
+            statements.Add(returnType is "bool" ? "return __result != 0;" : $"return {cast}__result;");
         }
 
         declaration.AddStatement(new Custom(ErrorDeclaration(method) + ComposeFixedBlock(shape.Pins, statements)));
@@ -383,7 +396,7 @@ internal sealed class BindingManagedExtensionComposer(
 
     private CallShape CreateCallShape(MethodModel method, string recordName, bool borrowedHandleReceiver)
     {
-        var shape = new CallShape();
+        var shape = new CallShape() { AllowGenericParameters = !_concreteParameterMethods.Contains(method), };
         if (!method.IsStatic)
         {
             AddReceiver(recordName, method, borrowedHandleReceiver, shape);
@@ -443,11 +456,27 @@ internal sealed class BindingManagedExtensionComposer(
             var ownerName = parameterRecord.ObjectKind is NativeObjectKind.Owned
                 ? "global::TedToolkit.CppBindings.Owned"
                 : profile.ManagedOwningIntrusiveHandle;
-            AddPublicParameter(shape, new DataType($"{ownerName}<{ownerTypeName}>"), parameterName);
+            var parameterTypeName = ownerTypeName;
+            var helperName = "AdjustParameter_" + ownerTypeName;
+            var usesGenericParameter = shape.AllowGenericParameters
+                                       && parameterRecord.ObjectKind is NativeObjectKind.Owned
+                                       && firstIndirection is TypeIndirectionKind.PointerIndirection
+                                       && GetDerivedRecords(parameterRecord).Length > 0;
+            if (usesGenericParameter)
+            {
+                parameterTypeName = "TParameter" + shape.PublicTypeParameters.Count;
+                shape.PublicTypeParameters.Add(new TypeParameter(parameterTypeName)
+                    .AddUnmanagedConstraint()
+                    .AddConstraint(new DataType(GetManagedInterfaceName(parameterRecord)))
+                    .AddConstraint(new DataType("global::TedToolkit.CppBindings.ICppRaii")));
+                _parameterAdjustmentRecords[helperName] = parameterRecord;
+            }
+
+            AddPublicParameter(shape, new DataType($"{ownerName}<{parameterTypeName}>"), parameterName);
             shape.NativeParameterTypes.Add(ownerTypeName + "*");
             var pointerName = parameterName + "Pointer";
-            shape.NativeArguments.Add(pointerName);
-            shape.Pins.Add((ownerTypeName, pointerName, "&" + parameterName + ".Value"));
+            shape.NativeArguments.Add(usesGenericParameter ? helperName + "(" + pointerName + ")" : pointerName);
+            shape.Pins.Add((parameterTypeName, pointerName, "&" + parameterName + ".Value"));
             shape.ParameterOwners.Add(parameterName);
             return;
         }
@@ -501,6 +530,28 @@ internal sealed class BindingManagedExtensionComposer(
             : $"({nativeType}){parameterName}");
     }
 
+    private void PreserveDistinctOverloadSignatures(IEnumerable<MethodModel> methods)
+    {
+        // C# constraints cannot distinguish overloads that generalize different native base pointers.
+        var signatures = methods.Select(method =>
+        {
+            var shape = new CallShape();
+            foreach (var parameter in method.Parameters)
+            {
+                AddParameter(parameter, shape);
+            }
+
+            return (Method: method, Key: string.Join("|",
+                method.Type, method.MethodName, method.IsStatic, shape.PublicTypeParameters.Count,
+                string.Join(";", shape.PublicParameterSignatures)));
+        });
+        foreach (var group in signatures.GroupBy(static value => value.Key, StringComparer.Ordinal)
+                     .Where(static group => group.Count() > 1))
+        {
+            _concreteParameterMethods.UnionWith(group.Select(static value => value.Method));
+        }
+    }
+
     private void AddReceiverTypeParameter(MethodModel method, Method declaration)
     {
         if (method.IsStatic || !UsesGenericReceiver)
@@ -524,21 +575,22 @@ internal sealed class BindingManagedExtensionComposer(
         declaration.AddTypeParameter(parameter);
     }
 
-    private Method ComposePointerAdjustment(string recordName)
+    private Method ComposePointerAdjustment(RecordModel targetRecord, string helperName)
     {
+        var recordName = targetRecord.Type.CSharpTypeName;
         var declaration = Method(
-            "AdjustReceiver",
+            helperName,
             ReturnType(new DataType(recordName + "*"))).Private.Static;
         declaration.AddTypeParameter(new TypeParameter("TReceiver")
             .AddUnmanagedConstraint()
-            .AddConstraint(new DataType(GetManagedInterfaceName(record))));
+            .AddConstraint(new DataType(GetManagedInterfaceName(targetRecord))));
         declaration.AddParameter(new Parameter(new DataType("TReceiver*"), "pointer"));
         var directReturn = $"if (typeof(TReceiver) == typeof({recordName}))\n"
                            + $"{{\n    return ({recordName}*)pointer;\n}}";
         var statements = new List<string>() { directReturn, };
-        foreach (var derived in GetDerivedRecords())
+        foreach (var derived in GetDerivedRecords(targetRecord))
         {
-            if (!TryGetInheritancePath(derived, record, out var path))
+            if (!TryGetInheritancePath(derived, targetRecord, out var path))
             {
                 continue;
             }
@@ -641,12 +693,12 @@ internal sealed class BindingManagedExtensionComposer(
             return;
         }
 
-        statements.Add("GC.KeepAlive(self);");
+        statements.Add("global::System.GC.KeepAlive(self);");
     }
 
     private static IEnumerable<string> KeepAliveStatements(IEnumerable<string> owners)
     {
-        return owners.Distinct(StringComparer.Ordinal).Select(static owner => $"GC.KeepAlive({owner});");
+        return owners.Distinct(StringComparer.Ordinal).Select(static owner => $"global::System.GC.KeepAlive({owner});");
     }
 
     private static void AddPublicParameters(Method declaration, CallShape shape)
@@ -654,6 +706,11 @@ internal sealed class BindingManagedExtensionComposer(
         foreach (var parameter in shape.PublicParameters)
         {
             declaration.AddParameter(parameter);
+        }
+
+        foreach (var parameter in shape.PublicTypeParameters)
+        {
+            declaration.AddTypeParameter(parameter);
         }
     }
 
@@ -731,11 +788,11 @@ internal sealed class BindingManagedExtensionComposer(
         return result;
     }
 
-    private RecordModel[] GetDerivedRecords()
+    private RecordModel[] GetDerivedRecords(RecordModel targetRecord)
     {
         return recordCatalog?.Values
-                   .Where(candidate => !ReferenceEquals(candidate, record)
-                                       && TryGetInheritancePath(candidate, record, out _))
+                   .Where(candidate => !ReferenceEquals(candidate, targetRecord)
+                                       && TryGetInheritancePath(candidate, targetRecord, out _))
                    .OrderBy(static candidate => candidate.Type.CSharpTypeName, StringComparer.Ordinal)
                    .ToArray()
                ?? Array.Empty<RecordModel>();
@@ -807,7 +864,11 @@ internal sealed class BindingManagedExtensionComposer(
 
     private sealed class CallShape
     {
+        internal bool AllowGenericParameters { get; init; } = true;
+
         internal List<Parameter> PublicParameters { get; } = [];
+
+        internal List<TypeParameter> PublicTypeParameters { get; } = [];
 
         internal List<ManagedParameterSignature> PublicParameterSignatures { get; } = [];
 

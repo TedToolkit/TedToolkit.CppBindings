@@ -8,6 +8,7 @@
 using TedToolkit.CppBindings.Windows.Generation.Tool;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
+var standardError = Console.Error;
 
 try
 {
@@ -20,6 +21,6 @@ try
 }
 catch (Exception exception)
 {
-    Console.Error.WriteLine(exception.Message);
+    standardError.WriteLine(exception);
     return 1;
 }

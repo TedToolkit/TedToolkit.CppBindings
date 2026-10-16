@@ -27,6 +27,7 @@ internal sealed class PublicSurfaceTests
             .IsEquivalentTo([
                 "TedToolkit.CppBindings.Owned`1",
                 "TedToolkit.CppBindings.ICppRaii",
+                "TedToolkit.CppBindings.ICppStableAddress",
                 "TedToolkit.CppBindings.ICppOwner`1",
                 "TedToolkit.CppBindings.NativeTypeNameAttribute",
                 "TedToolkit.CppBindings.GeneratedCodeOnlyAttribute",

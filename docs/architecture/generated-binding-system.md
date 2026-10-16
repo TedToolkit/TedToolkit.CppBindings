@@ -224,9 +224,15 @@ The ownership categories are:
   identifies only generated exact-layout structs classified as supported non-`Standard_Transient`
   RAII; eligible `TCollection_*` types implement it, while trivial values and
   `Standard_Transient` projections do not. The owner object contains one private `T` field as the
-  exact-layout object's managed storage instead of adopting a separately allocated C++ object or
-  allocating a second storage object. Generated construction, invocation, and destruction
-  stabilize that field with `fixed` whenever native code receives its address. The
+  exact-layout object's managed storage instead of adopting a separately allocated C++ object.
+  Address-sensitive projections additionally implement `ICppStableAddress`; for these types the
+  owner reserves one pinned managed array element instead of using its movable field. The OCCT
+  provider marks `std::ios_base` and `std::basic_streambuf` interfaces, propagating the requirement
+  through public native base interfaces to streams and stream buffers. Their native state may retain
+  object or interior pointers between calls, so call-scoped pinning alone is insufficient. The
+  pinned array does not root its owner and requires no separate native allocation or free.
+  Generated construction, invocation, and destruction
+  stabilize the selected storage with `fixed` whenever native code receives its address. The
   originating native artifact placement-constructs the object in that storage. Disposal invokes
   the matching C++ destructor exactly once, but never calls the `Standard_Transient`
   intrusive-release operation or a native storage-free function; the GC reclaims the managed
@@ -323,8 +329,9 @@ objects use `Owned<T>` directly.
 `Owned<T>` has no public construction-completion state or method. Its only declared public members
 are the generated-only
 `Owned(delegate* unmanaged[Cdecl]<T*, void> destroy)` constructor, `ref T Value`, and `Dispose()`.
-`destroy` must be non-null and non-throwing. The constructor creates the owner whose private `T`
-field is the construction destination. A generated factory placement-constructs that field through
+`destroy` must be non-null and non-throwing. The constructor reserves a private `T` field or, for
+`ICppStableAddress` projections, one pinned `T` array element as the construction destination.
+A generated factory placement-constructs that storage through
 `Value` and exposes the owner only after native success. A local success flag and `finally`
 suppress finalization on every managed exit before native success is established. Native
 construction failure is projected only after that suppression; generated code does not call
@@ -338,12 +345,12 @@ consumers have no direct construction path and receive `Owned<T>` only from gene
 C++ factories or copy operations. The marker is compiler guidance rather than authentication, so
 the constructor still validates the destructor input available at runtime.
 
-Direct-field ownership is eligible only when the pinned CLR target proves that the private `T`
-field representation satisfies the native `alignof(T)` requirement. This is a model and generator
+Managed-storage ownership is eligible only when the pinned CLR target proves that the private `T`
+field or pinned array element satisfies the native `alignof(T)` requirement. This is a model and generator
 admission rule, not a Runtime constructor check: observing one fixed address cannot prove alignment
 after later GC relocation. A type whose required alignment cannot be proved for this representation
-is rejected before callable binding emission; the generator does not silently select a second
-storage allocation or allow a possibly misaligned native call.
+is rejected before callable binding emission; address-stable storage does not relax alignment
+admission or allow a possibly misaligned native call.
 
 For the pinned win-x64 sequential storage model, supported native alignments are 1, 2, 4 and 8.
 Larger native alignment is not supplied by setting a larger Pack or observing a favorable pinned

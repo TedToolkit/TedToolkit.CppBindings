@@ -8,6 +8,7 @@
     <TargetFramework>net8.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <NoWarn>$(NoWarn);CA1032;CA1711;RCS0021;RCS0029;RCS0058;RCS1060;RCS1140;RCS1141;RCS1194;RCS1231;RCS1253;SA1128;SA1402;SA1502;SA1600;SA1611</NoWarn>
+    <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
   </PropertyGroup>
   <ItemGroup>
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />

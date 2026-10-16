@@ -47,14 +47,11 @@ internal static class Helpers
             return type.ToPInvokeDataType();
         }
 
-        if ((type.DePointer().DeConst() ?? type.DeConst().DePointer()) is { } constPointer)
-        {
-            return constPointer.ToPInvokeDataType().RefReadonly;
-        }
-
         if (type.DePointer() is { } pointer)
         {
-            return pointer.ToPInvokeDataType().Ref;
+            return pointer.IsLocalConstQualified
+                ? pointer.ToPInvokeDataType().RefReadonly
+                : pointer.ToPInvokeDataType().Ref;
         }
 
         return type.ToPInvokeDataType();
