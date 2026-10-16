@@ -40,10 +40,12 @@ BRepOffset_MakeSimpleOffset_GetSafeOffset
 BRepTools_PurgeLocations_ModifiedShape
 BSplCLib_DN_4
 BSplCLib_DN_5
+BinTools_Curve2dSet_Dump
 BlendFunc_Knots
 BlendFunc_Mults
 CDF_DirectoryIterator_Create_1
 CDM_Document_OperatorLessLess
+CDM_MetaData_OperatorLessLess
 Cocoa_LocalPool_Create
 Cocoa_LocalPool_Destroy
 Cocoa_Window_Create
@@ -120,6 +122,7 @@ LDOM_MemManager_HashedAllocate_2
 LDOM_XmlReader_CreateElement
 LDOM_XmlReader_Create_1
 LDOM_XmlReader_Create_2
+LDOM_XmlReader_ReadRecord
 LDOM_XmlReader_getInteger
 Law_Interpolate_ClearTangents
 LocOpe_Revol_Create_2

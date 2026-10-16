@@ -114,7 +114,62 @@ if (!rejectedDisposedOwner)
     throw new InvalidOperationException("Owning receiver accepted a disposed native owner.");
 }
 
+MemoryBrepProbe.Run();
 Console.WriteLine("Generated value, Owned, Handle, borrowed receiver, inheritance, and error smoke passed.");
+
+internal static class MemoryBrepProbe
+{
+    /// <summary>
+    /// Verifies that native stream bindings preserve a vertex through an in-memory BREP round-trip.
+    /// </summary>
+    public static void Run()
+    {
+        var builder = BRep_Builder.Create();
+        var point = gp_Pnt.Create(1.25, -2.5, 3.75);
+        using var vertex = TopoDS_Vertex.Create();
+        builder.MakeVertex(vertex, in point, 1e-7);
+        using var identity = TopLoc_Location.Create();
+        using var shape = vertex.Moved(identity, false);
+        if (shape.IsNull())
+        {
+            throw new InvalidOperationException("A constructed vertex was reported as null.");
+        }
+
+        using var buffer = std_basic_stringbuf_char.Create();
+        using var output = std_basic_ostream_char.Create(buffer);
+        using var progress = Message_ProgressRange.Create();
+        BRepToolsExtensions.Write(shape, output, progress);
+        using var text = buffer.str();
+        var bytes = new byte[checked((int)text.size())];
+        if (output.fail() || bytes.Length == 0
+            || text.copy(ref MemoryMarshal.Cast<byte, sbyte>(bytes.AsSpan())[0], (ulong)bytes.Length, 0) != (ulong)bytes.Length
+            || bytes.Contains((byte)0)
+            || !System.Text.Encoding.ASCII.GetString(bytes).Contains("CASCADE Topology", StringComparison.Ordinal))
+        {
+            throw new InvalidOperationException("Native BREP output did not produce complete, unterminated text bytes.");
+        }
+
+        using var input = std_basic_istream_char.Create(buffer);
+        using var restored = TopoDS_Shape.Create();
+        BRepToolsExtensions.Read(restored, input, in builder, progress);
+        if (restored.IsNull() || restored.ShapeType() != TopAbs_ShapeEnum.TopAbs_VERTEX)
+        {
+            throw new InvalidOperationException("Memory BREP input did not restore the vertex topology.");
+        }
+
+        var bounds = Bnd_Box.Create();
+        BRepBndLibExtensions.Add(restored, ref bounds, false);
+        var limits = bounds.Get();
+        if (!(Math.Abs(((limits.Xmin + limits.Xmax) / 2) - 1.25) < 1e-10)
+            || !(Math.Abs(((limits.Ymin + limits.Ymax) / 2) + 2.5) < 1e-10)
+            || !(Math.Abs(((limits.Zmin + limits.Zmax) / 2) - 3.75) < 1e-10))
+        {
+            throw new InvalidOperationException("Memory BREP round-trip changed the vertex coordinates.");
+        }
+
+        Console.WriteLine("Memory BREP round-trip preserved vertex topology and coordinates.");
+    }
+}
 
 internal static class GeneratedLayoutProbe
 {
