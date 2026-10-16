@@ -29,6 +29,40 @@ namespace TedToolkit.CppBindings.Occt.Generator.Tests.Services.RecordModelManage
 internal sealed class AddTest
 {
     /// <summary>
+    /// Verifies that native stream base projections request address-stable owner storage.
+    /// </summary>
+    /// <returns>A task that completes when the storage requirement assertions finish.</returns>
+    [Test]
+    public async Task Should_require_stable_addresses_for_stream_bases_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            namespace std
+            {
+                struct ios_base { ~ios_base(); };
+                template<typename T> struct basic_streambuf { ~basic_streambuf(); };
+            }
+            template struct std::basic_streambuf<char>;
+            struct Ordinary { ~Ordinary(); };
+            """);
+        var manager = CreateManager();
+        foreach (var record in translationUnit.TranslationUnitDecl.CursorChildren
+                     .OfType<NamespaceDecl>().SelectMany(static declaration => declaration.CursorChildren)
+                     .Concat(translationUnit.TranslationUnitDecl.CursorChildren)
+                     .OfType<CXXRecordDecl>())
+        {
+            manager.Add(record);
+        }
+
+        await Assert.That(manager.RecordModels.Single(static record => record.Type.CppTypeName == "std::ios_base")
+            .RequiresStableAddress).IsTrue();
+        await Assert.That(manager.RecordModels.Single(static record =>
+                record.Type.CppTypeName.StartsWith("std::basic_streambuf<", StringComparison.Ordinal))
+            .RequiresStableAddress).IsTrue();
+        await Assert.That(manager.RecordModels.Single(static record => record.Type.CppTypeName == "Ordinary")
+            .RequiresStableAddress).IsFalse();
+    }
+
+    /// <summary>
     /// Verifies C++ language linkage does not hide public stream parameter types.
     /// </summary>
     /// <returns>A task that completes when the assertions finish.</returns>

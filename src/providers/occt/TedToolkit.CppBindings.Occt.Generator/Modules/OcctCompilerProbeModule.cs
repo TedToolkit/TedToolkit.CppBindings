@@ -188,7 +188,8 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         if (process.ExitCode is not 0)
         {
             throw new InvalidOperationException(
-                $"Native compiler probe '{startInfo.FileName}' failed with exit code {process.ExitCode}: {error}");
+                $"Native compiler probe '{startInfo.FileName}' failed with exit code {process.ExitCode}:"
+                + Environment.NewLine + output + Environment.NewLine + error);
         }
 
         return output;

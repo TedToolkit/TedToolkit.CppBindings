@@ -15,14 +15,19 @@ namespace TedToolkit.CppBindings;
 /// </summary>
 /// <typeparam name="T">The exact-layout unmanaged RAII projection contained by this owner.</typeparam>
 /// <remarks>
-/// The native object is placement-constructed directly in this owner's managed <see cref="Value"/>
-/// field by generated code. Assigning this reference type aliases the same owner and disposal state.
+/// Generated code placement-constructs the native object in managed storage. Projections implementing
+/// <see cref="ICppStableAddress"/> use a pinned array element; other projections use a direct field.
+/// Assigning this reference type aliases the same owner and disposal state.
 /// <see cref="Value"/> is non-owning and must not be used after or concurrently with disposal.
 /// </remarks>
 public sealed unsafe class Owned<T> : IDisposable, ICppOwner<T>
     where T : unmanaged, ICppRaii
 {
+    private static readonly bool RequiresStableAddress = typeof(ICppStableAddress).IsAssignableFrom(typeof(T));
+
     private readonly nint _destroy;
+
+    private readonly T[]? _stableValue;
 
     private T _value;
 
@@ -37,22 +42,23 @@ public sealed unsafe class Owned<T> : IDisposable, ICppOwner<T>
     /// </param>
     /// <exception cref="ArgumentNullException"><paramref name="destroy"/> is null.</exception>
     /// <remarks>
-    /// This constructor reserves the contained field but does not construct <typeparamref name="T"/>.
+    /// This constructor reserves storage but does not construct <typeparamref name="T"/>.
     /// Generated bindings must reject native types whose alignment cannot be represented safely by
-    /// this direct managed-field storage model.
+    /// their managed field or pinned array element.
     /// Generated code must suppress finalization if native placement construction does not succeed.
     /// </remarks>
     [GeneratedCodeOnly]
     public Owned(delegate* unmanaged[Cdecl]<T*, void> destroy)
     {
         ArgumentNullException.ThrowIfNull(destroy);
+        _stableValue = RequiresStableAddress ? GC.AllocateArray<T>(1, pinned: true) : null;
         _destroy = (nint)destroy;
     }
 
     /// <summary>
     /// Gets a non-owning managed reference to the contained native object.
     /// </summary>
-    /// <value>The exact-layout value contained directly in this owner.</value>
+    /// <value>The exact-layout value in the storage reserved by this owner.</value>
     /// <exception cref="ObjectDisposedException">This owner has already been disposed.</exception>
     /// <remarks>
     /// Access does not extend lifetime. The returned reference must not be retained or used
@@ -69,7 +75,7 @@ public sealed unsafe class Owned<T> : IDisposable, ICppOwner<T>
                 ThrowObjectDisposedException();
             }
 
-            return ref _value;
+            return ref Storage;
         }
     }
 
@@ -95,6 +101,14 @@ public sealed unsafe class Owned<T> : IDisposable, ICppOwner<T>
         Destroy();
     }
 
+    private ref T Storage
+    {
+        get
+        {
+            return ref (_stableValue is null ? ref _value : ref _stableValue[0]);
+        }
+    }
+
     [DoesNotReturn]
     private static void ThrowObjectDisposedException()
     {
@@ -109,7 +123,7 @@ public sealed unsafe class Owned<T> : IDisposable, ICppOwner<T>
             return;
         }
 
-        fixed (T* value = &_value)
+        fixed (T* value = &Storage)
         {
             NativeCleanup.Invoke(_destroy, (nint)value);
         }

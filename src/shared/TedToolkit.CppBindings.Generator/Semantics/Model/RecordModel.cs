@@ -55,6 +55,11 @@ public sealed class RecordModel
     public required bool UsesIntrusiveReferenceCounting { get; set; }
 
     /// <summary>
+    /// Gets a value indicating whether native state requires a stable object address between calls.
+    /// </summary>
+    public bool RequiresStableAddress { get; init; }
+
+    /// <summary>
     /// Gets the native header file that declares the record.
     /// </summary>
     public required string SourceHeader { get; init; }
