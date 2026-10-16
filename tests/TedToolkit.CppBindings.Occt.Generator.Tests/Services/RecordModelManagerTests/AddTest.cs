@@ -119,7 +119,15 @@ internal sealed class AddTest
         using var translationUnit = ParseTranslationUnit("""
             struct Buffer { virtual ~Buffer(); };
             struct MemoryBuffer : Buffer { ~MemoryBuffer(); };
-            struct Stream { Stream(Buffer* buffer); ~Stream(); };
+            struct OtherBuffer { virtual ~OtherBuffer(); };
+            struct OtherMemoryBuffer : OtherBuffer { ~OtherMemoryBuffer(); };
+            struct Stream
+            {
+                Stream(Buffer* buffer);
+                ~Stream();
+                void Attach(Buffer* buffer);
+                void Attach(OtherBuffer* buffer);
+            };
             """);
         var manager = CreateManager();
         foreach (var declaration in translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>())
@@ -165,6 +173,14 @@ internal sealed class AddTest
                 public static class Probe
                 {
                     public static bool Check() => true;
+                    public static void Overloads(TedToolkit.CppBindings.Owned<Stream> stream,
+                        TedToolkit.CppBindings.Owned<Buffer> first,
+                        TedToolkit.CppBindings.Owned<OtherBuffer> second)
+                    {
+                        stream.Attach(first);
+                        stream.Attach(second);
+                    }
+
                     public static void Use(TedToolkit.CppBindings.Owned<MemoryBuffer> buffer)
                     {
                         using var stream = Stream.Create(buffer);

@@ -29,6 +29,8 @@ internal sealed class BindingManagedExtensionComposer(
 {
     private readonly Dictionary<string, RecordModel> _parameterAdjustmentRecords = new(StringComparer.Ordinal);
 
+    private readonly HashSet<MethodModel> _concreteParameterMethods = [];
+
     private bool? _usesGenericReceiver;
 
     private bool UsesGenericReceiver
@@ -67,6 +69,7 @@ internal sealed class BindingManagedExtensionComposer(
             return;
         }
 
+        PreserveDistinctOverloadSignatures(methods);
         var recordName = record.Type.CSharpTypeName;
         var extensionName = record.TemplateProjection?.FixedTypeName ?? recordName;
         var declaration = Class(extensionName + "Extensions").Static.Unsafe;
@@ -117,7 +120,7 @@ internal sealed class BindingManagedExtensionComposer(
 
     private Method ComposeConstructor(MethodModel method, string recordName)
     {
-        var shape = new CallShape();
+        var shape = new CallShape() { AllowGenericParameters = !_concreteParameterMethods.Contains(method), };
         foreach (var parameter in method.Parameters)
         {
             AddParameter(parameter, shape);
@@ -393,7 +396,7 @@ internal sealed class BindingManagedExtensionComposer(
 
     private CallShape CreateCallShape(MethodModel method, string recordName, bool borrowedHandleReceiver)
     {
-        var shape = new CallShape();
+        var shape = new CallShape() { AllowGenericParameters = !_concreteParameterMethods.Contains(method), };
         if (!method.IsStatic)
         {
             AddReceiver(recordName, method, borrowedHandleReceiver, shape);
@@ -455,7 +458,8 @@ internal sealed class BindingManagedExtensionComposer(
                 : profile.ManagedOwningIntrusiveHandle;
             var parameterTypeName = ownerTypeName;
             var helperName = "AdjustParameter_" + ownerTypeName;
-            var usesGenericParameter = parameterRecord.ObjectKind is NativeObjectKind.Owned
+            var usesGenericParameter = shape.AllowGenericParameters
+                                       && parameterRecord.ObjectKind is NativeObjectKind.Owned
                                        && firstIndirection is TypeIndirectionKind.PointerIndirection
                                        && GetDerivedRecords(parameterRecord).Length > 0;
             if (usesGenericParameter)
@@ -524,6 +528,28 @@ internal sealed class BindingManagedExtensionComposer(
         shape.NativeArguments.Add(string.Equals(publicType, nativeType, StringComparison.Ordinal)
             ? parameterName
             : $"({nativeType}){parameterName}");
+    }
+
+    private void PreserveDistinctOverloadSignatures(IEnumerable<MethodModel> methods)
+    {
+        // C# constraints cannot distinguish overloads that generalize different native base pointers.
+        var signatures = methods.Select(method =>
+        {
+            var shape = new CallShape();
+            foreach (var parameter in method.Parameters)
+            {
+                AddParameter(parameter, shape);
+            }
+
+            return (Method: method, Key: string.Join("|",
+                method.Type, method.MethodName, method.IsStatic, shape.PublicTypeParameters.Count,
+                string.Join(";", shape.PublicParameterSignatures)));
+        });
+        foreach (var group in signatures.GroupBy(static value => value.Key, StringComparer.Ordinal)
+                     .Where(static group => group.Count() > 1))
+        {
+            _concreteParameterMethods.UnionWith(group.Select(static value => value.Method));
+        }
     }
 
     private void AddReceiverTypeParameter(MethodModel method, Method declaration)
@@ -838,6 +864,8 @@ internal sealed class BindingManagedExtensionComposer(
 
     private sealed class CallShape
     {
+        internal bool AllowGenericParameters { get; init; } = true;
+
         internal List<Parameter> PublicParameters { get; } = [];
 
         internal List<TypeParameter> PublicTypeParameters { get; } = [];
