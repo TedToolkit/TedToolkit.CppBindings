@@ -100,9 +100,8 @@ jobs:
       - name: Run Windows build pipeline
         shell: pwsh
         env:
-          AI__ApiKey: ${{ secrets.AI__APIKEY }}
-          AI__EndPoint: ${{ secrets.AI__ENDPOINT }}
-          AI__ModelId: ${{ secrets.AI__MODELID }}
+          # Optional PR text generation must not gate native build and test verification.
+          AI__ApiKey: ''
           NuGet__ApiKey: ${{ secrets.NUGET__APIKEY }}
           NuGet__Url: ${{ vars.NUGET__URL }}
           NuGet__Source: ${{ vars.NUGET__SOURCE }}
