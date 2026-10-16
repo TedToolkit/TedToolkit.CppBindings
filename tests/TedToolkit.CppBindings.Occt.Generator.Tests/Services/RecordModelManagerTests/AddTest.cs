@@ -28,9 +28,187 @@ namespace TedToolkit.CppBindings.Occt.Generator.Tests.Services.RecordModelManage
 /// </summary>
 internal sealed class AddTest
 {
+    /// <summary>
+    /// Verifies C++ language linkage does not hide public stream parameter types.
+    /// </summary>
+    /// <returns>A task that completes when the assertions finish.</returns>
+    [Test]
+    public async Task Should_include_public_stream_parameter_inside_cpp_linkage_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            namespace std
+            {
+                extern "C++"
+                {
+                    struct ostream { void Flush(); };
+                }
+            }
+            struct Writer
+            {
+                static void Write(std::ostream& stream);
+            };
+            """);
+        var writer = translationUnit.TranslationUnitDecl.CursorChildren
+            .OfType<CXXRecordDecl>()
+            .Single(static record => record.Name == "Writer");
+        var manager = CreateManager();
+
+        manager.Add(writer);
+
+        await Assert.That(manager.RecordModels.Single(static record => record.Type.CppTypeName == "Writer")
+            .MethodModels.Select(static method => method.MethodName)).Contains("Write");
+        await Assert.That(manager.RecordModels.Single(static record => record.Type.CppTypeName == "std::ostream")
+            .IsPubliclyAccessible).IsTrue();
+    }
+
     private static readonly FieldInfo SourceBuilderField = typeof(SourceBuilder)
         .GetField("_stringBuilder", BindingFlags.Instance | BindingFlags.NonPublic)
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
+
+    /// <summary>
+    /// Verifies C++ bool return values ignore unspecified upper register bits.
+    /// </summary>
+    /// <returns>A task that completes after running the emitted native call.</returns>
+    [Test]
+    public async Task Should_read_only_low_byte_of_native_boolean_return_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("struct Storage { static bool IsNull() noexcept; };");
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static declaration => declaration.Name == "Storage"));
+        var record = manager.RecordModels.Single();
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
+        });
+        var indices = NativeExportInventory.GetExports([record,], [])
+            .Select(static (export, index) => (export, index))
+            .ToDictionary(static pair => pair.export, static pair => pair.index, StringComparer.Ordinal);
+        var source = await OcctEmitterFactory.Managed(record, options, nativeFunctionIndices: indices)
+            .GenerateAsync(CancellationToken.None).ConfigureAwait(false);
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static unsafe class NativeApi
+                {
+                    internal static nint GetFunction(int index) => (nint)(delegate* unmanaged[Cdecl]<uint>)&False;
+                    [System.Runtime.InteropServices.UnmanagedCallersOnly(
+                        CallConvs = new[] { typeof(System.Runtime.CompilerServices.CallConvCdecl) })]
+                    private static uint False() => 0x100;
+                }
+                public static class Probe
+                {
+                    public static bool Check() => !StorageExtensions.IsNull();
+                }
+            }
+            """;
+        await Generators.CSharpGeneratorTests.LayoutTests.AssertCompiledStorageAsync(source, Probe)
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies owned derived buffers can be borrowed through a native base pointer parameter.
+    /// </summary>
+    /// <returns>A task that completes after compiling the generated consumer.</returns>
+    [Test]
+    public async Task Should_accept_owned_derived_buffer_for_base_pointer_parameter_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("""
+            struct Buffer { virtual ~Buffer(); };
+            struct MemoryBuffer : Buffer { ~MemoryBuffer(); };
+            struct OtherBuffer { virtual ~OtherBuffer(); };
+            struct OtherMemoryBuffer : OtherBuffer { ~OtherMemoryBuffer(); };
+            struct Stream
+            {
+                Stream(Buffer* buffer);
+                ~Stream();
+                void Attach(Buffer* buffer);
+                void Attach(OtherBuffer* buffer);
+            };
+            """);
+        var manager = CreateManager();
+        foreach (var declaration in translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>())
+        {
+            manager.Add(declaration);
+        }
+
+        var records = manager.RecordModels.ToArray();
+        var catalog = records.ToDictionary(static record => record.Type.CppTypeName, StringComparer.Ordinal);
+
+        // These fixture records have nontrivial destructors; production completes this fact in the native probe.
+        foreach (var record in records)
+        {
+            record.ObjectKind = NativeObjectKind.Owned;
+        }
+
+        var indices = NativeExportInventory.GetExports(records, ["NativeError_Clear",])
+            .Select(static (export, index) => (export, index))
+            .ToDictionary(static pair => pair.export, static pair => pair.index, StringComparer.Ordinal);
+        var options = Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+        {
+            CSharpNamespace = "LayoutProbe",
+            DeclOptions = [],
+            CSharpFolder = new(Path.GetTempPath()),
+            CppFolder = new(Path.GetTempPath()),
+        });
+        var sources = new List<string>();
+        foreach (var record in records)
+        {
+            sources.Add(await OcctEmitterFactory.Managed(record, options, catalog, indices)
+                .GenerateAsync(CancellationToken.None).ConfigureAwait(false));
+        }
+
+        const string Probe = """
+            namespace LayoutProbe
+            {
+                internal static class NativeApi { internal static nint GetFunction(int index) => 0; }
+                public static class NativeErrorProjection
+                {
+                    public static unsafe void ThrowIfFailed(ref TedToolkit.CppBindings.NativeError error,
+                        delegate* unmanaged[Cdecl]<TedToolkit.CppBindings.NativeError*, void> clear) { }
+                }
+                public static class Probe
+                {
+                    public static bool Check() => true;
+                    public static void Overloads(TedToolkit.CppBindings.Owned<Stream> stream,
+                        TedToolkit.CppBindings.Owned<Buffer> first,
+                        TedToolkit.CppBindings.Owned<OtherBuffer> second)
+                    {
+                        stream.Attach(first);
+                        stream.Attach(second);
+                    }
+
+                    public static void Use(TedToolkit.CppBindings.Owned<MemoryBuffer> buffer)
+                    {
+                        using var stream = Stream.Create(buffer);
+                    }
+                }
+            }
+            """;
+        await Generators.CSharpGeneratorTests.LayoutTests.AssertCompiledStorageAsync(string.Join("\n", sources), Probe,
+                "LayoutProbe.MemoryBuffer")
+            .ConfigureAwait(false);
+    }
+
+    /// <summary>
+    /// Verifies a const pointer still permits writes to its mutable pointee.
+    /// </summary>
+    /// <returns>A task that completes after checking the public parameter projection.</returns>
+    [Test]
+    public async Task Should_preserve_mutable_pointee_of_const_pointer_Async()
+    {
+        using var translationUnit = ParseTranslationUnit("struct Writer { void Copy(char* const output); };");
+        var manager = CreateManager();
+        manager.Add(translationUnit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+            .Single(static declaration => declaration.Name == "Writer"));
+        var parameter = manager.RecordModels.Single(static record => record.Type.CppTypeName == "Writer")
+            .MethodModels.Single(static method => method.MethodName == "Copy").Parameters.Single();
+
+        await Assert.That(parameter.Type.CSharpPublicType.ToCode()).IsEqualTo("ref sbyte");
+    }
 
     /// <summary>
     /// Verifies parsed unions retain exact shared storage and typed interior references.
@@ -1100,7 +1278,7 @@ internal sealed class AddTest
 
         manager.Add(record);
 
-        var methodNames = manager.RecordModels.Single().MethodModels
+        var methodNames = manager.RecordModels.Single(static model => model.Type.CppTypeName == "Derived").MethodModels
             .Select(static m => (m.Type, m.MethodName))
             .ToArray();
 
