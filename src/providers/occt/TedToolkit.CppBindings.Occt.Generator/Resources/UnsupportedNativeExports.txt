@@ -43,6 +43,7 @@ BSplCLib_DN_5
 BlendFunc_Knots
 BlendFunc_Mults
 CDF_DirectoryIterator_Create_1
+CDM_Document_OperatorLessLess
 Cocoa_LocalPool_Create
 Cocoa_LocalPool_Destroy
 Cocoa_Window_Create

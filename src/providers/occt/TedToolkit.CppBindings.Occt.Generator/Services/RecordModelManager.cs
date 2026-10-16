@@ -206,11 +206,10 @@ internal sealed class RecordModelManager(
         result.UsesAllocatorPlacementNew = record.Methods.Any(static method =>
             method.Name is "operator new" && method.Parameters.Count is 2);
 
-        result.Bases = isOcctType
-            ? record.Bases
-                .Select(baseSpecifier => CreateBaseRelation(record, baseSpecifier))
-                .ToArray()
-            : [];
+        result.Bases = record.Bases
+            .Where(baseSpecifier => isOcctType || clang.getCXXAccessSpecifier(baseSpecifier.Handle) is CX_CXXAccessSpecifier.CX_CXXPublic)
+            .Select(baseSpecifier => CreateBaseRelation(record, baseSpecifier))
+            .ToArray();
         result.UsesIntrusiveReferenceCounting = DerivesFromStandardTransient(record, []);
         NativeExportNameBuilder.Assign(result);
 
@@ -900,7 +899,7 @@ internal sealed class RecordModelManager(
 
         while (true)
         {
-            var parent = clang.getCursorSemanticParent(cursor);
+            var parent = GetAccessScopeParent(cursor);
             if (parent.kind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace)
             {
                 return true;
@@ -1025,7 +1024,7 @@ internal sealed class RecordModelManager(
         var cursor = record.Handle;
         while (true)
         {
-            var parent = clang.getCursorSemanticParent(cursor);
+            var parent = GetAccessScopeParent(cursor);
             if (parent.kind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace)
             {
                 break;
@@ -1084,7 +1083,7 @@ internal sealed class RecordModelManager(
         var cursor = declaration.Handle;
         while (true)
         {
-            var parent = clang.getCursorSemanticParent(cursor);
+            var parent = GetAccessScopeParent(cursor);
             if (parent.kind is CXCursorKind.CXCursor_TranslationUnit or CXCursorKind.CXCursor_Namespace)
             {
                 return true;
@@ -1101,6 +1100,17 @@ internal sealed class RecordModelManager(
 
             cursor = parent;
         }
+    }
+
+    private static CXCursor GetAccessScopeParent(CXCursor cursor)
+    {
+        var parent = clang.getCursorSemanticParent(cursor);
+        while (parent.kind is CXCursorKind.CXCursor_LinkageSpec)
+        {
+            parent = clang.getCursorSemanticParent(parent);
+        }
+
+        return parent;
     }
 
     private static bool HasPublicAccess(CXCursor cursor)
