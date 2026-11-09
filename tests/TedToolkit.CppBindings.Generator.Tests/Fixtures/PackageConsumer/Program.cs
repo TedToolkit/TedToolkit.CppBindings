@@ -55,7 +55,10 @@ internal static class Program
             if (scenario == "namespace_keyword") options = options with { CSharpNamespace = "Independent.class" };
             if (scenario == "namespace_trailing_lf") options = options with { CSharpNamespace = "Independent.Generated\n" };
             if (scenario == "unsupported_native_version") options = options with { NativeLibraryVersion = new(1, 2, 3) };
-            var provider = new Provider(scenario);
+            var inputs = scenario == "compiler_target"
+                ? CreateNativeInputs(Directory.CreateDirectory(Path.Combine(root, "native-inputs")))
+                : null;
+            var provider = new Provider(scenario, inputs);
             Exception? failure = null;
             try
             {
@@ -66,27 +69,7 @@ internal static class Program
                 builder.Options.DefaultRetryCount = 0;
                 builder.Options.ThrowOnPipelineFailure = true;
                 builder.Services.AddModule<PreparationModule>(_ => new PreparationModule(provider));
-                if (scenario == "compiler_target")
-                {
-                    var inputsFolder = Directory.CreateDirectory(Path.Combine(root, "native-inputs"));
-                    var source = CreateNativeSource(inputsFolder);
-                    builder.AddCppGenerators(options, source, inputs =>
-                    {
-                        Require(inputs.PublicHeaders.SequenceEqual(["fixture_value.hxx"]), "Composition lost the entry header.");
-                        Require(inputs.DependencyIncludeDirectories.Single().FullName == Path.Combine(inputsFolder.FullName, "deps", "include"),
-                            "Composition lost the dependency include directory.");
-                        Require(inputs.DependencyLibraryDirectories.Single().FullName == Path.Combine(inputsFolder.FullName, "deps", "lib"),
-                            "Composition lost the dependency library directory.");
-                        Require(inputs.DependencyLibraries.Single().FullName == Path.Combine(inputsFolder.FullName, "deps", "lib", "fixture.a"),
-                            "Composition lost the explicit dependency library.");
-                        return provider;
-                    });
-                }
-                else
-                {
-                    builder.AddCppGenerators(options, provider);
-                }
-                var pipeline = await builder.BuildAsync();
+                var pipeline = await builder.AddCppGenerators(options, provider).BuildAsync();
                 var summary = await pipeline.RunAsync();
                 Require(summary.Status == Status.Successful, "Pipeline returned a non-success result.");
             }
@@ -183,7 +166,6 @@ internal static class Program
         [
             "TedToolkit.CppBindings.Generator.GenerationOptions",
             "TedToolkit.CppBindings.Generator.IGenerationProvider",
-            "TedToolkit.CppBindings.Generator.INativeSourceProvider",
             "TedToolkit.CppBindings.Generator.NativeSourceInputs",
             "TedToolkit.CppBindings.Generator.NativeSources",
             "TedToolkit.CppBindings.Generator.GenerationPlan",
@@ -273,7 +255,7 @@ internal static class Program
         await File.WriteAllTextAsync(Path.Combine(root, "result.json"), JsonSerializer.Serialize(new { passed = true, count = results.Count, results, manifest = first }, new JsonSerializerOptions { WriteIndented = true }));
     }
 
-    private static INativeSourceProvider CreateNativeSource(DirectoryInfo folder)
+    private static NativeSourceInputs CreateNativeInputs(DirectoryInfo folder)
     {
         var sourceRoot = folder.CreateSubdirectory("cpp source");
         var sourceInclude = sourceRoot.CreateSubdirectory("include");
@@ -290,15 +272,21 @@ internal static class Program
         var library = new FilePath(Path.Combine(depLibrary.FullName, "fixture.a"));
         File.WriteAllText(library.FullName, "fixture dependency");
 
-        var installedInputs = NativeSources.FromVcpkg(installation, triplet.Name, [header]).Resolve(default);
+        var installedInputs = NativeSources.FromVcpkg(installation, triplet.Name, [header]);
         Require(installedInputs.IncludeRoot.FullName == installedInclude.FullName
             && installedInputs.DependencyLibraryDirectories.Single().FullName == installedLibrary.FullName,
             "The vcpkg source did not resolve the selected installed triplet.");
-        var sourceInputs = NativeSources.FromSourceDirectory(sourceRoot, "include", [header]).Resolve(default);
+        var sourceInputs = NativeSources.FromSourceDirectory(sourceRoot, "include", [header]);
         Require(sourceInputs.SourceDirectory?.FullName == sourceRoot.FullName
             && sourceInputs.IncludeRoot.FullName == sourceInclude.FullName,
             "The source directory input lost the source root or its include directory.");
-        return NativeSources.FromHeaders(sourceInclude, [header], [depInclude], [depLibrary], [library]);
+        var inputs = NativeSources.FromHeaders(sourceInclude, [header], [depInclude], [depLibrary], [library]);
+        Require(inputs.PublicHeaders.SequenceEqual([header])
+            && inputs.DependencyIncludeDirectories.Single().FullName == depInclude.FullName
+            && inputs.DependencyLibraryDirectories.Single().FullName == depLibrary.FullName
+            && inputs.DependencyLibraries.Single().FullName == library.FullName,
+            "Explicit header inputs lost the entry header or its dependencies.");
+        return inputs;
     }
 
     private static async Task VerifyLegacyInterfaceProviderAsync(string root)
@@ -422,10 +410,13 @@ public sealed class PreparationModule(Provider provider) : Module<bool>
 
 public sealed class Provider : SemanticGenerationProvider
 {
-    public Provider(string scenario)
+    private readonly string _sourceHeader;
+
+    public Provider(string scenario, NativeSourceInputs? inputs = null)
         : base(CreateSemanticEngine(scenario))
     {
         Scenario = scenario;
+        _sourceHeader = inputs?.PublicHeaders.Single() ?? "fixture_value.hxx";
     }
 
     public string Scenario { get; }
@@ -523,7 +514,7 @@ public sealed class Provider : SemanticGenerationProvider
             DescriptionItems = [recordDescription,],
             IsAbstract = false,
             UsesIntrusiveReferenceCounting = false,
-            SourceHeader = "fixture_value.hxx",
+            SourceHeader = _sourceHeader,
             Type = new()
             {
                 CppTypeName = "fixture::value",

@@ -10,7 +10,7 @@ using TedToolkit.FileSystem;
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
-/// Creates native source providers for vcpkg installations, source trees, and explicit headers.
+/// Resolves native inputs from vcpkg installations, source trees, and explicit headers.
 /// </summary>
 public static class NativeSources
 {
@@ -20,9 +20,9 @@ public static class NativeSources
     /// <param name="installationRoot">The classic <c>installed</c> or manifest <c>vcpkg_installed</c> directory.</param>
     /// <param name="triplet">The installed triplet directory name.</param>
     /// <param name="publicHeaders">The entry headers relative to the triplet's include directory.</param>
-    /// <returns>The provider for the selected installed inputs.</returns>
+    /// <returns>The selected installed inputs.</returns>
     /// <exception cref="ArgumentException"><paramref name="triplet"/> is not a single directory name.</exception>
-    public static INativeSourceProvider FromVcpkg(
+    public static NativeSourceInputs FromVcpkg(
         in DirectoryPath installationRoot,
         string triplet,
         IEnumerable<string> publicHeaders)
@@ -54,8 +54,8 @@ public static class NativeSources
     /// <param name="dependencyIncludeDirectories">Additional include directories, in search order.</param>
     /// <param name="dependencyLibraryDirectories">Directories in which to search for native libraries.</param>
     /// <param name="dependencyLibraries">Explicit native library files, in link order.</param>
-    /// <returns>The provider for the selected source tree and dependencies.</returns>
-    public static INativeSourceProvider FromSourceDirectory(
+    /// <returns>The selected source tree and dependencies.</returns>
+    public static NativeSourceInputs FromSourceDirectory(
         in DirectoryPath sourceDirectory,
         string includeSubdirectory,
         IEnumerable<string> publicHeaders,
@@ -66,7 +66,7 @@ public static class NativeSources
         ArgumentNullException.ThrowIfNull(sourceDirectory.FullName, nameof(sourceDirectory));
         var root = sourceDirectory.GetFullPath();
         var includeRoot = new DirectoryPath(ResolveUnderRoot(root.FullName, includeSubdirectory));
-        return new FileSystemSource(new NativeSourceInputs(
+        return Validate(new NativeSourceInputs(
             includeRoot, NormalizeHeaders(publicHeaders), dependencyIncludeDirectories, dependencyLibraryDirectories,
             dependencyLibraries, root));
     }
@@ -79,15 +79,15 @@ public static class NativeSources
     /// <param name="dependencyIncludeDirectories">Additional include directories, in search order.</param>
     /// <param name="dependencyLibraryDirectories">Directories in which to search for native libraries.</param>
     /// <param name="dependencyLibraries">Explicit native library files, in link order.</param>
-    /// <returns>The provider for the selected headers and dependencies.</returns>
-    public static INativeSourceProvider FromHeaders(
+    /// <returns>The selected headers and dependencies.</returns>
+    public static NativeSourceInputs FromHeaders(
         in DirectoryPath includeRoot,
         IEnumerable<string> publicHeaders,
         IEnumerable<DirectoryPath>? dependencyIncludeDirectories = null,
         IEnumerable<DirectoryPath>? dependencyLibraryDirectories = null,
         IEnumerable<FilePath>? dependencyLibraries = null)
     {
-        return new FileSystemSource(new NativeSourceInputs(
+        return Validate(new NativeSourceInputs(
             includeRoot, NormalizeHeaders(publicHeaders), dependencyIncludeDirectories, dependencyLibraryDirectories,
             dependencyLibraries));
     }
@@ -124,43 +124,36 @@ public static class NativeSources
         throw new DirectoryNotFoundException($"Native source directory '{directory.FullName}' was not found.");
     }
 
-    private sealed class FileSystemSource(NativeSourceInputs inputs) : INativeSourceProvider
+    private static NativeSourceInputs Validate(NativeSourceInputs inputs)
     {
-        public NativeSourceInputs Resolve(CancellationToken cancellationToken)
+        RequireDirectory(inputs.IncludeRoot);
+        if (inputs.SourceDirectory is { } sourceDirectory)
         {
-            cancellationToken.ThrowIfCancellationRequested();
-            RequireDirectory(inputs.IncludeRoot);
-            if (inputs.SourceDirectory is { } sourceDirectory)
-            {
-                RequireDirectory(sourceDirectory);
-            }
-
-            foreach (var directory in inputs.DependencyIncludeDirectories.Concat(inputs.DependencyLibraryDirectories))
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                RequireDirectory(directory);
-            }
-
-            foreach (var header in inputs.PublicHeaders)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                var path = ResolveUnderRoot(inputs.IncludeRoot.FullName, header);
-                if (!File.Exists(path))
-                {
-                    throw new FileNotFoundException("Native entry header was not found.", path);
-                }
-            }
-
-            foreach (var library in inputs.DependencyLibraries)
-            {
-                cancellationToken.ThrowIfCancellationRequested();
-                if (!library.Exists)
-                {
-                    throw new FileNotFoundException("Native dependency library was not found.", library.FullName);
-                }
-            }
-
-            return inputs;
+            RequireDirectory(sourceDirectory);
         }
+
+        foreach (var directory in inputs.DependencyIncludeDirectories.Concat(inputs.DependencyLibraryDirectories))
+        {
+            RequireDirectory(directory);
+        }
+
+        foreach (var header in inputs.PublicHeaders)
+        {
+            var path = ResolveUnderRoot(inputs.IncludeRoot.FullName, header);
+            if (!File.Exists(path))
+            {
+                throw new FileNotFoundException("Native entry header was not found.", path);
+            }
+        }
+
+        foreach (var library in inputs.DependencyLibraries)
+        {
+            if (!library.Exists)
+            {
+                throw new FileNotFoundException("Native dependency library was not found.", library.FullName);
+            }
+        }
+
+        return inputs;
     }
 }

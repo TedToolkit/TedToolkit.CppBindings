@@ -17,37 +17,10 @@ namespace TedToolkit.CppBindings.Generator;
 public static class CppBindingsPipelineBuilderExtensions
 {
     /// <summary>
-    /// Resolves native inputs and composes the binding provider that uses them.
-    /// </summary>
-    /// <param name="builder">The pipeline builder.</param>
-    /// <param name="options">The source generation options.</param>
-    /// <param name="nativeSource">The source of the native headers and dependencies.</param>
-    /// <param name="createProvider">Creates the binding provider from the resolved inputs.</param>
-    /// <param name="cancellationToken">Cancellation for native input resolution.</param>
-    /// <returns>The same configured builder.</returns>
-    public static PipelineBuilder AddCppGenerators(
-        this PipelineBuilder builder,
-        GenerationOptions options,
-        INativeSourceProvider nativeSource,
-        Func<NativeSourceInputs, IGenerationProvider> createProvider,
-        in CancellationToken cancellationToken = default)
-    {
-        ArgumentNullException.ThrowIfNull(builder);
-        ArgumentNullException.ThrowIfNull(options);
-        ArgumentNullException.ThrowIfNull(nativeSource);
-        ArgumentNullException.ThrowIfNull(createProvider);
-        cancellationToken.ThrowIfCancellationRequested();
-        var inputs = nativeSource.Resolve(cancellationToken);
-        ArgumentNullException.ThrowIfNull(inputs);
-        cancellationToken.ThrowIfCancellationRequested();
-        return builder.AddCppGenerators(options, createProvider(inputs));
-    }
-
-    /// <summary>
     /// Registers the clean and language publication stages after the provider's preparation modules.
     /// </summary>
     /// <param name="builder">The pipeline builder, with the provider's preparation modules registered.</param>
-    /// <param name="options">Dedicated output roots and the source generation configuration.</param>
+    /// <param name="options">Dedicated output roots and the supported target configuration.</param>
     /// <param name="provider">The provider supplying the completed source plan.</param>
     /// <returns>The same configured builder.</returns>
     /// <exception cref="ArgumentException">A preparation dependency is not a concrete module type.</exception>

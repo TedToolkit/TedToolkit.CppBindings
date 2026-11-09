@@ -50,25 +50,24 @@ the globally newest release.
 
 ## Provider contract
 
-`AddCppGenerators(options, nativeSource, createProvider)` resolves the `INativeSourceProvider`
-when composing the pipeline and passes its inputs to the binding provider factory. Use the
-resolved headers and include paths for declaration discovery and pass the source directory and
-library paths to the native build as needed.
+`NativeSources` returns resolved `NativeSourceInputs` for the binding provider. Use the headers
+and include paths for declaration discovery and pass the source directory and library paths to
+the native build as needed.
 
 ```csharp
-var nativeSource = NativeSources.FromHeaders(
+var inputs = NativeSources.FromHeaders(
     new DirectoryPath("sdk/include"),
     ["widget.h"],
     dependencyIncludeDirectories: [new DirectoryPath("dependency/include")],
     dependencyLibraries: [new FilePath("dependency/lib/libwidget.a")]);
 
-builder.AddCppGenerators(options, nativeSource, inputs => new WidgetGenerationProvider(inputs));
+builder.AddCppGenerators(options, new WidgetGenerationProvider(inputs));
 ```
 
 `NativeSources.FromVcpkg` takes a populated `installed` or `vcpkg_installed` directory, an explicit
 triplet, and entry headers. `NativeSources.FromSourceDirectory` takes the C++ source directory,
-its relative include directory, and entry headers. Implement `INativeSourceProvider` to supply
-inputs from a different layout.
+its relative include directory, and entry headers. Construct `NativeSourceInputs` directly for a
+custom layout.
 
 `CreatePlanAsync` runs once after every declared preparation module succeeds. A direct
 `IGenerationProvider` returns a `GenerationPlan` containing copied, read-only C# and C++ source
