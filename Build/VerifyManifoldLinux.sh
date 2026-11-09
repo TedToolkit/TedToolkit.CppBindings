@@ -8,6 +8,9 @@ fi
 
 repository=$(cd -- "$(dirname -- "${BASH_SOURCE[0]}")/.." && pwd -P)
 prefix=$(realpath -e -- "$1")
+if [[ ! -f "$repository/.editorconfig" ]]; then
+    cp -- "$repository/externals/TedToolkit/.editorconfig" "$repository/.editorconfig"
+fi
 mkdir -p -- "$repository/output"
 work=$(mktemp -d "$repository/output/manifold-linux.XXXXXXXX")
 fixtures="$repository/tests/TedToolkit.CppBindings.Manifold.Linux.Tests/Fixtures"

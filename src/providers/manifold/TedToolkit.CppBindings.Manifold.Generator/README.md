@@ -1,8 +1,7 @@
 # TedToolkit.CppBindings.Manifold.Generator
 
 Generates finite bindings for Manifold 3.5.2 on `win-x64` and `linux-x64`. The profiles cover owned
-triangle meshes, Boolean operations, translation, status, triangle count, and mesh exchange. It
-does not claim coverage of the complete Manifold API.
+triangle meshes, Boolean operations, translation, status, triangle count, and mesh exchange.
 
 The Generator owns only the finite Manifold profile, native algorithm bodies, dependency policy, and
 header discovery. It supplies those facts through Shared's `SemanticGenerationProvider`; Shared
@@ -34,8 +33,9 @@ For Linux x64, select `FromInstallation(prefix)` and set
 `GenerationOptions.RuntimeIdentifier = "linux-x64"`. The generated project builds an ELF shared
 library with the function-table bootstrap exposed to the managed loader. Use the same local
 Manifold installation when configuring and running the bridge. To verify generation, compilation,
-and native calls on Linux, run the following from the repository root with .NET 8 and 10, CMake
-3.28 or later, Ninja, a C++20 compiler, binutils, and Python 3 installed.
+and native calls on Linux, initialize the repository submodules and run the following from the
+repository root with .NET 8 and 10, CMake 3.28 or later, Ninja, a C++20 compiler, binutils, and
+Python 3 installed.
 
 ```bash
 bash Build/VerifyManifoldLinux.sh /path/to/manifold-install

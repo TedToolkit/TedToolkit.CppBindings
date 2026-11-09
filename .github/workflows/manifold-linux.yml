@@ -51,6 +51,4 @@ jobs:
           cmake --install output/manifold-build
 
       - name: Generate, build, and call the binding
-        run: |
-          cp externals/TedToolkit/.editorconfig .editorconfig
-          bash Build/VerifyManifoldLinux.sh "$RUNNER_TEMP/manifold-install"
+        run: bash Build/VerifyManifoldLinux.sh "$RUNNER_TEMP/manifold-install"
