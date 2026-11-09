@@ -19,6 +19,46 @@ namespace TedToolkit.CppBindings.Manifold.Generator.Tests;
 internal sealed class ManifoldGenerationProviderTests
 {
     /// <summary>
+    /// Verifies local headers and generated CMake use the same locked Manifold version.
+    /// </summary>
+    /// <returns>A task that completes when version assertions finish.</returns>
+    [Test]
+    public async Task Should_generate_from_a_local_installation_and_reject_mismatched_headers_Async()
+    {
+        var prefix = Directory.CreateTempSubdirectory();
+        try
+        {
+            var include = prefix.CreateSubdirectory(Path.Combine("include", "manifold"));
+            await File.WriteAllTextAsync(Path.Combine(include.FullName, "manifold.h"), "#include <manifold/mesh.h>")
+                .ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(include.FullName, "mesh.h"), "").ConfigureAwait(false);
+            var versionHeader = Path.Combine(include.FullName, "version.h");
+            const string version = """
+                #define MANIFOLD_VERSION_MAJOR 3
+                #define MANIFOLD_VERSION_MINOR 5
+                #define MANIFOLD_VERSION_PATCH 2
+                """;
+            await File.WriteAllTextAsync(versionHeader, version).ConfigureAwait(false);
+
+            var provider = ManifoldGenerationProvider.FromInstallation(new(prefix.FullName));
+            var plan = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+            var native = await RenderAsync(plan.CppSources).ConfigureAwait(false);
+            await Assert.That(plan.NativeExports.Count).IsEqualTo(9);
+            await Assert.That(native["CMakeLists.txt"]).Contains("find_package(manifold 3.5.2 EXACT CONFIG REQUIRED");
+            await Assert.That(native["CMakeLists.txt"]).Contains("NO_DEFAULT_PATH");
+
+            await File.WriteAllTextAsync(versionHeader, version.Replace("PATCH 2", "PATCH 3", StringComparison.Ordinal))
+                .ConfigureAwait(false);
+            await Assert.That(() => (Task)provider.CreatePlanAsync(CancellationToken.None))
+                .Throws<InvalidOperationException>();
+        }
+        finally
+        {
+            prefix.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Verifies that two plans are byte-identical and include the complete finite ABI authority.
     /// </summary>
     /// <returns>A task that completes when assertions finish.</returns>

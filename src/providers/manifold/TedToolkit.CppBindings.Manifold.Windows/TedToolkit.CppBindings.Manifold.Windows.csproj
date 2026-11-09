@@ -14,7 +14,9 @@
     <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
     <PackageReadmeFile>README.md</PackageReadmeFile>
     <GeneratedRoot>$(MSBuildProjectDirectory)\..\..\..\..\output\providers\manifold</GeneratedRoot>
-    <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == '' and '$(ManifoldInstallPrefix)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+    <ManifoldNativeSourceArgument Condition="'$(ManifoldInstallPrefix)' == ''">--vcpkg-root &quot;$(VcpkgRoot)&quot;</ManifoldNativeSourceArgument>
+    <ManifoldNativeSourceArgument Condition="'$(ManifoldInstallPrefix)' != ''">--install-prefix &quot;$(ManifoldInstallPrefix)&quot;</ManifoldNativeSourceArgument>
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
   </PropertyGroup>
 
@@ -33,9 +35,12 @@
   </ItemGroup>
 
   <Target Name="GenerateManifoldWindowsBindings" BeforeTargets="CoreCompile">
-    <Error Condition="'$(VcpkgRoot)' == ''" Text="VCPKG_ROOT is required to generate TedToolkit.CppBindings.Manifold.Windows." />
+    <Error Condition="'$(VcpkgRoot)' == '' and '$(ManifoldInstallPrefix)' == ''"
+           Text="Set VCPKG_ROOT or ManifoldInstallPrefix to generate TedToolkit.CppBindings.Manifold.Windows." />
+    <Error Condition="'$(VcpkgRoot)' != '' and '$(ManifoldInstallPrefix)' != ''"
+           Text="VcpkgRoot and ManifoldInstallPrefix are mutually exclusive." />
     <Error Condition="'@(WindowsGenerationHost)' == ''" Text="The Windows generation host output was not resolved." />
-    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider manifold --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; --vcpkg-root &quot;$(VcpkgRoot)&quot; --configuration &quot;$(Configuration)&quot;" />
+    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider manifold --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; $(ManifoldNativeSourceArgument) --configuration &quot;$(Configuration)&quot;" />
   </Target>
 
   <Target Name="IncludeGeneratedManifoldWindowsBindings"

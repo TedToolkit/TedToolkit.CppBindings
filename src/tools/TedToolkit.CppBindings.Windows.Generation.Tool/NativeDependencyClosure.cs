@@ -22,7 +22,7 @@ internal interface INativeDependencyClosure
         string compiler,
         string nativeLibrary,
         string destination,
-        string vcpkgBin,
+        string runtimeDirectory,
         string ownedRoot,
         string workingDirectory,
         CancellationToken cancellationToken);
@@ -62,7 +62,7 @@ internal sealed class PowerShellNativeDependencyClosure(IProcessRunner processes
         string compiler,
         string nativeLibrary,
         string destination,
-        string vcpkgBin,
+        string runtimeDirectory,
         string ownedRoot,
         string workingDirectory,
         CancellationToken cancellationToken)
@@ -70,13 +70,13 @@ internal sealed class PowerShellNativeDependencyClosure(IProcessRunner processes
         const string command = "$ErrorActionPreference = 'Stop'; Import-Module $args[0] -Force; "
                                + "$toolchain = Get-WindowsNativeToolchain -Compiler $args[1]; "
                                + "Set-NativeDependencyClosure -NativeLibrary $args[2] "
-                               + "-Destination $args[3] -VcpkgBin $args[4] "
+                               + "-Destination $args[3] -RuntimeDirectory $args[4] "
                                + "-Toolchain $toolchain -OwnedRoot $args[5] | Out-Null";
         _ = await processes.RunAsync(
                 "pwsh",
                 [
                     "-NoProfile", "-CommandWithArgs", command, modulePath, compiler, nativeLibrary,
-                    destination, vcpkgBin, ownedRoot,
+                    destination, runtimeDirectory, ownedRoot,
                 ],
                 workingDirectory,
                 null,

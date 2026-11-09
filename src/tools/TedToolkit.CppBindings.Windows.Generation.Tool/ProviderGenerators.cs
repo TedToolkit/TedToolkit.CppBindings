@@ -41,7 +41,7 @@ internal interface IGenerationOperations
 
 internal static class ProviderGenerators
 {
-    internal static async Task GenerateAsync(
+    internal static async Task GenerateFromVcpkgAsync(
         string provider,
         DirectoryPath outputRoot,
         DirectoryPath vcpkgRoot,
@@ -56,7 +56,7 @@ internal static class ProviderGenerators
                 await GenerateCgalAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
                 break;
             case "manifold":
-                await GenerateManifoldAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
+                await GenerateManifoldAsync(outputRoot, new(vcpkgRoot), cancellationToken).ConfigureAwait(false);
                 break;
             case "fcl":
                 await GenerateFclAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
@@ -187,12 +187,11 @@ internal static class ProviderGenerators
             .ConfigureAwait(false);
     }
 
-    private static async Task GenerateManifoldAsync(
+    internal static async Task GenerateManifoldAsync(
         DirectoryPath outputRoot,
-        DirectoryPath vcpkgRoot,
+        ManifoldGenerationProvider provider,
         CancellationToken cancellationToken)
     {
-        var provider = new ManifoldGenerationProvider(vcpkgRoot);
         var options = new GenerationOptions
         {
             CSharpFolder = outputRoot / "csharp",

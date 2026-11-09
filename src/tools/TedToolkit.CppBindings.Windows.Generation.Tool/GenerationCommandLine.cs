@@ -28,11 +28,27 @@ internal static class GenerationCommandLine
             }
         }
 
+        var descriptor = ProviderDescriptor.Create(Require(values, "--provider").ToLowerInvariant());
+        var hasVcpkgRoot = values.ContainsKey("--vcpkg-root");
+        var hasInstallPrefix = values.ContainsKey("--install-prefix");
+        if (hasVcpkgRoot == hasInstallPrefix)
+        {
+            throw Usage();
+        }
+
+        if (hasInstallPrefix && descriptor.Id is not "manifold")
+        {
+            throw new ArgumentException($"An installation prefix is not supported for {descriptor.DisplayName}.");
+        }
+
+        INativeSourceProvider source = hasVcpkgRoot
+            ? new VcpkgNativeSourceProvider(new(Require(values, "--vcpkg-root")), descriptor)
+            : new ManifoldInstallSourceProvider(new(Require(values, "--install-prefix")));
         return new(
-            Require(values, "--provider"),
+            descriptor,
             new(Require(values, "--repository-root")),
             new(Require(values, "--output-root")),
-            new(Require(values, "--vcpkg-root")),
+            source,
             Require(values, "--configuration"));
     }
 
@@ -50,13 +66,13 @@ internal static class GenerationCommandLine
     {
         return new(
             "Expected --provider <occt|cgal|manifold|fcl> --repository-root <path> "
-            + "--output-root <path> --vcpkg-root <path> --configuration <name>.");
+            + "--output-root <path> (--vcpkg-root <path> | --install-prefix <path>) --configuration <name>.");
     }
 }
 
 internal sealed record WindowsGenerationOptions(
-    string Provider,
+    ProviderDescriptor Descriptor,
     DirectoryPath RepositoryRoot,
     DirectoryPath OutputRoot,
-    DirectoryPath VcpkgRoot,
+    INativeSourceProvider Source,
     string Configuration);

@@ -12,3 +12,8 @@ gates; they are not alternative generation implementations.
 ```powershell
 dotnet run --project src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj -c Release -- --provider cgal --repository-root . --output-root output/providers/cgal --vcpkg-root $env:VCPKG_ROOT --configuration Release
 ```
+
+Each invocation selects one native source. The source supplies generation inputs, CMake arguments,
+runtime DLL lookup, notices, and cache inputs through `INativeSourceProvider`. The repository and CI
+default is vcpkg. For Manifold, `--install-prefix <path>` selects an installed upstream CMake
+package and replaces `--vcpkg-root`. See the [Manifold Windows build](../../providers/manifold/TedToolkit.CppBindings.Manifold.Windows/README.md).

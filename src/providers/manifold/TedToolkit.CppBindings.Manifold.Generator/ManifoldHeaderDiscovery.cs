@@ -20,10 +20,10 @@ internal static partial class ManifoldHeaderDiscovery
     /// <exception cref="DirectoryNotFoundException">The installed Manifold header tree is absent.</exception>
     /// <exception cref="InvalidOperationException">The package identity or header inventory is inconsistent.</exception>
     internal static IReadOnlyList<ManifoldSourceDisposition> Resolve(
-        in DirectoryPath vcpkgRoot,
-        ManifoldProfile profile)
+        DirectoryPath includeRoot,
+        ManifoldProfile profile,
+        DirectoryPath? vcpkgRoot)
     {
-        var includeRoot = vcpkgRoot / "installed" / profile.Triplet / "include";
         var manifoldRoot = includeRoot / "manifold";
         if (!manifoldRoot.Exists)
         {
@@ -35,12 +35,13 @@ internal static partial class ManifoldHeaderDiscovery
             .Select(path => Normalize(path.GetRelativePath(includeRoot).FullName))
             .Order(StringComparer.Ordinal)
             .ToArray();
-        ValidatePackageStatus(vcpkgRoot, profile);
-        var packaged = ResolvePackageHeaders(vcpkgRoot, profile);
-        if (!installed.SequenceEqual(packaged, StringComparer.Ordinal))
+        if (vcpkgRoot is { } root)
         {
-            throw new InvalidOperationException(
-                "The installed Manifold public-header inventory does not match the vcpkg package list.");
+            ValidateVcpkgInventory(root, profile, installed);
+        }
+        else
+        {
+            ValidateInstalledVersion(manifoldRoot, profile);
         }
 
         var roots = ProfileRoots.ToHashSet(StringComparer.Ordinal);
@@ -49,6 +50,44 @@ internal static partial class ManifoldHeaderDiscovery
                 header,
                 GetDisposition(header, roots, reachable)))
             .ToArray());
+    }
+
+    private static void ValidateInstalledVersion(in DirectoryPath manifoldRoot, ManifoldProfile profile)
+    {
+        var versionHeader = manifoldRoot / new FileName("version.h");
+        var version = Version.Parse(profile.ManifoldVersion);
+        var content = versionHeader.Exists ? versionHeader.ReadAllText() : "";
+        if (HasVersionDefine(content, "MAJOR", version.Major)
+            && HasVersionDefine(content, "MINOR", version.Minor)
+            && HasVersionDefine(content, "PATCH", version.Build))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            $"The Manifold version header '{versionHeader}' is missing or does not match profile version {version}.");
+    }
+
+    private static void ValidateVcpkgInventory(
+        in DirectoryPath vcpkgRoot,
+        ManifoldProfile profile,
+        string[] installed)
+    {
+        ValidatePackageStatus(vcpkgRoot, profile);
+        var packaged = ResolvePackageHeaders(vcpkgRoot, profile);
+        if (installed.SequenceEqual(packaged, StringComparer.Ordinal))
+        {
+            return;
+        }
+
+        throw new InvalidOperationException(
+            "The installed Manifold public-header inventory does not match the vcpkg package list.");
+    }
+
+    private static bool HasVersionDefine(string content, string component, int value)
+    {
+        return Regex.IsMatch(content, $@"(?m)^#define[ \t]+MANIFOLD_VERSION_{component}[ \t]+{value}[ \t]*\r?$",
+            RegexOptions.CultureInvariant);
     }
 
     private static void ValidatePackageStatus(in DirectoryPath vcpkgRoot, ManifoldProfile profile)
