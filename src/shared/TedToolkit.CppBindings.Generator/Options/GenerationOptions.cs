@@ -65,8 +65,9 @@ public record GenerationOptions
     public string CSharpNamespace { get; init; } = "TedToolkit.CppBindings";
 
     /// <summary>
-    /// Gets the native target RID. Providers must support it before generation can begin.
+    /// Gets the native target RID available to the generation provider.
     /// </summary>
+    /// <remarks>Shared source emission uses the C++ compiler's target and does not filter RIDs.</remarks>
     public string RuntimeIdentifier { get; init; } = "win-x64";
 
     /// <summary>

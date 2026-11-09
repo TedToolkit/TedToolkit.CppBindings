@@ -44,18 +44,9 @@ internal static class ProviderGenerators
     internal static async Task GenerateAsync(
         string provider,
         DirectoryPath outputRoot,
-        IWindowsNativeBuildSource source,
+        DirectoryPath vcpkgRoot,
         CancellationToken cancellationToken)
     {
-        if (source is ManifoldInstallBuildSource)
-        {
-            await GenerateManifoldAsync(
-                    outputRoot, ManifoldGenerationProvider.FromInstallation(source.Root), cancellationToken)
-                .ConfigureAwait(false);
-            return;
-        }
-
-        var vcpkgRoot = source.Root;
         switch (provider)
         {
             case "occt":
@@ -65,7 +56,7 @@ internal static class ProviderGenerators
                 await GenerateCgalAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
                 break;
             case "manifold":
-                await GenerateManifoldAsync(outputRoot, new(vcpkgRoot), cancellationToken).ConfigureAwait(false);
+                await GenerateManifoldAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
                 break;
             case "fcl":
                 await GenerateFclAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
@@ -198,9 +189,10 @@ internal static class ProviderGenerators
 
     private static async Task GenerateManifoldAsync(
         DirectoryPath outputRoot,
-        ManifoldGenerationProvider provider,
+        DirectoryPath vcpkgRoot,
         CancellationToken cancellationToken)
     {
+        var provider = new ManifoldGenerationProvider(vcpkgRoot);
         var options = new GenerationOptions
         {
             CSharpFolder = outputRoot / "csharp",

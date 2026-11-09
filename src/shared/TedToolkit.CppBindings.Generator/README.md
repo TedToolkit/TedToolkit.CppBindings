@@ -1,7 +1,7 @@
 # TedToolkit.CppBindings.Generator
 
 Provider-neutral generation stages for C++ bindings. This .NET 10 tool package owns source-path
-validation, publication, and the existing Windows x64 native function-table/loading mechanics.
+validation, publication, and generation of the native function table and its managed loader.
 It contains no Clang declarations, OCCT rules, native package dependencies, or ownership classification.
 
 ## Use
@@ -37,9 +37,11 @@ Existing `DirectoryInfo` inputs can be assigned through FileSystem's implicit co
 the properties now returns `DirectoryPath`. Provider vcpkg roots use `DirectoryPath`, and explicit
 CGAL profile documents use `FilePath`. This changes the public API types, so existing compiled
 consumers must be rebuilt. The other settings include
-`CSharpNamespace` and a portable `NativeLibraryBaseName`. The default target is `win-x64`, with
-Cdecl function pointers and the MSVC native ABI. Providers can opt in to `linux-x64` with
-`SupportsRuntimeIdentifier`; unsupported targets are rejected before preparation.
+`CSharpNamespace` and a portable `NativeLibraryBaseName`. `RuntimeIdentifier` is available to
+binding providers and defaults to `win-x64` for existing callers. Shared accepts any target RID.
+The generated function table uses the C++ compiler's target to choose its export declaration.
+Builds with a different export convention can define `TEDTOOLKIT_CPPBINDINGS_EXPORT` when compiling
+the generated function table.
 `CppVersion` defaults to 17 and is available to the provider's native build description;
 `IsInternal` is available to its managed emitters. Set `NativeLibraryVersion` to a `System.Version`
 when the provider's primary native package must match exactly. Leaving it unset preserves the
@@ -48,10 +50,25 @@ the globally newest release.
 
 ## Provider contract
 
-`INativeSourceProvider` resolves the include root and public header inventory before a generation
-provider discovers binding declarations. The generation provider selects the source and maps the
-resolved inputs to its own declarations. Native source implementations can validate how the
-selected dependency was obtained without coupling Shared to a package manager.
+`AddCppGenerators(options, nativeSource, createProvider)` resolves the `INativeSourceProvider`
+when composing the pipeline and passes its inputs to the binding provider factory. Use the
+resolved headers and include paths for declaration discovery and pass the source directory and
+library paths to the native build as needed.
+
+```csharp
+var nativeSource = NativeSources.FromHeaders(
+    new DirectoryPath("sdk/include"),
+    ["widget.h"],
+    dependencyIncludeDirectories: [new DirectoryPath("dependency/include")],
+    dependencyLibraries: [new FilePath("dependency/lib/libwidget.a")]);
+
+builder.AddCppGenerators(options, nativeSource, inputs => new WidgetGenerationProvider(inputs));
+```
+
+`NativeSources.FromVcpkg` takes a populated `installed` or `vcpkg_installed` directory, an explicit
+triplet, and entry headers. `NativeSources.FromSourceDirectory` takes the C++ source directory,
+its relative include directory, and entry headers. Implement `INativeSourceProvider` to supply
+inputs from a different layout.
 
 `CreatePlanAsync` runs once after every declared preparation module succeeds. A direct
 `IGenerationProvider` returns a `GenerationPlan` containing copied, read-only C# and C++ source

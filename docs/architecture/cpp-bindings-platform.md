@@ -49,11 +49,6 @@ A provider supplies declaration roots and finite template profiles, header disco
 and lifetime rules, provider-specific native dependencies and local exceptions, generated declarations,
 default artifact identity, and concrete platform packages.
 
-The Shared Generator defines the native source contract in terms of include roots and public header
-inventories. Binding providers select a source and own package identity and header validation.
-Native source selection and target ABI selection are separate. The Windows generation tool
-composes those inputs for the `win-x64` build and stages its native package assets.
-
 Shared Runtime owns provider-neutral native-error diagnostic consumption and common exception
 projection. Shared Generator owns the carrier, copy, set, and clear emission, fixes common standard
 C++ catches, and fixes error kinds 0 through 8 and 255. Providers supply only symbol names and

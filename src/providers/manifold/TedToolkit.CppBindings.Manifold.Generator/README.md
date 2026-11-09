@@ -20,12 +20,4 @@ matched pair and must be built together.
 Set `GenerationOptions.NativeLibraryVersion = new Version(3, 5, 2)` to require that primary
 Manifold version exactly; generated CMake then uses `find_package(manifold 3.5.2 EXACT ...)`. A
 different version is rejected by the finite profile before publication. Leaving the option unset
-retains the existing unversioned vcpkg package lookup.
-
-Use `ManifoldGenerationProvider.FromInstallation(prefix)` to generate against a local Manifold
-installation. The provider verifies `include/manifold/version.h` against the finite profile and
-the resulting CMake project requires exactly that version. Pass the same prefix as
-`-DCPPBINDINGS_MANIFOLD_PREFIX=<path>` when configuring the generated project.
-
-Both entry points resolve headers through the shared `INativeSourceProvider` contract before
-classifying the finite profile's header inventory.
+retains the existing unversioned package lookup.

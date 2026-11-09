@@ -8,14 +8,14 @@
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
-/// Supplies the native headers used to discover binding declarations.
+/// Supplies the native inputs used to compose a binding provider.
 /// </summary>
 public interface INativeSourceProvider
 {
     /// <summary>
-    /// Resolves and validates the header inputs for the selected native dependency.
+    /// Resolves the headers and dependencies for the selected native source.
     /// </summary>
     /// <param name="cancellationToken">Cancellation for native input discovery.</param>
-    /// <returns>The include root and its public header inventory.</returns>
+    /// <returns>The resolved native source inputs.</returns>
     NativeSourceInputs Resolve(CancellationToken cancellationToken);
 }

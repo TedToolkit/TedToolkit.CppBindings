@@ -40,35 +40,9 @@ internal sealed class WindowsGenerationCoordinatorTests
             "--configuration", "Release",
         ]);
 
-        await Assert.That(options.Descriptor.Id).IsEqualTo("cgal");
-        await Assert.That(options.Source).IsAssignableTo<VcpkgNativeBuildSource>();
+        await Assert.That(options.Provider).IsEqualTo("cgal");
         await Assert.That(options.Configuration).IsEqualTo("Release");
         await Assert.That(() => GenerationCommandLine.Parse(["--provider", "cgal", "--provider", "fcl"]))
-            .Throws<ArgumentException>();
-    }
-
-    /// <summary>Verifies that a local Manifold prefix selects its own CMake and runtime inputs.</summary>
-    [Test]
-    public async Task Should_select_an_installation_prefix_only_for_manifold_Async()
-    {
-        string[] arguments =
-        [
-            "--provider", "manifold",
-            "--repository-root", "repo",
-            "--output-root", "output",
-            "--configuration", "Release",
-        ];
-        using var fixture = new TestDirectory();
-        var options = GenerationCommandLine.Parse([..arguments, "--install-prefix", fixture.Path]);
-
-        await Assert.That(options.Source).IsAssignableTo<ManifoldInstallBuildSource>();
-        await Assert.That(options.Source.CMakeArguments).Contains($"-DCPPBINDINGS_MANIFOLD_PREFIX={fixture.Path}");
-        await Assert.That(options.Source.RuntimeDirectory).IsEmpty();
-        await Assert.That(() => GenerationCommandLine.Parse([..arguments, "--install-prefix", fixture.Path,
-                "--vcpkg-root", "vcpkg"]))
-            .Throws<ArgumentException>();
-        arguments[1] = "occt";
-        await Assert.That(() => GenerationCommandLine.Parse([..arguments, "--install-prefix", fixture.Path]))
             .Throws<ArgumentException>();
     }
 
@@ -359,8 +333,8 @@ internal sealed class WindowsGenerationCoordinatorTests
             }
 
             function Set-NativeDependencyClosure {
-                param($NativeLibrary, $Destination, $RuntimeDirectory, $Toolchain, $OwnedRoot)
-                if (@($NativeLibrary, $Destination, $RuntimeDirectory, $Toolchain, $OwnedRoot) |
+                param($NativeLibrary, $Destination, $VcpkgBin, $Toolchain, $OwnedRoot)
+                if (@($NativeLibrary, $Destination, $VcpkgBin, $Toolchain, $OwnedRoot) |
                     Where-Object { [string]::IsNullOrWhiteSpace($_) }) {
                     throw 'Every closure argument is required.'
                 }
@@ -668,10 +642,10 @@ internal sealed class WindowsGenerationCoordinatorTests
         internal FixtureNativeClosure NativeClosure { get; }
 
         internal WindowsGenerationOptions Options => new(
-            descriptor,
+            descriptor.Id,
             new(Repository),
             new(Output),
-            new VcpkgNativeBuildSource(new(Vcpkg), descriptor),
+            new(Vcpkg),
             "Release");
 
         internal WindowsGenerationCoordinator CreateCoordinator(INativeDependencyClosure closure) =>
@@ -716,7 +690,7 @@ internal sealed class WindowsGenerationCoordinatorTests
             var inputFingerprint = await WindowsGenerationCoordinator.ComputeInputFingerprintAsync(
                 descriptor,
                 Repository,
-                Options.Source,
+                Vcpkg,
                 CancellationToken.None);
             var outputFingerprint = await WindowsGenerationCoordinator.ComputeOutputFingerprintAsync(
                 descriptor,
@@ -762,7 +736,7 @@ internal sealed class WindowsGenerationCoordinatorTests
             descriptor,
             Repository,
             Output,
-            Options.Source,
+            Vcpkg,
             "Release",
             CancellationToken.None);
 

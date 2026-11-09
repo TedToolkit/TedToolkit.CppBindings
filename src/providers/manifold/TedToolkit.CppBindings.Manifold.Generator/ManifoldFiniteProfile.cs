@@ -159,16 +159,12 @@ internal static class ManifoldFiniteProfile
         };
     }
 
-    internal static BindingNativeProject CreateNativeProject(
-        ManifoldProfile profile,
-        Version? nativeLibraryVersion,
-        bool fromInstallation)
+    internal static BindingNativeProject CreateNativeProject(ManifoldProfile profile, Version? nativeLibraryVersion)
     {
-        var version = fromInstallation ? Version.Parse(profile.ManifoldVersion) : nativeLibraryVersion;
         return new(
             "CMakeLists.txt",
             (sources, writer, token) => writer.WriteAsync(
-                RenderCMake(profile.NativeLibraryBaseName, sources, version, fromInstallation).AsMemory(), token));
+                RenderCMake(profile.NativeLibraryBaseName, sources, nativeLibraryVersion).AsMemory(), token));
     }
 
     private const string NativePreamble = """
@@ -260,23 +256,10 @@ internal static class ManifoldFiniteProfile
     private static string RenderCMake(
         string libraryBaseName,
         IReadOnlyList<string> sources,
-        Version? nativeLibraryVersion,
-        bool fromInstallation)
+        Version? nativeLibraryVersion)
     {
         var sourceList = string.Join(" ", sources);
         var versionRequirement = nativeLibraryVersion is null ? "" : $" {nativeLibraryVersion} EXACT";
-        var findManifold = $"find_package(manifold{versionRequirement} CONFIG REQUIRED)";
-        if (fromInstallation)
-        {
-            findManifold = $$"""
-                if(NOT IS_DIRECTORY "${CPPBINDINGS_MANIFOLD_PREFIX}")
-                    message(FATAL_ERROR "Set CPPBINDINGS_MANIFOLD_PREFIX to the Manifold installation used for generation.")
-                endif()
-                find_package(manifold{{versionRequirement}} CONFIG REQUIRED
-                    PATHS "${CPPBINDINGS_MANIFOLD_PREFIX}" NO_DEFAULT_PATH)
-                """;
-        }
-
         return $$"""
                  cmake_minimum_required(VERSION 3.28)
                  project(TedToolkitCppBindingsManifold LANGUAGES CXX)
@@ -284,7 +267,7 @@ internal static class ManifoldFiniteProfile
                  file(WRITE "${CMAKE_BINARY_DIR}/compiler-identity.txt"
                      "${CMAKE_CXX_COMPILER_ID}|${CMAKE_CXX_COMPILER_VERSION}|${CMAKE_CXX_COMPILER}")
 
-                 {{findManifold}}
+                 find_package(manifold{{versionRequirement}} CONFIG REQUIRED)
 
                  add_library({{libraryBaseName}} SHARED {{sourceList}})
                  target_compile_features({{libraryBaseName}} PRIVATE cxx_std_20)

@@ -34,22 +34,13 @@ internal static class GenerationOutput
         StringComparer.Ordinal);
 
     /// <summary>
-    /// Validates shared target and output settings before provider preparation.
+    /// Validates source publication settings before provider preparation.
     /// </summary>
     /// <param name="options">The configured shared options.</param>
-    /// <param name="provider">The provider supplying target-specific bindings.</param>
-    /// <exception cref="NotSupportedException">The generator or provider does not support the native target.</exception>
     /// <exception cref="ArgumentException">The namespace or output roots are invalid.</exception>
-    internal static void ValidateOptions(GenerationOptions options, IGenerationProvider provider)
+    internal static void ValidateOptions(GenerationOptions options)
     {
         _ = options.GetNativeLibraryBaseName();
-        if (options.RuntimeIdentifier is not ("win-x64" or "linux-x64")
-            || !provider.SupportsRuntimeIdentifier(options.RuntimeIdentifier))
-        {
-            throw new NotSupportedException(
-                $"Generation target '{options.RuntimeIdentifier}' is not supported by the selected provider.");
-        }
-
         ArgumentException.ThrowIfNullOrWhiteSpace(options.CSharpNamespace);
         if (options.CSharpNamespace.Split('.').Any(static part => !Identifier.IsMatch(part) || CSharpKeywords.Contains(part)))
         {

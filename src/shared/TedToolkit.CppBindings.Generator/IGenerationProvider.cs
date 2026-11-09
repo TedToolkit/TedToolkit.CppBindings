@@ -18,16 +18,6 @@ public interface IGenerationProvider
     public IReadOnlyList<Type> PreparationModules { get; }
 
     /// <summary>
-    /// Determines whether this provider supports generation for the requested native target.
-    /// </summary>
-    /// <param name="runtimeIdentifier">The native target RID.</param>
-    /// <returns>Whether the provider supports the target with its current configuration.</returns>
-    public bool SupportsRuntimeIdentifier(string runtimeIdentifier)
-    {
-        return runtimeIdentifier is "win-x64";
-    }
-
-    /// <summary>
     /// Creates one finalized plan for this pipeline run without beginning source publication.
     /// </summary>
     /// <param name="cancellationToken">Cancellation for preparation and plan creation.</param>
