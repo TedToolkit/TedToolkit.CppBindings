@@ -17,6 +17,10 @@ namespace TedToolkit.CppBindings.Manifold.Generator;
 /// <summary>Supplies the finite Manifold profile to the provider-neutral Shared semantic engine.</summary>
 public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
 {
+    private const string ManifoldHeader = "manifold/manifold.h";
+
+    private const string MeshHeader = "manifold/mesh.h";
+
     private static readonly string[] Admitted =
     [
         "Manifold", "Manifold.Create", "Manifold.Status", "Manifold.Boolean",
@@ -68,13 +72,15 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateNativeLibraryVersion(nativeLibraryVersion);
-        var sourceInventory = ManifoldHeaderDiscovery.Resolve(_vcpkgRoot, Profile);
+        var sourceInventory = VcpkgHeaderInventory.ResolveLocked(
+            _vcpkgRoot / "installed", Profile.Triplet, "Manifold", Profile.ManifoldVersion,
+            [ManifoldHeader, MeshHeader,]);
         var sourceDeclarations = Admitted.Select(static value => new
         {
             id = value,
             header = value.StartsWith("Manifold", StringComparison.Ordinal)
-                ? "manifold/manifold.h"
-                : "manifold/mesh.h",
+                ? ManifoldHeader
+                : MeshHeader,
             disposition = "finite-profile-candidate",
         }).ToArray();
         BindingSourceDefinition[] managedSources =

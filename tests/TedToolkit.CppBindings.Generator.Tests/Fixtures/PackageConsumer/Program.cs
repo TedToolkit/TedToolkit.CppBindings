@@ -9,6 +9,7 @@ using ModularPipelines.Modules;
 
 using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Generator.Semantics;
+using TedToolkit.FileSystem;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -21,7 +22,7 @@ internal static class Program
         "valid", "repeat", "path_escape", "absolute_path", "case_collision", "file_directory_collision",
         "reserved_managed", "reserved_native", "duplicate_export", "invalid_export",
         "plan_failure", "plan_cancellation", "module_failure", "render_failure", "render_cancellation",
-        "unsupported_rid", "overlapping_roots", "invalid_basename", "namespace_keyword", "device_path", "reserved_export",
+        "compiler_target", "overlapping_roots", "invalid_basename", "namespace_keyword", "device_path", "reserved_export",
         "export_trailing_lf", "duplicate_export_trailing_lf", "reserved_export_trailing_lf", "namespace_trailing_lf",
         "unsupported_native_version",
     ];
@@ -48,13 +49,16 @@ internal static class Program
                 Path.Combine(options.CppFolder.FullName, "stale.txt"),
             };
             foreach (var sentinel in sentinels) await File.WriteAllTextAsync(sentinel, "preserve until validated");
-            if (scenario == "unsupported_rid") options = options with { RuntimeIdentifier = "linux-x64" };
+            if (scenario == "compiler_target") options = options with { RuntimeIdentifier = "freebsd-arm64" };
             if (scenario == "overlapping_roots") options = options with { CppFolder = options.CSharpFolder };
             if (scenario == "invalid_basename") options = options with { NativeLibraryBaseName = "fixture.dll" };
             if (scenario == "namespace_keyword") options = options with { CSharpNamespace = "Independent.class" };
             if (scenario == "namespace_trailing_lf") options = options with { CSharpNamespace = "Independent.Generated\n" };
             if (scenario == "unsupported_native_version") options = options with { NativeLibraryVersion = new(1, 2, 3) };
-            var provider = new Provider(scenario);
+            var inputs = scenario == "compiler_target"
+                ? CreateNativeInputs(Directory.CreateDirectory(Path.Combine(root, "native-inputs")))
+                : null;
+            var provider = new Provider(scenario, inputs);
             Exception? failure = null;
             try
             {
@@ -74,7 +78,7 @@ internal static class Program
                 failure = exception;
             }
 
-            var valid = scenario is "valid" or "repeat";
+            var valid = scenario is "valid" or "repeat" or "compiler_target";
             Require(valid == (failure is null), $"Unexpected result for {scenario}: {failure}");
             if (!valid)
             {
@@ -90,7 +94,6 @@ internal static class Program
                     "module_failure" => "fixture preparation failure",
                     "render_failure" => "fixture render failure",
                     "render_cancellation" => "fixture render cancellation",
-                    "unsupported_rid" => "Only the proved win-x64",
                     "overlapping_roots" => "distinct and non-overlapping",
                     "namespace_keyword" or "namespace_trailing_lf" => "portable C# identifiers",
                     "invalid_basename" => "basename",
@@ -98,7 +101,7 @@ internal static class Program
                     _ => throw new InvalidOperationException("Unclassified negative proof."),
                 };
                 Require(failure!.ToString().Contains(expectedFailure, StringComparison.OrdinalIgnoreCase), $"Wrong failure for {scenario}: {failure}");
-                var registrationFailure = scenario is "unsupported_rid" or "overlapping_roots" or "invalid_basename" or "namespace_keyword" or "namespace_trailing_lf";
+                var registrationFailure = scenario is "overlapping_roots" or "invalid_basename" or "namespace_keyword" or "namespace_trailing_lf";
                 var skipsLegacyPlan = registrationFailure || scenario is "module_failure" or "unsupported_native_version";
                 Require(provider.PlanCalls == (skipsLegacyPlan ? 0 : 1), $"Wrong plan count for {scenario}.");
                 Require(provider.Prepared != (registrationFailure || scenario == "module_failure"), $"Wrong preparation result for {scenario}.");
@@ -119,6 +122,9 @@ internal static class Program
                 Require(native.Contains("extern \"C\" int Alpha(") && native.Contains("extern \"C\" int Zebra("),
                     "Shared did not emit matching native method bodies.");
                 Require(table.IndexOf("&Alpha", StringComparison.Ordinal) < table.IndexOf("&Zebra", StringComparison.Ordinal), "Shared did not assign deterministic export order.");
+                Require(table.Contains("#if defined(_WIN32)") && table.Contains("#if __has_attribute(visibility)")
+                    && table.Contains("TEDTOOLKIT_CPPBINDINGS_EXPORT const std::uintptr_t* NativeApi_GetFunctionTable"),
+                    "Shared did not leave export selection to the C++ compiler target.");
                 var loaderSyntax = Microsoft.CodeAnalysis.CSharp.CSharpSyntaxTree.ParseText(loader).GetRoot();
                 Require(loaderSyntax.DescendantNodes()
                     .OfType<Microsoft.CodeAnalysis.CSharp.Syntax.BaseNamespaceDeclarationSyntax>()
@@ -153,11 +159,16 @@ internal static class Program
         var first = Manifest(Path.Combine(root, "valid"));
         var second = Manifest(Path.Combine(root, "repeat"));
         Require(first.SequenceEqual(second), "Identical input produced different relative-path/content manifests.");
+        Require(first.SequenceEqual(Manifest(Path.Combine(root, "compiler_target"))),
+            "The target RID or native source selection changed shared output.");
         var assembly = typeof(GenerationPlan).Assembly;
         string[] expectedTypes =
         [
             "TedToolkit.CppBindings.Generator.GenerationOptions",
             "TedToolkit.CppBindings.Generator.IGenerationProvider",
+            "TedToolkit.CppBindings.Generator.NativeSourceInputs",
+            "TedToolkit.CppBindings.Generator.NativeSources",
+            "TedToolkit.CppBindings.Generator.VcpkgHeaderInventory",
             "TedToolkit.CppBindings.Generator.GenerationPlan",
             "TedToolkit.CppBindings.Generator.GeneratedSource",
             "TedToolkit.CppBindings.Generator.CppBindingsPipelineBuilderExtensions",
@@ -243,6 +254,40 @@ internal static class Program
             .Any(attribute => attribute.AssemblyName == typeof(Program).Assembly.GetName().Name), "Consumer received friend access.");
         Require(!AppDomain.CurrentDomain.GetAssemblies().Any(item => item.GetName().Name?.Contains("Occt", StringComparison.OrdinalIgnoreCase) == true), "Consumer loaded OCCT.");
         await File.WriteAllTextAsync(Path.Combine(root, "result.json"), JsonSerializer.Serialize(new { passed = true, count = results.Count, results, manifest = first }, new JsonSerializerOptions { WriteIndented = true }));
+    }
+
+    private static NativeSourceInputs CreateNativeInputs(DirectoryInfo folder)
+    {
+        var sourceRoot = folder.CreateSubdirectory("cpp source");
+        var sourceInclude = sourceRoot.CreateSubdirectory("include");
+        var installation = folder.CreateSubdirectory("vcpkg_installed");
+        var triplet = installation.CreateSubdirectory("custom-triplet");
+        var installedInclude = triplet.CreateSubdirectory("include");
+        var installedLibrary = triplet.CreateSubdirectory("lib");
+        var deps = folder.CreateSubdirectory("deps");
+        var depInclude = deps.CreateSubdirectory("include");
+        var depLibrary = deps.CreateSubdirectory("lib");
+        const string header = "fixture_value.hxx";
+        File.WriteAllText(Path.Combine(sourceInclude.FullName, header), "// fixture header");
+        File.WriteAllText(Path.Combine(installedInclude.FullName, header), "// installed fixture header");
+        var library = new FilePath(Path.Combine(depLibrary.FullName, "fixture.a"));
+        File.WriteAllText(library.FullName, "fixture dependency");
+
+        var installedInputs = NativeSources.FromVcpkg(installation, triplet.Name, [header]);
+        Require(installedInputs.IncludeRoot.FullName == installedInclude.FullName
+            && installedInputs.DependencyLibraryDirectories.Single().FullName == installedLibrary.FullName,
+            "The vcpkg source did not resolve the selected installed triplet.");
+        var sourceInputs = NativeSources.FromSourceDirectory(sourceRoot, "include", [header]);
+        Require(sourceInputs.SourceDirectory?.FullName == sourceRoot.FullName
+            && sourceInputs.IncludeRoot.FullName == sourceInclude.FullName,
+            "The source directory input lost the source root or its include directory.");
+        var inputs = NativeSources.FromHeaders(sourceInclude, [header], [depInclude], [depLibrary], [library]);
+        Require(inputs.PublicHeaders.SequenceEqual([header])
+            && inputs.DependencyIncludeDirectories.Single().FullName == depInclude.FullName
+            && inputs.DependencyLibraryDirectories.Single().FullName == depLibrary.FullName
+            && inputs.DependencyLibraries.Single().FullName == library.FullName,
+            "Explicit header inputs lost the entry header or its dependencies.");
+        return inputs;
     }
 
     private static async Task VerifyLegacyInterfaceProviderAsync(string root)
@@ -366,10 +411,13 @@ public sealed class PreparationModule(Provider provider) : Module<bool>
 
 public sealed class Provider : SemanticGenerationProvider
 {
-    public Provider(string scenario)
+    private readonly string _sourceHeader;
+
+    public Provider(string scenario, NativeSourceInputs? inputs = null)
         : base(CreateSemanticEngine(scenario))
     {
         Scenario = scenario;
+        _sourceHeader = inputs?.PublicHeaders.Single() ?? "fixture_value.hxx";
     }
 
     public string Scenario { get; }
@@ -467,7 +515,7 @@ public sealed class Provider : SemanticGenerationProvider
             DescriptionItems = [recordDescription,],
             IsAbstract = false,
             UsesIntrusiveReferenceCounting = false,
-            SourceHeader = "fixture_value.hxx",
+            SourceHeader = _sourceHeader,
             Type = new()
             {
                 CppTypeName = "fixture::value",

@@ -8,6 +8,7 @@
 using System.Diagnostics;
 using System.Text.RegularExpressions;
 
+using TedToolkit.CppBindings.Generator;
 using TedToolkit.FileSystem;
 
 namespace TedToolkit.CppBindings.Cgal.Generator;
@@ -28,7 +29,8 @@ internal static partial class CgalProfileDiscovery
     internal static CgalGenerationInventory Resolve(CgalGenerationOptions options, CgalProfileManifest profile)
     {
         ValidateProfile(profile);
-        var includeRoot = options.VcpkgRoot / "installed" / profile.Triplet / "include";
+        var installationRoot = options.VcpkgRoot / "installed";
+        var includeRoot = NativeSources.GetVcpkgIncludeRoot(installationRoot, profile.Triplet);
         var cgalRoot = includeRoot / "CGAL";
         if (!cgalRoot.Exists)
         {
@@ -41,7 +43,7 @@ internal static partial class CgalProfileDiscovery
             .ToArray();
         if (options.RequireLockedHeaderInventory
             && !installed.SequenceEqual(
-                ResolveVcpkgPackageHeaders(options.VcpkgRoot, profile.Triplet),
+                VcpkgHeaderInventory.ReadPackageHeaders(installationRoot, profile.Triplet, "CGAL", "CGAL"),
                 StringComparer.Ordinal))
         {
             throw new InvalidOperationException(
@@ -93,7 +95,7 @@ internal static partial class CgalProfileDiscovery
             .ToArray();
         var admitted = candidates.Where(static item => item.Disposition == "admitted").ToArray();
         var unsupported = candidates.Where(static item => item.Disposition == "unsupported").ToArray();
-        var toolchain = ResolveToolchain(options.VcpkgRoot, profile.Triplet);
+        var toolchain = ResolveToolchain(installationRoot, profile.Triplet);
         if (options.RequireLockedToolchain)
         {
             ValidateToolchain(profile, toolchain);
@@ -127,41 +129,6 @@ internal static partial class CgalProfileDiscovery
         }
 
         return reachable.Contains(header) ? "reachable-dependency" : "not-reachable-from-finite-profile";
-    }
-
-    private static string[] ResolveVcpkgPackageHeaders(in DirectoryPath vcpkgRoot, string triplet)
-    {
-        var infoRoot = vcpkgRoot / "installed" / "vcpkg" / "info";
-        if (!infoRoot.Exists)
-        {
-            throw new InvalidOperationException($"The vcpkg installed-package list directory '{infoRoot}' was not found.");
-        }
-
-        var suffix = $"_{triplet}.list";
-        var packageLists = infoRoot.EnumerateFiles("cgal_*.list", SearchOption.TopDirectoryOnly)
-            .Where(path => path.Name.EndsWith(suffix, StringComparison.Ordinal))
-            .ToArray();
-        if (packageLists.Length != 1)
-        {
-            throw new InvalidOperationException(
-                $"Expected one installed CGAL package list for triplet '{triplet}', found {packageLists.Length}.");
-        }
-
-        var includePrefix = $"{triplet}/include/";
-        var headers = packageLists[0].ReadLines()
-            .Select(static line => line.Replace('\\', '/'))
-            .Where(line => line.StartsWith(includePrefix + "CGAL/", StringComparison.Ordinal)
-                && !line.EndsWith('/'))
-            .Select(line => line[includePrefix.Length..])
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (headers.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"The installed CGAL package list for triplet '{triplet}' contains no public headers.");
-        }
-
-        return headers;
     }
 
     private static void ValidateProfile(CgalProfileManifest profile)
@@ -269,9 +236,9 @@ internal static partial class CgalProfileDiscovery
             proof);
     }
 
-    private static CgalResolvedToolchain ResolveToolchain(in DirectoryPath vcpkgRoot, string triplet)
+    private static CgalResolvedToolchain ResolveToolchain(in DirectoryPath installationRoot, string triplet)
     {
-        var statusPath = vcpkgRoot / "installed" / "vcpkg" / new FileName("status");
+        var statusPath = installationRoot / "vcpkg" / new FileName("status");
         var status = statusPath.ReadAllText();
         var cgal = ReadPackage(status, "cgal", triplet);
         var gmp = ReadPackage(status, "gmp", triplet);

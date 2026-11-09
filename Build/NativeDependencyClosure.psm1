@@ -256,6 +256,7 @@ function Set-NativeDependencyClosure {
         [string] $Destination,
 
         [Parameter(Mandatory = $true)]
+        [AllowEmptyString()]
         [string] $VcpkgBin,
 
         [Parameter(Mandatory = $true)]
@@ -277,15 +278,16 @@ function Set-NativeDependencyClosure {
         throw "Native binding library is absent: '$native'."
     }
 
-    if (-not (Test-Path -LiteralPath $VcpkgBin -PathType Container)) {
-        throw "The vcpkg runtime directory is absent: '$VcpkgBin'."
-    }
-
     $manifestPath = Join-Path (Split-Path $destinationPath -Parent) 'native-dependencies.json'
     $vcpkgFiles = [Collections.Generic.Dictionary[string, string]]::new(
         [StringComparer]::OrdinalIgnoreCase)
-    Get-ChildItem -LiteralPath $VcpkgBin -Filter '*.dll' -File | ForEach-Object {
-        $vcpkgFiles[$_.Name] = $_.FullName
+    if ($VcpkgBin) {
+        if (-not (Test-Path -LiteralPath $VcpkgBin -PathType Container)) {
+            throw "The vcpkg runtime directory is absent: '$VcpkgBin'."
+        }
+        Get-ChildItem -LiteralPath $VcpkgBin -Filter '*.dll' -File | ForEach-Object {
+            $vcpkgFiles[$_.Name] = $_.FullName
+        }
     }
 
     $sources = [Collections.Generic.Dictionary[string, string]]::new(

@@ -15,6 +15,7 @@ using TedToolkit.CppBindings.Fcl.Generator;
 using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Manifold.Generator;
 using TedToolkit.CppBindings.Occt.Generator;
+using TedToolkit.CppBindings.Smlib.Generator;
 
 using TedToolkit.FileSystem;
 
@@ -27,42 +28,84 @@ internal interface IGenerationOperations
     Task GenerateAsync(
         ProviderDescriptor descriptor,
         string output,
-        string vcpkg,
+        string? vcpkg,
         CancellationToken cancellationToken);
 
     Task<string> BuildNativeAsync(
         ProviderDescriptor descriptor,
         string repository,
         string output,
-        string vcpkg,
+        string? vcpkg,
         string configuration,
         CancellationToken cancellationToken);
 }
 
 internal static class ProviderGenerators
 {
-    internal static async Task GenerateAsync(
+    internal static Task GenerateAsync(
         string provider,
         DirectoryPath outputRoot,
-        DirectoryPath vcpkgRoot,
+        DirectoryPath repositoryRoot,
+        string? vcpkgRoot,
         CancellationToken cancellationToken)
     {
-        switch (provider)
+        if (provider is "smlib")
         {
-            case "occt":
-                await GenerateOcctAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
-                break;
-            case "cgal":
-                await GenerateCgalAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
-                break;
-            case "manifold":
-                await GenerateManifoldAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
-                break;
-            case "fcl":
-                await GenerateFclAsync(outputRoot, vcpkgRoot, cancellationToken).ConfigureAwait(false);
-                break;
-            default:
-                throw new ArgumentException($"Unknown Windows provider '{provider}'.", nameof(provider));
+            var options = new GenerationOptions
+            {
+                CSharpFolder = outputRoot / "csharp",
+                CppFolder = outputRoot / "cpp",
+                CSharpNamespace = "TedToolkit.CppBindings.Smlib",
+                NativeLibraryBaseName = SmlibGenerationProvider.NativeLibraryBaseName,
+                CppVersion = 17,
+            };
+            return RunFinitePipelineAsync(
+                options, new SmlibGenerationProvider(repositoryRoot / "externals" / "SMLib"), "SMLib", cancellationToken);
+        }
+
+        var vcpkg = new DirectoryPath(vcpkgRoot ?? throw new ArgumentNullException(nameof(vcpkgRoot)));
+        return provider switch
+        {
+            "occt" => GenerateOcctAsync(outputRoot, vcpkg, cancellationToken),
+            "cgal" => GenerateCgalAsync(outputRoot, vcpkg, cancellationToken),
+            "manifold" => GenerateManifoldAsync(outputRoot, vcpkg, cancellationToken),
+            "fcl" => GenerateFclAsync(outputRoot, vcpkg, cancellationToken),
+            _ => throw new ArgumentException($"Unknown Windows provider '{provider}'.", nameof(provider)),
+        };
+    }
+
+    internal static async Task<GenerationPlan> RunFinitePipelineAsync(
+        GenerationOptions options,
+        IGenerationProvider provider,
+        string name,
+        CancellationToken cancellationToken)
+    {
+        var recordingProvider = new PlanRecordingProvider(provider);
+        var builder = CreateGenerationBuilder().AddCppGenerators(options, recordingProvider);
+        await RunPipelineAsync(builder, name, cancellationToken).ConfigureAwait(false);
+        return await (recordingProvider.Plan
+            ?? throw new InvalidOperationException($"The {name} generator did not create a plan.")).ConfigureAwait(false);
+    }
+
+    private static PipelineBuilder CreateGenerationBuilder()
+    {
+        var builder = Pipeline.CreateBuilder();
+        builder.Options.PrintLogo = false;
+        builder.Options.PrintResults = false;
+        builder.Options.ShowProgressInConsole = false;
+        builder.Options.DefaultRetryCount = 0;
+        builder.Options.ThrowOnPipelineFailure = true;
+        return builder;
+    }
+
+    private static async Task RunPipelineAsync(PipelineBuilder builder, string name, CancellationToken cancellationToken)
+    {
+        var pipeline = await builder.BuildAsync().ConfigureAwait(false);
+        cancellationToken.ThrowIfCancellationRequested();
+        var summary = await pipeline.RunAsync().ConfigureAwait(false);
+        if (summary.Status is not Status.Successful)
+        {
+            throw new InvalidOperationException($"The {name} generator did not complete successfully.");
         }
     }
 
@@ -72,13 +115,7 @@ internal static class ProviderGenerators
         CancellationToken cancellationToken)
     {
         using var environment = ProcessEnvironment.Override("VCPKG_ROOT", vcpkgRoot.FullName);
-        var builder = Pipeline.CreateBuilder();
-        builder.Options.PrintLogo = false;
-        builder.Options.PrintResults = false;
-        builder.Options.ShowProgressInConsole = false;
-        builder.Options.DefaultRetryCount = 0;
-        builder.Options.ThrowOnPipelineFailure = true;
-        var pipeline = await builder.AddOcctGenerators(
+        var builder = CreateGenerationBuilder().AddOcctGenerators(
             new()
             {
                 DeclOptions = [],
@@ -87,13 +124,8 @@ internal static class ProviderGenerators
                 CppFolder = outputRoot / "cpp",
                 CommandLineArgs = ["-w",],
                 NativeLibraryVersion = new(8, 0, 1),
-            }).BuildAsync().ConfigureAwait(false);
-        cancellationToken.ThrowIfCancellationRequested();
-        var summary = await pipeline.RunAsync().ConfigureAwait(false);
-        if (summary.Status is not Status.Successful)
-        {
-            throw new InvalidOperationException("The OCCT generator did not complete successfully.");
-        }
+            });
+        await RunPipelineAsync(builder, "OCCT", cancellationToken).ConfigureAwait(false);
     }
 
     private static async Task GenerateCgalAsync(
@@ -112,19 +144,7 @@ internal static class ProviderGenerators
             NativeLibraryVersion = new(6, 2),
         };
         var provider = new CgalGenerationProvider(options);
-        var plan = await provider.CreatePlanAsync(options, cancellationToken).ConfigureAwait(false);
-        var builder = Pipeline.CreateBuilder();
-        builder.Options.PrintLogo = false;
-        builder.Options.PrintResults = false;
-        builder.Options.ShowProgressInConsole = false;
-        builder.Options.DefaultRetryCount = 0;
-        builder.Options.ThrowOnPipelineFailure = true;
-        var pipeline = await builder.AddCppGenerators(options, provider).BuildAsync().ConfigureAwait(false);
-        var summary = await pipeline.RunAsync().ConfigureAwait(false);
-        if (summary.Status is not Status.Successful)
-        {
-            throw new InvalidOperationException("The CGAL generator did not complete successfully.");
-        }
+        var plan = await RunFinitePipelineAsync(options, provider, "CGAL", cancellationToken).ConfigureAwait(false);
 
         var result = new
         {
@@ -159,19 +179,7 @@ internal static class ProviderGenerators
             NativeLibraryVersion = new(0, 7, 0),
         };
         var provider = new FclGenerationProvider(vcpkgRoot);
-        var plan = await provider.CreatePlanAsync(options, cancellationToken).ConfigureAwait(false);
-        var builder = Pipeline.CreateBuilder();
-        builder.Options.PrintLogo = false;
-        builder.Options.PrintResults = false;
-        builder.Options.ShowProgressInConsole = false;
-        builder.Options.DefaultRetryCount = 0;
-        builder.Options.ThrowOnPipelineFailure = true;
-        var pipeline = await builder.AddCppGenerators(options, provider).BuildAsync().ConfigureAwait(false);
-        var summary = await pipeline.RunAsync().ConfigureAwait(false);
-        if (summary.Status is not Status.Successful)
-        {
-            throw new InvalidOperationException("The FCL generator did not complete successfully.");
-        }
+        var plan = await RunFinitePipelineAsync(options, provider, "FCL", cancellationToken).ConfigureAwait(false);
 
         var result = new
         {
@@ -202,19 +210,7 @@ internal static class ProviderGenerators
             CppVersion = 20,
             NativeLibraryVersion = new(3, 5, 2),
         };
-        var plan = await provider.CreatePlanAsync(options, cancellationToken).ConfigureAwait(false);
-        var builder = Pipeline.CreateBuilder();
-        builder.Options.PrintLogo = false;
-        builder.Options.PrintResults = false;
-        builder.Options.ShowProgressInConsole = false;
-        builder.Options.DefaultRetryCount = 0;
-        builder.Options.ThrowOnPipelineFailure = true;
-        var pipeline = await builder.AddCppGenerators(options, provider).BuildAsync().ConfigureAwait(false);
-        var summary = await pipeline.RunAsync().ConfigureAwait(false);
-        if (summary.Status is not Status.Successful)
-        {
-            throw new InvalidOperationException("The Manifold generator did not complete successfully.");
-        }
+        var plan = await RunFinitePipelineAsync(options, provider, "Manifold", cancellationToken).ConfigureAwait(false);
 
         var result = new
         {
@@ -233,6 +229,19 @@ internal static class ProviderGenerators
                 JsonSerializer.Serialize(result, new JsonSerializerOptions { WriteIndented = true }) + "\n",
                 cancellationToken)
             .ConfigureAwait(false);
+    }
+
+    private sealed class PlanRecordingProvider(IGenerationProvider provider) : IGenerationProvider
+    {
+        internal Task<GenerationPlan>? Plan { get; private set; }
+
+        public IReadOnlyList<Type> PreparationModules => provider.PreparationModules;
+
+        public Task<GenerationPlan> CreatePlanAsync(CancellationToken cancellationToken) =>
+            Plan = provider.CreatePlanAsync(cancellationToken);
+
+        public Task<GenerationPlan> CreatePlanAsync(in GenerationOptions options, in CancellationToken cancellationToken) =>
+            Plan = provider.CreatePlanAsync(options, cancellationToken);
     }
 }
 

@@ -34,19 +34,13 @@ internal static class GenerationOutput
         StringComparer.Ordinal);
 
     /// <summary>
-    /// Validates shared target and output settings before provider preparation.
+    /// Validates source publication settings before provider preparation.
     /// </summary>
     /// <param name="options">The configured shared options.</param>
-    /// <exception cref="NotSupportedException">The target is not win-x64.</exception>
     /// <exception cref="ArgumentException">The namespace or output roots are invalid.</exception>
     internal static void ValidateOptions(GenerationOptions options)
     {
         _ = options.GetNativeLibraryBaseName();
-        if (options.RuntimeIdentifier != "win-x64")
-        {
-            throw new NotSupportedException("Only the proved win-x64 generation profile is supported.");
-        }
-
         ArgumentException.ThrowIfNullOrWhiteSpace(options.CSharpNamespace);
         if (options.CSharpNamespace.Split('.').Any(static part => !Identifier.IsMatch(part) || CSharpKeywords.Contains(part)))
         {

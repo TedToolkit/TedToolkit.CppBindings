@@ -71,6 +71,10 @@ public sealed class WindowsBindingsModule(
                 root.FullName,
                 "src", "providers", "fcl", "TedToolkit.CppBindings.Fcl.Windows",
                 "TedToolkit.CppBindings.Fcl.Windows.csproj"),
+            Path.Combine(
+                root.FullName,
+                "src", "providers", "smlib", "TedToolkit.CppBindings.Smlib.Windows",
+                "TedToolkit.CppBindings.Smlib.Windows.csproj"),
         };
         foreach (var project in windowsProjects)
         {

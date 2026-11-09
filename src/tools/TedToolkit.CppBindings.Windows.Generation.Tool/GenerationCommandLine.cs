@@ -28,11 +28,15 @@ internal static class GenerationCommandLine
             }
         }
 
+        var provider = ProviderDescriptor.Create(Require(values, "--provider").ToLowerInvariant());
+        var vcpkgRoot = provider.UsesVcpkg
+            ? new DirectoryPath(Require(values, "--vcpkg-root"))
+            : (DirectoryPath?)null;
         return new(
-            Require(values, "--provider"),
+            provider,
             new(Require(values, "--repository-root")),
             new(Require(values, "--output-root")),
-            new(Require(values, "--vcpkg-root")),
+            vcpkgRoot,
             Require(values, "--configuration"));
     }
 
@@ -49,14 +53,14 @@ internal static class GenerationCommandLine
     private static ArgumentException Usage()
     {
         return new(
-            "Expected --provider <occt|cgal|manifold|fcl> --repository-root <path> "
-            + "--output-root <path> --vcpkg-root <path> --configuration <name>.");
+            "Expected --provider <occt|cgal|manifold|fcl|smlib> --repository-root <path> "
+            + "--output-root <path> --configuration <name> and --vcpkg-root <path> for vcpkg providers.");
     }
 }
 
 internal sealed record WindowsGenerationOptions(
-    string Provider,
+    ProviderDescriptor Provider,
     DirectoryPath RepositoryRoot,
     DirectoryPath OutputRoot,
-    DirectoryPath VcpkgRoot,
+    DirectoryPath? VcpkgRoot,
     string Configuration);

@@ -17,6 +17,8 @@ namespace TedToolkit.CppBindings.Fcl.Generator;
 /// <summary>Supplies the finite FCL profile to the provider-neutral Shared semantic engine.</summary>
 public sealed class FclGenerationProvider : SemanticGenerationProvider
 {
+    private const string FclHeader = "fcl/fcl.h";
+
     private static readonly string[] Admitted =
     [
         "FclVector3", "FclBvhReturnCode", "FclBvhModel.Create", "FclModelBuildResult",
@@ -67,7 +69,8 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateNativeLibraryVersion(nativeLibraryVersion);
-        var sourceInventory = FclHeaderDiscovery.Resolve(_vcpkgRoot, Profile);
+        var sourceInventory = VcpkgHeaderInventory.ResolveLocked(
+            _vcpkgRoot / "installed", Profile.Versions["Triplet"], "FCL", Profile.Versions["Fcl"], [FclHeader,]);
         BindingSourceDefinition[] managedSources =
         [
             JsonSource("admitted-inventory.json", Admitted),
@@ -91,7 +94,7 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
             JsonSource("source-declaration-inventory.json", Admitted.Select(static id => new
             {
                 id,
-                header = "fcl/fcl.h",
+                header = FclHeader,
                 disposition = "finite-profile-candidate",
             })),
             JsonSource("source-inventory.json", sourceInventory.Select(static item => new

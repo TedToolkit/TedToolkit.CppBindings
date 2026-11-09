@@ -10,7 +10,7 @@ using TedToolkit.FileSystem;
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
-/// Configures provider-neutral source publication and the supported Windows target.
+/// Configures provider-neutral source publication and the native target.
 /// </summary>
 public record GenerationOptions
 {
@@ -65,8 +65,9 @@ public record GenerationOptions
     public string CSharpNamespace { get; init; } = "TedToolkit.CppBindings";
 
     /// <summary>
-    /// Gets the supported Windows x64 target identifier; other targets fail before preparation.
+    /// Gets the native target RID available to the generation provider.
     /// </summary>
+    /// <remarks>Shared source emission uses the C++ compiler's target and does not filter RIDs.</remarks>
     public string RuntimeIdentifier { get; init; } = "win-x64";
 
     /// <summary>
