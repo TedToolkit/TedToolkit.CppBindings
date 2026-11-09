@@ -162,14 +162,13 @@ internal static class ManifoldFiniteProfile
     internal static BindingNativeProject CreateNativeProject(
         ManifoldProfile profile,
         Version? nativeLibraryVersion,
-        bool fromInstallation,
-        bool linuxTarget)
+        bool fromInstallation)
     {
         var version = fromInstallation ? Version.Parse(profile.ManifoldVersion) : nativeLibraryVersion;
         return new(
             "CMakeLists.txt",
             (sources, writer, token) => writer.WriteAsync(
-                RenderCMake(profile.NativeLibraryBaseName, sources, version, fromInstallation, linuxTarget).AsMemory(), token));
+                RenderCMake(profile.NativeLibraryBaseName, sources, version, fromInstallation).AsMemory(), token));
     }
 
     private const string NativePreamble = """
@@ -262,8 +261,7 @@ internal static class ManifoldFiniteProfile
         string libraryBaseName,
         IReadOnlyList<string> sources,
         Version? nativeLibraryVersion,
-        bool fromInstallation,
-        bool linuxTarget)
+        bool fromInstallation)
     {
         var sourceList = string.Join(" ", sources);
         var versionRequirement = nativeLibraryVersion is null ? "" : $" {nativeLibraryVersion} EXACT";
@@ -279,18 +277,6 @@ internal static class ManifoldFiniteProfile
                 """;
         }
 
-        var targetOptions = linuxTarget
-            ? $$"""
-                if(NOT CMAKE_SYSTEM_NAME STREQUAL "Linux"
-                    OR NOT CMAKE_SYSTEM_PROCESSOR MATCHES "^(x86_64|amd64)$"
-                    OR NOT CMAKE_SIZEOF_VOID_P EQUAL 8)
-                    message(FATAL_ERROR "The generated Manifold bridge targets linux-x64.")
-                endif()
-                set_target_properties({{libraryBaseName}} PROPERTIES
-                    CXX_VISIBILITY_PRESET hidden VISIBILITY_INLINES_HIDDEN YES)
-                """
-            : $"target_compile_options({libraryBaseName} PRIVATE /MP1)";
-
         return $$"""
                  cmake_minimum_required(VERSION 3.28)
                  project(TedToolkitCppBindingsManifold LANGUAGES CXX)
@@ -302,7 +288,7 @@ internal static class ManifoldFiniteProfile
 
                  add_library({{libraryBaseName}} SHARED {{sourceList}})
                  target_compile_features({{libraryBaseName}} PRIVATE cxx_std_20)
-                 {{targetOptions}}
+                 target_compile_options({{libraryBaseName}} PRIVATE /MP1)
                  target_link_libraries({{libraryBaseName}} PRIVATE manifold::manifold)
                  """;
     }
