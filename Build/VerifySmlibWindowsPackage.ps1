@@ -8,6 +8,11 @@ Import-Module (Join-Path $PSScriptRoot 'NativeDependencyClosure.psm1') -Force
 Import-Module (Join-Path $PSScriptRoot 'VerifyNativePackageClosure.psm1') -Force
 
 $repository = Split-Path $PSScriptRoot -Parent
+$editorConfig = Join-Path $repository '.editorconfig'
+if (-not (Test-Path -LiteralPath $editorConfig -PathType Leaf)) {
+    Copy-Item -LiteralPath (Join-Path $repository 'externals/TedToolkit/.editorconfig') -Destination $editorConfig
+}
+
 if (-not $ReportDirectory) {
     $ReportDirectory = Join-Path $repository ('out/verification/sw-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
 }
@@ -26,7 +31,10 @@ try {
         $log = Join-Path $report "$name-pack.log"
         & dotnet pack $project -c Release -o $feed --maxcpucount:1 --disable-build-servers `
             -p:GeneratePackageOnBuild=false -p:NuGetAudit=false "-p:GeneratedRoot=$generated" *> $log
-        if ($LASTEXITCODE -ne 0) { throw "SMLib package build failed; see '$log'." }
+        if ($LASTEXITCODE -ne 0) {
+            Get-Content -LiteralPath $log -Tail 50
+            throw "SMLib package build failed; see '$log'."
+        }
     }
 
     $package = Get-NuGetPackageArtifact -Feed $feed -PackageId 'TedToolkit.CppBindings.Smlib.Windows'
@@ -55,7 +63,10 @@ try {
         --disable-build-servers "-p:RestoreSources=$feed" "-p:RestorePackagesPath=$(Join-Path $report 'packages')" `
         -p:RestoreAdditionalProjectSources=https://api.nuget.org/v3/index.json `
         "-p:PackageVersionUnderTest=$($package.Version)" -p:NuGetAudit=false *> $log
-    if ($LASTEXITCODE -ne 0) { throw "SMLib NuGet consumer failed; see '$log'." }
+    if ($LASTEXITCODE -ne 0) {
+        Get-Content -LiteralPath $log -Tail 50
+        throw "SMLib NuGet consumer failed; see '$log'."
+    }
     $assets = Get-Content -LiteralPath (Join-Path $consumer 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
     $hash = [Convert]::ToBase64String([Security.Cryptography.SHA512]::HashData([IO.File]::ReadAllBytes($package.Path)))
     if ($assets.libraries["$($package.Id)/$($package.Version)"].sha512 -cne $hash) {

@@ -5,6 +5,7 @@ at `externals/SMLib`. Its native target compiles the standalone kernel and SM_AP
 
 ```powershell
 git submodule update --init --recursive
+if (-not (Test-Path .editorconfig)) { Copy-Item externals/TedToolkit/.editorconfig .editorconfig }
 dotnet pack src/providers/smlib/TedToolkit.CppBindings.Smlib.Windows -c Release
 ```
 
