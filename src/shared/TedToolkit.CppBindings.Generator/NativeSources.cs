@@ -27,6 +27,23 @@ public static class NativeSources
         string triplet,
         IEnumerable<string> publicHeaders)
     {
+        var includeRoot = GetVcpkgIncludeRoot(installationRoot, triplet);
+        var libraryDirectory = includeRoot.Parent!.Value / "lib";
+        return FromHeaders(
+            includeRoot,
+            publicHeaders,
+            dependencyLibraryDirectories: libraryDirectory.Exists ? [libraryDirectory,] : []);
+    }
+
+    /// <summary>
+    /// Gets the include path for a vcpkg triplet before discovering or validating its headers.
+    /// </summary>
+    /// <param name="installationRoot">The classic <c>installed</c> or manifest <c>vcpkg_installed</c> directory.</param>
+    /// <param name="triplet">The installed triplet directory name.</param>
+    /// <returns>The absolute include path, even if the directory does not exist.</returns>
+    /// <exception cref="ArgumentException"><paramref name="triplet"/> is not a single directory name.</exception>
+    public static DirectoryPath GetVcpkgIncludeRoot(in DirectoryPath installationRoot, string triplet)
+    {
         ArgumentNullException.ThrowIfNull(installationRoot.FullName, nameof(installationRoot));
         ArgumentException.ThrowIfNullOrWhiteSpace(triplet);
         if (triplet is "." or ".."
@@ -37,12 +54,7 @@ public static class NativeSources
             throw new ArgumentException("A vcpkg triplet must be one directory name.", nameof(triplet));
         }
 
-        var tripletRoot = installationRoot.GetFullPath() / triplet;
-        var libraryDirectory = tripletRoot / "lib";
-        return FromHeaders(
-            tripletRoot / "include",
-            publicHeaders,
-            dependencyLibraryDirectories: libraryDirectory.Exists ? [libraryDirectory,] : []);
+        return installationRoot.GetFullPath() / triplet / "include";
     }
 
     /// <summary>
