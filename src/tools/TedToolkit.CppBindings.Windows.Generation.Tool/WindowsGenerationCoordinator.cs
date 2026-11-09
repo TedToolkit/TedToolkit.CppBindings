@@ -68,7 +68,7 @@ internal sealed partial class WindowsGenerationCoordinator(
         ProviderDescriptor descriptor,
         string repository,
         string output,
-        INativeSourceProvider source,
+        IWindowsNativeBuildSource source,
         string configuration,
         CancellationToken cancellationToken)
     {
@@ -113,7 +113,7 @@ internal sealed partial class WindowsGenerationCoordinator(
         ProviderDescriptor descriptor,
         string repository,
         string output,
-        INativeSourceProvider source,
+        IWindowsNativeBuildSource source,
         string configuration,
         CancellationToken cancellationToken)
     {
@@ -212,11 +212,11 @@ internal sealed partial class WindowsGenerationCoordinator(
     private Task GenerateProviderAsync(
         ProviderDescriptor descriptor,
         string output,
-        INativeSourceProvider source,
+        IWindowsNativeBuildSource source,
         CancellationToken cancellationToken)
     {
         return operations is null
-            ? source.GenerateAsync(new(output), cancellationToken)
+            ? ProviderGenerators.GenerateAsync(descriptor.Id, new(output), source, cancellationToken)
             : operations.GenerateAsync(descriptor, output, source.Root.FullName, cancellationToken);
     }
 
@@ -224,7 +224,7 @@ internal sealed partial class WindowsGenerationCoordinator(
         ProviderDescriptor descriptor,
         string repository,
         string output,
-        INativeSourceProvider source,
+        IWindowsNativeBuildSource source,
         string configuration,
         CancellationToken cancellationToken)
     {
@@ -254,7 +254,7 @@ internal sealed partial class WindowsGenerationCoordinator(
         ProviderDescriptor descriptor,
         string repository,
         string output,
-        INativeSourceProvider source,
+        IWindowsNativeBuildSource source,
         string configuration,
         CancellationToken cancellationToken)
     {
@@ -586,7 +586,7 @@ internal sealed partial class WindowsGenerationCoordinator(
     internal static async Task<string> ComputeInputFingerprintAsync(
         ProviderDescriptor descriptor,
         string repository,
-        INativeSourceProvider source,
+        IWindowsNativeBuildSource source,
         CancellationToken cancellationToken)
     {
         var files = new HashSet<string>(StringComparer.OrdinalIgnoreCase);

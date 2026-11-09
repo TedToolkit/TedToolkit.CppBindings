@@ -26,3 +26,6 @@ Use `ManifoldGenerationProvider.FromInstallation(prefix)` to generate against a 
 installation. The provider verifies `include/manifold/version.h` against the finite profile and
 the resulting CMake project requires exactly that version. Pass the same prefix as
 `-DCPPBINDINGS_MANIFOLD_PREFIX=<path>` when configuring the generated project.
+
+Both entry points resolve headers through the shared `INativeSourceProvider` contract before
+classifying the finite profile's header inventory.

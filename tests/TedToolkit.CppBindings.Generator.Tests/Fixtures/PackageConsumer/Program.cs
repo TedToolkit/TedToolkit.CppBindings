@@ -158,6 +158,8 @@ internal static class Program
         [
             "TedToolkit.CppBindings.Generator.GenerationOptions",
             "TedToolkit.CppBindings.Generator.IGenerationProvider",
+            "TedToolkit.CppBindings.Generator.INativeSourceProvider",
+            "TedToolkit.CppBindings.Generator.NativeSourceInputs",
             "TedToolkit.CppBindings.Generator.GenerationPlan",
             "TedToolkit.CppBindings.Generator.GeneratedSource",
             "TedToolkit.CppBindings.Generator.CppBindingsPipelineBuilderExtensions",

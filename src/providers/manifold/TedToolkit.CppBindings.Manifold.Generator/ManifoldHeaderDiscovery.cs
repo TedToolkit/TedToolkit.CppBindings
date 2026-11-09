@@ -7,23 +7,20 @@
 
 using System.Text.RegularExpressions;
 
+using TedToolkit.CppBindings.Generator;
+
 using TedToolkit.FileSystem;
 
 namespace TedToolkit.CppBindings.Manifold.Generator;
 
-/// <summary>Resolves the installed Manifold public-header boundary.</summary>
+/// <summary>Reads and classifies the public headers of a Manifold include tree.</summary>
 internal static partial class ManifoldHeaderDiscovery
 {
     private static readonly string[] ProfileRoots = ["manifold/manifold.h", "manifold/mesh.h",];
 
-    /// <summary>Resolves and validates the deterministic installed source inventory.</summary>
-    /// <exception cref="DirectoryNotFoundException">The installed Manifold header tree is absent.</exception>
-    /// <exception cref="InvalidOperationException">The package identity or header inventory is inconsistent.</exception>
-    internal static IReadOnlyList<ManifoldSourceDisposition> Resolve(
-        DirectoryPath includeRoot,
-        ManifoldProfile profile,
-        DirectoryPath? vcpkgRoot)
+    internal static NativeSourceInputs ReadInputs(DirectoryPath includeRoot, in CancellationToken cancellationToken)
     {
+        cancellationToken.ThrowIfCancellationRequested();
         var manifoldRoot = includeRoot / "manifold";
         if (!manifoldRoot.Exists)
         {
@@ -33,93 +30,20 @@ internal static partial class ManifoldHeaderDiscovery
 
         var installed = manifoldRoot.EnumerateFiles("*", SearchOption.AllDirectories)
             .Select(path => Normalize(path.GetRelativePath(includeRoot).FullName))
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (vcpkgRoot is { } root)
-        {
-            ValidateVcpkgInventory(root, profile, installed);
-        }
-        else
-        {
-            ValidateInstalledVersion(manifoldRoot, profile);
-        }
+            .Order(StringComparer.Ordinal);
+        return new NativeSourceInputs(includeRoot, installed);
+    }
 
+    internal static IReadOnlyList<ManifoldSourceDisposition> Classify(NativeSourceInputs inputs)
+    {
+        var includeRoot = inputs.IncludeRoot;
+        var manifoldRoot = includeRoot / "manifold";
         var roots = ProfileRoots.ToHashSet(StringComparer.Ordinal);
         var reachable = CloseIncludes(includeRoot.FullName, manifoldRoot.FullName, ProfileRoots);
-        return Array.AsReadOnly(installed.Select(header => new ManifoldSourceDisposition(
+        return Array.AsReadOnly(inputs.PublicHeaders.Select(header => new ManifoldSourceDisposition(
                 header,
                 GetDisposition(header, roots, reachable)))
             .ToArray());
-    }
-
-    private static void ValidateInstalledVersion(in DirectoryPath manifoldRoot, ManifoldProfile profile)
-    {
-        var versionHeader = manifoldRoot / new FileName("version.h");
-        var version = Version.Parse(profile.ManifoldVersion);
-        var content = versionHeader.Exists ? versionHeader.ReadAllText() : "";
-        if (HasVersionDefine(content, "MAJOR", version.Major)
-            && HasVersionDefine(content, "MINOR", version.Minor)
-            && HasVersionDefine(content, "PATCH", version.Build))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"The Manifold version header '{versionHeader}' is missing or does not match profile version {version}.");
-    }
-
-    private static void ValidateVcpkgInventory(
-        in DirectoryPath vcpkgRoot,
-        ManifoldProfile profile,
-        string[] installed)
-    {
-        ValidatePackageStatus(vcpkgRoot, profile);
-        var packaged = ResolvePackageHeaders(vcpkgRoot, profile);
-        if (installed.SequenceEqual(packaged, StringComparer.Ordinal))
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            "The installed Manifold public-header inventory does not match the vcpkg package list.");
-    }
-
-    private static bool HasVersionDefine(string content, string component, int value)
-    {
-        return Regex.IsMatch(content, $@"(?m)^#define[ \t]+MANIFOLD_VERSION_{component}[ \t]+{value}[ \t]*\r?$",
-            RegexOptions.CultureInvariant);
-    }
-
-    private static void ValidatePackageStatus(in DirectoryPath vcpkgRoot, ManifoldProfile profile)
-    {
-        var statusPath = vcpkgRoot / "installed" / "vcpkg" / new FileName("status");
-        if (!statusPath.Exists)
-        {
-            throw new InvalidOperationException($"The vcpkg installed-package status file '{statusPath}' was not found.");
-        }
-
-        var blocks = PackageStatusBlock().Matches(statusPath.ReadAllText())
-            .Select(static match => match.Groups["body"].Value)
-            .Where(body => HasStatusValue(body, "Architecture", profile.Triplet)
-                && HasStatusValue(body, "Version", profile.ManifoldVersion)
-                && !PortVersionStatusLine().IsMatch(body)
-                && HasStatusValue(body, "Status", "install ok installed"))
-            .ToArray();
-        if (blocks.Length == 1)
-        {
-            return;
-        }
-
-        throw new InvalidOperationException(
-            $"Expected installed Manifold {profile.ManifoldVersion} for triplet '{profile.Triplet}'.");
-    }
-
-    private static bool HasStatusValue(string block, string name, string value)
-    {
-        return Regex.IsMatch(
-            block,
-            $"(?m)^{Regex.Escape(name)}: {Regex.Escape(value)}\\r?$",
-            RegexOptions.CultureInvariant);
     }
 
     private static string GetDisposition(
@@ -135,43 +59,6 @@ internal static partial class ManifoldHeaderDiscovery
         return reachable.Contains(header)
             ? "reachable-dependency"
             : "not-reachable-from-finite-profile";
-    }
-
-    private static string[] ResolvePackageHeaders(in DirectoryPath vcpkgRoot, ManifoldProfile profile)
-    {
-        var infoRoot = vcpkgRoot / "installed" / "vcpkg" / "info";
-        if (!infoRoot.Exists)
-        {
-            throw new InvalidOperationException(
-                $"The vcpkg installed-package list directory '{infoRoot}' was not found.");
-        }
-
-        var suffix = $"_{profile.Triplet}.list";
-        var lists = infoRoot.EnumerateFiles("manifold_*.list", SearchOption.TopDirectoryOnly)
-            .Where(path => path.Name.EndsWith(suffix, StringComparison.Ordinal))
-            .ToArray();
-        var expectedName = $"manifold_{profile.ManifoldVersion}_{profile.Triplet}.list";
-        if (lists.Length != 1 || !string.Equals(lists[0].Name, expectedName, StringComparison.Ordinal))
-        {
-            throw new InvalidOperationException(
-                $"Expected the installed Manifold package list '{expectedName}', found {lists.Length} candidate(s).");
-        }
-
-        var includePrefix = $"{profile.Triplet}/include/";
-        var headers = lists[0].ReadLines()
-            .Select(Normalize)
-            .Where(line => line.StartsWith(includePrefix + "manifold/", StringComparison.Ordinal)
-                && !line.EndsWith('/'))
-            .Select(line => line[includePrefix.Length..])
-            .Order(StringComparer.Ordinal)
-            .ToArray();
-        if (headers.Length == 0)
-        {
-            throw new InvalidOperationException(
-                $"The installed Manifold package list for triplet '{profile.Triplet}' contains no public headers.");
-        }
-
-        return headers;
     }
 
     private static HashSet<string> CloseIncludes(
@@ -213,17 +100,11 @@ internal static partial class ManifoldHeaderDiscovery
         return closure;
     }
 
-    private static string Normalize(string path)
+    internal static string Normalize(string path)
     {
         return path.Replace('\\', '/');
     }
 
     [GeneratedRegex("(?m)^\\s*#\\s*include\\s*[<\\\"](?<path>[^>\\\"]+)[>\\\"]", RegexOptions.CultureInvariant)]
     private static partial Regex HeaderInclude();
-
-    [GeneratedRegex("(?ms)^Package: manifold\\r?\\n(?<body>.*?)(?=\\r?\\n\\r?\\n|\\z)", RegexOptions.CultureInvariant)]
-    private static partial Regex PackageStatusBlock();
-
-    [GeneratedRegex("(?m)^Port-Version:", RegexOptions.CultureInvariant)]
-    private static partial Regex PortVersionStatusLine();
 }

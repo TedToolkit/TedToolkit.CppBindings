@@ -1,16 +1,15 @@
 // -----------------------------------------------------------------------
-// <copyright file="INativeSourceProvider.cs" company="TedToolkit">
+// <copyright file="IWindowsNativeBuildSource.cs" company="TedToolkit">
 // Copyright (c) TedToolkit. All rights reserved.
 // Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.CppBindings.Manifold.Generator;
 using TedToolkit.FileSystem;
 
 namespace TedToolkit.CppBindings.Windows.Generation.Tool;
 
-internal interface INativeSourceProvider
+internal interface IWindowsNativeBuildSource
 {
     DirectoryPath Root { get; }
 
@@ -23,12 +22,10 @@ internal interface INativeSourceProvider
     IReadOnlyDictionary<string, string> Notices { get; }
 
     IEnumerable<string> EnumerateInputFiles();
-
-    Task GenerateAsync(DirectoryPath output, CancellationToken cancellationToken);
 }
 
-internal sealed class VcpkgNativeSourceProvider(DirectoryPath root, ProviderDescriptor descriptor)
-    : INativeSourceProvider
+internal sealed class VcpkgNativeBuildSource(DirectoryPath root, ProviderDescriptor descriptor)
+    : IWindowsNativeBuildSource
 {
     public DirectoryPath Root { get; } = root.GetFullPath();
 
@@ -63,18 +60,13 @@ internal sealed class VcpkgNativeSourceProvider(DirectoryPath root, ProviderDesc
             .Where(File.Exists);
     }
 
-    public Task GenerateAsync(DirectoryPath output, CancellationToken cancellationToken)
-    {
-        return ProviderGenerators.GenerateFromVcpkgAsync(descriptor.Id, output, Root, cancellationToken);
-    }
-
     private static IEnumerable<string> EnumerateFiles(string root, string pattern, SearchOption searchOption)
     {
         return Directory.Exists(root) ? Directory.EnumerateFiles(root, pattern, searchOption) : [];
     }
 }
 
-internal sealed class ManifoldInstallSourceProvider(DirectoryPath prefix) : INativeSourceProvider
+internal sealed class ManifoldInstallBuildSource(DirectoryPath prefix) : IWindowsNativeBuildSource
 {
     public DirectoryPath Root { get; } = prefix.GetFullPath();
 
@@ -113,11 +105,5 @@ internal sealed class ManifoldInstallSourceProvider(DirectoryPath prefix) : INat
                 }
             }
         }
-    }
-
-    public Task GenerateAsync(DirectoryPath output, CancellationToken cancellationToken)
-    {
-        return ProviderGenerators.GenerateManifoldAsync(
-            output, ManifoldGenerationProvider.FromInstallation(Root), cancellationToken);
     }
 }

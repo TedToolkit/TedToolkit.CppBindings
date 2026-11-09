@@ -41,12 +41,21 @@ internal interface IGenerationOperations
 
 internal static class ProviderGenerators
 {
-    internal static async Task GenerateFromVcpkgAsync(
+    internal static async Task GenerateAsync(
         string provider,
         DirectoryPath outputRoot,
-        DirectoryPath vcpkgRoot,
+        IWindowsNativeBuildSource source,
         CancellationToken cancellationToken)
     {
+        if (source is ManifoldInstallBuildSource)
+        {
+            await GenerateManifoldAsync(
+                    outputRoot, ManifoldGenerationProvider.FromInstallation(source.Root), cancellationToken)
+                .ConfigureAwait(false);
+            return;
+        }
+
+        var vcpkgRoot = source.Root;
         switch (provider)
         {
             case "occt":
@@ -187,7 +196,7 @@ internal static class ProviderGenerators
             .ConfigureAwait(false);
     }
 
-    internal static async Task GenerateManifoldAsync(
+    private static async Task GenerateManifoldAsync(
         DirectoryPath outputRoot,
         ManifoldGenerationProvider provider,
         CancellationToken cancellationToken)

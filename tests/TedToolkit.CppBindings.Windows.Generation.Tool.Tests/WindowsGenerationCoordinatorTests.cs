@@ -41,7 +41,7 @@ internal sealed class WindowsGenerationCoordinatorTests
         ]);
 
         await Assert.That(options.Descriptor.Id).IsEqualTo("cgal");
-        await Assert.That(options.Source).IsAssignableTo<VcpkgNativeSourceProvider>();
+        await Assert.That(options.Source).IsAssignableTo<VcpkgNativeBuildSource>();
         await Assert.That(options.Configuration).IsEqualTo("Release");
         await Assert.That(() => GenerationCommandLine.Parse(["--provider", "cgal", "--provider", "fcl"]))
             .Throws<ArgumentException>();
@@ -61,7 +61,7 @@ internal sealed class WindowsGenerationCoordinatorTests
         using var fixture = new TestDirectory();
         var options = GenerationCommandLine.Parse([..arguments, "--install-prefix", fixture.Path]);
 
-        await Assert.That(options.Source).IsAssignableTo<ManifoldInstallSourceProvider>();
+        await Assert.That(options.Source).IsAssignableTo<ManifoldInstallBuildSource>();
         await Assert.That(options.Source.CMakeArguments).Contains($"-DCPPBINDINGS_MANIFOLD_PREFIX={fixture.Path}");
         await Assert.That(options.Source.RuntimeDirectory).IsEmpty();
         await Assert.That(() => GenerationCommandLine.Parse([..arguments, "--install-prefix", fixture.Path,
@@ -671,7 +671,7 @@ internal sealed class WindowsGenerationCoordinatorTests
             descriptor,
             new(Repository),
             new(Output),
-            new VcpkgNativeSourceProvider(new(Vcpkg), descriptor),
+            new VcpkgNativeBuildSource(new(Vcpkg), descriptor),
             "Release");
 
         internal WindowsGenerationCoordinator CreateCoordinator(INativeDependencyClosure closure) =>

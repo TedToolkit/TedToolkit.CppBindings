@@ -24,9 +24,9 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
         "ManifoldOp", "ManifoldError",
     ];
 
-    private readonly DirectoryPath _includeRoot;
+    private readonly INativeSourceProvider _nativeSource;
 
-    private readonly DirectoryPath? _vcpkgRoot;
+    private readonly bool _fromInstallation;
 
     /// <summary>Initializes a provider using the process <c>VCPKG_ROOT</c>.</summary>
     public ManifoldGenerationProvider()
@@ -37,17 +37,19 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     /// <summary>Initializes a provider from the selected vcpkg installation.</summary>
     /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
     public ManifoldGenerationProvider(in DirectoryPath vcpkgRoot)
-        : this(vcpkgRoot, isVcpkg: true)
+        : this(vcpkgRoot, fromInstallation: false)
     {
     }
 
-    private ManifoldGenerationProvider(in DirectoryPath root, bool isVcpkg)
+    private ManifoldGenerationProvider(in DirectoryPath root, bool fromInstallation)
         : base(ManifoldSemanticProfile.Create())
     {
         ArgumentNullException.ThrowIfNull(root.FullName, nameof(root));
         var fullRoot = root.GetFullPath();
-        _vcpkgRoot = isVcpkg ? fullRoot : (DirectoryPath?)null;
-        _includeRoot = isVcpkg ? fullRoot / "installed" / Profile.Triplet / "include" : fullRoot / "include";
+        _fromInstallation = fromInstallation;
+        _nativeSource = fromInstallation
+            ? new ManifoldInstalledSourceProvider(fullRoot, Profile)
+            : new ManifoldVcpkgSourceProvider(fullRoot, Profile);
     }
 
     /// <summary>Creates a provider from an installed Manifold CMake package.</summary>
@@ -55,7 +57,7 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     /// <returns>A provider that verifies the installed headers against the finite profile.</returns>
     public static ManifoldGenerationProvider FromInstallation(in DirectoryPath prefix)
     {
-        return new(prefix, isVcpkg: false);
+        return new(prefix, fromInstallation: true);
     }
 
     /// <summary>Gets the finite profile.</summary>
@@ -85,7 +87,7 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateNativeLibraryVersion(nativeLibraryVersion);
-        var sourceInventory = ManifoldHeaderDiscovery.Resolve(_includeRoot, Profile, _vcpkgRoot);
+        var sourceInventory = ManifoldHeaderDiscovery.Classify(_nativeSource.Resolve(cancellationToken));
         var sourceDeclarations = Admitted.Select(static value => new
         {
             id = value,
@@ -123,7 +125,7 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
             {
                 Profile.ManifoldVersion,
                 Profile.Triplet,
-                VcpkgBuiltinBaseline = _vcpkgRoot.HasValue ? Profile.VcpkgBuiltinBaseline : null,
+                VcpkgBuiltinBaseline = _fromInstallation ? null : Profile.VcpkgBuiltinBaseline,
                 Profile.CMake,
                 Profile.Msvc,
             }),
@@ -149,7 +151,7 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
             ManifoldSemanticProfile.ManagedSourceStem,
             ManifoldSemanticProfile.NativeSourceStem,
             ManifoldFiniteProfile.CreateNativeProject(
-                Profile, nativeLibraryVersion, fromInstallation: !_vcpkgRoot.HasValue),
+                Profile, nativeLibraryVersion, _fromInstallation),
             [finiteApi,]));
     }
 

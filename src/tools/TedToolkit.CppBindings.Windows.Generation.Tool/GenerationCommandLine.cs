@@ -41,9 +41,9 @@ internal static class GenerationCommandLine
             throw new ArgumentException($"An installation prefix is not supported for {descriptor.DisplayName}.");
         }
 
-        INativeSourceProvider source = hasVcpkgRoot
-            ? new VcpkgNativeSourceProvider(new(Require(values, "--vcpkg-root")), descriptor)
-            : new ManifoldInstallSourceProvider(new(Require(values, "--install-prefix")));
+        IWindowsNativeBuildSource source = hasVcpkgRoot
+            ? new VcpkgNativeBuildSource(new(Require(values, "--vcpkg-root")), descriptor)
+            : new ManifoldInstallBuildSource(new(Require(values, "--install-prefix")));
         return new(
             descriptor,
             new(Require(values, "--repository-root")),
@@ -74,5 +74,5 @@ internal sealed record WindowsGenerationOptions(
     ProviderDescriptor Descriptor,
     DirectoryPath RepositoryRoot,
     DirectoryPath OutputRoot,
-    INativeSourceProvider Source,
+    IWindowsNativeBuildSource Source,
     string Configuration);

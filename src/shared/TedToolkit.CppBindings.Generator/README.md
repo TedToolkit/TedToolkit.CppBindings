@@ -47,6 +47,11 @@ the globally newest release.
 
 ## Provider contract
 
+`INativeSourceProvider` resolves the include root and public header inventory before a generation
+provider discovers binding declarations. The generation provider selects the source and maps the
+resolved inputs to its own declarations. Native source implementations can validate how the
+selected dependency was obtained without coupling Shared to a package manager.
+
 `CreatePlanAsync` runs once after every declared preparation module succeeds. A direct
 `IGenerationProvider` returns a `GenerationPlan` containing copied, read-only C# and C++ source
 inventories and one exact native export order. Both sides must derive their slot indexes from that
