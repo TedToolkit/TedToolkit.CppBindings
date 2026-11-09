@@ -7,6 +7,8 @@
 
 using System.Text.Json;
 
+using TedToolkit.CppBindings.Generator;
+
 namespace TedToolkit.CppBindings.Windows.Generation.Tool.Tests;
 
 internal sealed class WindowsGenerationCoordinatorTests
@@ -33,14 +35,14 @@ internal sealed class WindowsGenerationCoordinatorTests
     {
         var options = GenerationCommandLine.Parse(
         [
-            "--provider", "cgal",
+            "--provider", "CGAL",
             "--repository-root", "repo",
             "--output-root", "output",
             "--vcpkg-root", "vcpkg",
             "--configuration", "Release",
         ]);
 
-        await Assert.That(options.Provider).IsEqualTo("cgal");
+        await Assert.That(options.Provider.Id).IsEqualTo("cgal");
         await Assert.That(options.Configuration).IsEqualTo("Release");
         await Assert.That(options.VcpkgRoot).IsNotNull();
         await Assert.That(() => GenerationCommandLine.Parse(["--provider", "cgal", "--provider", "fcl"]))
@@ -54,7 +56,29 @@ internal sealed class WindowsGenerationCoordinatorTests
             "--configuration", "Release",
         ]);
         await Assert.That(sourceOptions.VcpkgRoot).IsNull();
-        await Assert.That(ProviderDescriptor.Create(sourceOptions.Provider).UsesVcpkg).IsFalse();
+        await Assert.That(sourceOptions.Provider.UsesVcpkg).IsFalse();
+    }
+
+    [Test]
+    public async Task Should_return_the_plan_used_by_both_generation_stages_Async()
+    {
+        using var directory = new TestDirectory();
+        var options = new GenerationOptions
+        {
+            CSharpFolder = new(Path.Combine(directory.Path, "managed")),
+            CppFolder = new(Path.Combine(directory.Path, "native")),
+            CSharpNamespace = "TestBindings",
+            NativeLibraryVersion = new(1, 2, 3),
+        };
+        var provider = new CountingPlanProvider();
+        var plan = await ProviderGenerators.RunFinitePipelineAsync(
+            options, provider, "test", CancellationToken.None);
+
+        await Assert.That(provider.CallCount).IsEqualTo(1);
+        await Assert.That(ReferenceEquals(plan, provider.Plan)).IsTrue();
+        await Assert.That(File.Exists(Path.Combine(options.CSharpFolder.FullName, "NativeApi.g.cs"))).IsTrue();
+        var table = await File.ReadAllTextAsync(Path.Combine(options.CppFolder.FullName, "NativeFunctionTable.cpp"));
+        await Assert.That(table).Contains(plan.NativeExports.Single());
     }
 
     [Test]
@@ -653,7 +677,7 @@ internal sealed class WindowsGenerationCoordinatorTests
         internal FixtureNativeClosure NativeClosure { get; }
 
         internal WindowsGenerationOptions Options => new(
-            descriptor.Id,
+            descriptor,
             new(Repository),
             new(Output),
             new(Vcpkg),
@@ -777,7 +801,7 @@ internal sealed class WindowsGenerationCoordinatorTests
             string compiler,
             string nativeLibrary,
             string destination,
-            string searchDirectory,
+            string? searchDirectory,
             string generatedRoot,
             string repository,
             CancellationToken cancellationToken)
@@ -820,7 +844,7 @@ internal sealed class WindowsGenerationCoordinatorTests
         public async Task GenerateAsync(
             ProviderDescriptor descriptor,
             string output,
-            string vcpkg,
+            string? vcpkg,
             CancellationToken cancellationToken)
         {
             GeneratedProviders.Add(descriptor.Id);
@@ -844,7 +868,7 @@ internal sealed class WindowsGenerationCoordinatorTests
             ProviderDescriptor descriptor,
             string repository,
             string output,
-            string vcpkg,
+            string? vcpkg,
             string configuration,
             CancellationToken cancellationToken)
         {
@@ -909,10 +933,28 @@ internal sealed class WindowsGenerationCoordinatorTests
             string compiler,
             string nativeLibrary,
             string destination,
-            string searchDirectory,
+            string? searchDirectory,
             string generatedRoot,
             string repository,
             CancellationToken cancellationToken) => throw new NotSupportedException();
+    }
+
+    private sealed class CountingPlanProvider : IGenerationProvider
+    {
+        internal GenerationPlan Plan { get; } = new([], [], ["FixtureExport"]);
+
+        internal int CallCount { get; private set; }
+
+        public IReadOnlyList<Type> PreparationModules => [];
+
+        public Task<GenerationPlan> CreatePlanAsync(CancellationToken cancellationToken) =>
+            throw new NotSupportedException();
+
+        public Task<GenerationPlan> CreatePlanAsync(in GenerationOptions options, in CancellationToken cancellationToken)
+        {
+            CallCount++;
+            return Task.FromResult(Plan);
+        }
     }
 
     private sealed class UnusedProcessRunner : IProcessRunner

@@ -28,9 +28,8 @@ internal static class GenerationCommandLine
             }
         }
 
-        var provider = Require(values, "--provider");
-        var descriptor = ProviderDescriptor.Create(provider.ToLowerInvariant());
-        var vcpkgRoot = descriptor.UsesVcpkg
+        var provider = ProviderDescriptor.Create(Require(values, "--provider").ToLowerInvariant());
+        var vcpkgRoot = provider.UsesVcpkg
             ? new DirectoryPath(Require(values, "--vcpkg-root"))
             : (DirectoryPath?)null;
         return new(
@@ -60,7 +59,7 @@ internal static class GenerationCommandLine
 }
 
 internal sealed record WindowsGenerationOptions(
-    string Provider,
+    ProviderDescriptor Provider,
     DirectoryPath RepositoryRoot,
     DirectoryPath OutputRoot,
     DirectoryPath? VcpkgRoot,
