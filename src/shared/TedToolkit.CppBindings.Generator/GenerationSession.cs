@@ -55,7 +55,9 @@ internal sealed class GenerationSession(GenerationOptions options, IGenerationPr
                 (writer, token) => writer.WriteAsync(NativeApiGenerator.Generate(Options).AsMemory(), token))),
             providerPlan.CppSources.Append(new GeneratedSource(
                 NativeFunctionTableGenerator.FileName,
-                (writer, token) => writer.WriteAsync(NativeFunctionTableGenerator.Generate(providerPlan.NativeExports).AsMemory(), token))),
+                (writer, token) => writer.WriteAsync(
+                    NativeFunctionTableGenerator.Generate(providerPlan.NativeExports, Options.RuntimeIdentifier).AsMemory(),
+                    token))),
             providerPlan.NativeExports);
         GenerationOutput.ValidateSources(Options.CSharpFolder, plan.CSharpSources);
         GenerationOutput.ValidateSources(Options.CppFolder, plan.CppSources);

@@ -37,9 +37,10 @@ Existing `DirectoryInfo` inputs can be assigned through FileSystem's implicit co
 the properties now returns `DirectoryPath`. Provider vcpkg roots use `DirectoryPath`, and explicit
 CGAL profile documents use `FilePath`. This changes the public API types, so existing compiled
 consumers must be rebuilt. The other settings include
-`CSharpNamespace` and a portable `NativeLibraryBaseName`. The built-in target is `win-x64`, with
-Cdecl function pointers and the MSVC native ABI. Other runtime identifiers are rejected before
-preparation. `CppVersion` defaults to 17 and is available to the provider's native build description;
+`CSharpNamespace` and a portable `NativeLibraryBaseName`. The default target is `win-x64`, with
+Cdecl function pointers and the MSVC native ABI. Providers can opt in to `linux-x64` with
+`SupportsRuntimeIdentifier`; unsupported targets are rejected before preparation.
+`CppVersion` defaults to 17 and is available to the provider's native build description;
 `IsInternal` is available to its managed emitters. Set `NativeLibraryVersion` to a `System.Version`
 when the provider's primary native package must match exactly. Leaving it unset preserves the
 provider's existing unversioned resolver behavior; it does not promise that every resolver chooses

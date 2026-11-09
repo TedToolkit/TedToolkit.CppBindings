@@ -31,6 +31,12 @@ public abstract class SemanticGenerationProvider : IGenerationProvider
     public abstract IReadOnlyList<Type> PreparationModules { get; }
 
     /// <inheritdoc />
+    public virtual bool SupportsRuntimeIdentifier(string runtimeIdentifier)
+    {
+        return runtimeIdentifier is "win-x64";
+    }
+
+    /// <inheritdoc />
     public Task<GenerationPlan> CreatePlanAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();

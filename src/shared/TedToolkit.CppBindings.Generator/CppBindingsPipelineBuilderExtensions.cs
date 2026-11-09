@@ -33,7 +33,7 @@ public static class CppBindingsPipelineBuilderExtensions
         ArgumentNullException.ThrowIfNull(options);
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(provider.PreparationModules);
-        GenerationOutput.ValidateOptions(options);
+        GenerationOutput.ValidateOptions(options, provider);
         if (provider.PreparationModules.Any(static type =>
                 type?.IsAbstract != false || type.ContainsGenericParameters || !typeof(IModule).IsAssignableFrom(type)))
         {

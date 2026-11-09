@@ -17,6 +17,8 @@ namespace TedToolkit.CppBindings.Manifold.Generator;
 /// <summary>Supplies the finite Manifold profile to the provider-neutral Shared semantic engine.</summary>
 public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
 {
+    private const string LinuxProfileId = "manifold-3.5.2-linux-x64-v1";
+
     private static readonly string[] Admitted =
     [
         "Manifold", "Manifold.Create", "Manifold.Status", "Manifold.Boolean",
@@ -60,16 +62,22 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
         return new(prefix, fromInstallation: true);
     }
 
-    /// <summary>Gets the finite profile.</summary>
+    /// <summary>Gets the default Windows profile and common Manifold ABI facts.</summary>
     public ManifoldProfile Profile { get; } = new();
 
     /// <inheritdoc />
     public override IReadOnlyList<Type> PreparationModules { get; } = Array.Empty<Type>();
 
     /// <inheritdoc />
+    public override bool SupportsRuntimeIdentifier(string runtimeIdentifier)
+    {
+        return runtimeIdentifier is "win-x64" || (_fromInstallation && runtimeIdentifier is "linux-x64");
+    }
+
+    /// <inheritdoc />
     protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
     {
-        return CreateProviderModelAsync(null, cancellationToken);
+        return CreateProviderModelAsync("win-x64", null, cancellationToken);
     }
 
     /// <inheritdoc />
@@ -78,14 +86,22 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
         in CancellationToken cancellationToken)
     {
         ArgumentNullException.ThrowIfNull(options);
-        return CreateProviderModelAsync(options.NativeLibraryVersion, cancellationToken);
+        return CreateProviderModelAsync(options.RuntimeIdentifier, options.NativeLibraryVersion, cancellationToken);
     }
 
     private Task<BindingProviderModel> CreateProviderModelAsync(
+        string runtimeIdentifier,
         Version? nativeLibraryVersion,
         in CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
+        if (!SupportsRuntimeIdentifier(runtimeIdentifier))
+        {
+            throw new NotSupportedException(
+                $"Manifold does not support generation target '{runtimeIdentifier}' with the selected native source.");
+        }
+
+        var linuxTarget = runtimeIdentifier is "linux-x64";
         ValidateNativeLibraryVersion(nativeLibraryVersion);
         var sourceInventory = ManifoldHeaderDiscovery.Classify(_nativeSource.Resolve(cancellationToken));
         var sourceDeclarations = Admitted.Select(static value => new
@@ -114,21 +130,35 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
                 new { id = "Manifold", ownership = "Owned", nativeStorage = "ManifoldAdapter" },
                 new { id = "ManifoldMeshData", ownership = "managed-arrays", nativeStorage = "none" },
             }),
-            JsonSource("profile-manifest.json", Profile),
+            JsonSource("profile-manifest.json", linuxTarget
+                ? new
+                {
+                    ProfileId = LinuxProfileId,
+                    RuntimeIdentifier = runtimeIdentifier,
+                    Profile.ManifoldVersion,
+                    Profile.NativeLibraryBaseName,
+                    Profile.NativeOperationUnderlyingType,
+                    Profile.NativeErrorUnderlyingType,
+                    Profile.Operations,
+                    Profile.Errors,
+                }
+                : Profile),
             JsonSource("source-declaration-inventory.json", sourceDeclarations),
             JsonSource("source-inventory.json", sourceInventory.Select(static item => new
             {
                 header = item.Header,
                 disposition = item.Disposition,
             })),
-            JsonSource("toolchain-inventory.json", new
-            {
-                Profile.ManifoldVersion,
-                Profile.Triplet,
-                VcpkgBuiltinBaseline = _fromInstallation ? null : Profile.VcpkgBuiltinBaseline,
-                Profile.CMake,
-                Profile.Msvc,
-            }),
+            JsonSource("toolchain-inventory.json", linuxTarget
+                ? new { RuntimeIdentifier = runtimeIdentifier, Profile.ManifoldVersion }
+                : new
+                {
+                    Profile.ManifoldVersion,
+                    Profile.Triplet,
+                    VcpkgBuiltinBaseline = _fromInstallation ? null : Profile.VcpkgBuiltinBaseline,
+                    Profile.CMake,
+                    Profile.Msvc,
+                }),
             JsonSource("unsupported-inventory.json", new[]
             {
                 new { id = "callbacks", reason = "callbacks-outside-finite-profile" },
@@ -151,7 +181,7 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
             ManifoldSemanticProfile.ManagedSourceStem,
             ManifoldSemanticProfile.NativeSourceStem,
             ManifoldFiniteProfile.CreateNativeProject(
-                Profile, nativeLibraryVersion, _fromInstallation),
+                Profile, nativeLibraryVersion, _fromInstallation, linuxTarget),
             [finiteApi,]));
     }
 

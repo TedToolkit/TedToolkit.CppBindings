@@ -1,0 +1,56 @@
+name: Manifold Linux
+
+on:
+  push:
+    paths:
+      - '.github/workflows/manifold-linux.yml'
+      - 'Build/VerifyManifoldLinux.sh'
+      - 'Directory.*.props'
+      - 'externals/TedToolkit'
+      - 'src/shared/**'
+      - 'src/providers/manifold/**'
+      - 'tests/TedToolkit.CppBindings.Manifold.Linux.Tests/**'
+      - 'tests/TedToolkit.CppBindings.Manifold.Windows.Tests/Fixtures/PackageConsumer/Program.cs'
+  workflow_dispatch:
+
+permissions:
+  contents: read
+
+jobs:
+  manifold-linux-x64:
+    runs-on: ubuntu-24.04
+    timeout-minutes: 15
+    steps:
+      - uses: actions/checkout@v4
+        with:
+          submodules: recursive
+          persist-credentials: false
+
+      - uses: actions/setup-dotnet@v4
+        with:
+          dotnet-version: |
+            8.0.x
+            10.0.x
+
+      - name: Check out Manifold 3.5.2
+        uses: actions/checkout@v4
+        with:
+          repository: elalish/manifold
+          ref: 11235e6b8ebea2dbed8aec4285685aafd3d95667
+          path: output/upstream-manifold
+          persist-credentials: false
+
+      - name: Build a local Manifold installation
+        run: |
+          cmake -S output/upstream-manifold -B output/manifold-build -G Ninja \
+            -DCMAKE_BUILD_TYPE=Release -DCMAKE_INSTALL_LIBDIR=lib \
+            -DCMAKE_INSTALL_PREFIX="$RUNNER_TEMP/manifold-install" \
+            -DMANIFOLD_CROSS_SECTION=OFF -DMANIFOLD_PAR=OFF -DMANIFOLD_TEST=OFF \
+            -DMANIFOLD_DOWNLOADS=OFF -DBUILD_SHARED_LIBS=ON
+          cmake --build output/manifold-build --parallel 2
+          cmake --install output/manifold-build
+
+      - name: Generate, build, and call the binding
+        run: |
+          cp externals/TedToolkit/.editorconfig .editorconfig
+          bash Build/VerifyManifoldLinux.sh "$RUNNER_TEMP/manifold-install"

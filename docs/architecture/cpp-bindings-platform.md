@@ -53,6 +53,8 @@ The Shared Generator defines the native source contract in terms of include root
 inventories. Binding providers select a source and own package identity and header validation.
 Native source selection and target ABI selection are separate. The Windows generation tool
 composes those inputs for the `win-x64` build and stages its native package assets.
+The shared pipeline requires explicit provider support for a non-default target and emits the
+bootstrap export for the selected ABI. Manifold opts in to `linux-x64` with a local CMake installation.
 
 Shared Runtime owns provider-neutral native-error diagnostic consumption and common exception
 projection. Shared Generator owns the carrier, copy, set, and clear emission, fixes common standard

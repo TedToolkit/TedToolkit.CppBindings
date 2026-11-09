@@ -37,14 +37,17 @@ internal static class GenerationOutput
     /// Validates shared target and output settings before provider preparation.
     /// </summary>
     /// <param name="options">The configured shared options.</param>
-    /// <exception cref="NotSupportedException">The target is not win-x64.</exception>
+    /// <param name="provider">The provider supplying target-specific bindings.</param>
+    /// <exception cref="NotSupportedException">The generator or provider does not support the native target.</exception>
     /// <exception cref="ArgumentException">The namespace or output roots are invalid.</exception>
-    internal static void ValidateOptions(GenerationOptions options)
+    internal static void ValidateOptions(GenerationOptions options, IGenerationProvider provider)
     {
         _ = options.GetNativeLibraryBaseName();
-        if (options.RuntimeIdentifier != "win-x64")
+        if (options.RuntimeIdentifier is not ("win-x64" or "linux-x64")
+            || !provider.SupportsRuntimeIdentifier(options.RuntimeIdentifier))
         {
-            throw new NotSupportedException("Only the proved win-x64 generation profile is supported.");
+            throw new NotSupportedException(
+                $"Generation target '{options.RuntimeIdentifier}' is not supported by the selected provider.");
         }
 
         ArgumentException.ThrowIfNullOrWhiteSpace(options.CSharpNamespace);

@@ -90,7 +90,7 @@ internal static class Program
                     "module_failure" => "fixture preparation failure",
                     "render_failure" => "fixture render failure",
                     "render_cancellation" => "fixture render cancellation",
-                    "unsupported_rid" => "Only the proved win-x64",
+                    "unsupported_rid" => "Generation target 'linux-x64' is not supported",
                     "overlapping_roots" => "distinct and non-overlapping",
                     "namespace_keyword" or "namespace_trailing_lf" => "portable C# identifiers",
                     "invalid_basename" => "basename",
