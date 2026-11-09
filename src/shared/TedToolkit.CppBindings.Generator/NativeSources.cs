@@ -127,10 +127,6 @@ public static class NativeSources
     private static NativeSourceInputs Validate(NativeSourceInputs inputs)
     {
         RequireDirectory(inputs.IncludeRoot);
-        if (inputs.SourceDirectory is { } sourceDirectory)
-        {
-            RequireDirectory(sourceDirectory);
-        }
 
         foreach (var directory in inputs.DependencyIncludeDirectories.Concat(inputs.DependencyLibraryDirectories))
         {

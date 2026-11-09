@@ -21,16 +21,6 @@ public sealed class NativeSourceInputs
     /// </summary>
     /// <param name="includeRoot">The include root that resolves the public header paths.</param>
     /// <param name="publicHeaders">The include-relative paths in deterministic order.</param>
-    public NativeSourceInputs(in DirectoryPath includeRoot, IEnumerable<string> publicHeaders)
-        : this(includeRoot, publicHeaders, null)
-    {
-    }
-
-    /// <summary>
-    /// Initializes a new instance of the <see cref="NativeSourceInputs"/> class with native dependencies.
-    /// </summary>
-    /// <param name="includeRoot">The include root that resolves the public header paths.</param>
-    /// <param name="publicHeaders">The include-relative paths in deterministic order.</param>
     /// <param name="dependencyIncludeDirectories">Additional include directories, in search order.</param>
     /// <param name="dependencyLibraryDirectories">Directories in which to search for native libraries.</param>
     /// <param name="dependencyLibraries">Explicit native library files, in link order.</param>
@@ -38,7 +28,7 @@ public sealed class NativeSourceInputs
     public NativeSourceInputs(
         in DirectoryPath includeRoot,
         IEnumerable<string> publicHeaders,
-        IEnumerable<DirectoryPath>? dependencyIncludeDirectories,
+        IEnumerable<DirectoryPath>? dependencyIncludeDirectories = null,
         IEnumerable<DirectoryPath>? dependencyLibraryDirectories = null,
         IEnumerable<FilePath>? dependencyLibraries = null,
         DirectoryPath? sourceDirectory = null)

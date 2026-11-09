@@ -64,6 +64,14 @@ var inputs = NativeSources.FromHeaders(
 builder.AddCppGenerators(options, new WidgetGenerationProvider(inputs));
 ```
 
+When creating a `BindingCMakeProjectDefinition`, the binding provider passes `IncludeRoot` and
+`DependencyIncludeDirectories` as `includeDirectories` and the explicit `DependencyLibraries`
+files as `linkLibraries`. Use quoted CMake arguments and forward slashes in paths. The emitted project uses
+`target_include_directories` to compile the bridge and `target_link_libraries` to resolve symbols
+from the dependency. A library search directory helps locate a library. The link step still needs
+the selected file or a CMake target. A header-only dependency can leave `dependencyLibraries`
+empty when its headers supply all required implementations.
+
 `NativeSources.FromVcpkg` takes a populated `installed` or `vcpkg_installed` directory, an explicit
 triplet, and entry headers. `NativeSources.FromSourceDirectory` takes the C++ source directory,
 its relative include directory, and entry headers. Construct `NativeSourceInputs` directly for a
