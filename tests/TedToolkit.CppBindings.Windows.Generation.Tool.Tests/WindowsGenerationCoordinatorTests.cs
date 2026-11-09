@@ -42,8 +42,19 @@ internal sealed class WindowsGenerationCoordinatorTests
 
         await Assert.That(options.Provider).IsEqualTo("cgal");
         await Assert.That(options.Configuration).IsEqualTo("Release");
+        await Assert.That(options.VcpkgRoot).IsNotNull();
         await Assert.That(() => GenerationCommandLine.Parse(["--provider", "cgal", "--provider", "fcl"]))
             .Throws<ArgumentException>();
+
+        var sourceOptions = GenerationCommandLine.Parse(
+        [
+            "--provider", "smlib",
+            "--repository-root", "repo",
+            "--output-root", "output",
+            "--configuration", "Release",
+        ]);
+        await Assert.That(sourceOptions.VcpkgRoot).IsNull();
+        await Assert.That(ProviderDescriptor.Create(sourceOptions.Provider).UsesVcpkg).IsFalse();
     }
 
     [Test]

@@ -37,6 +37,10 @@
     <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj" />
     <Project Path="src/providers/occt/TedToolkit.CppBindings.Occt.SourceGenerators/TedToolkit.CppBindings.Occt.SourceGenerators.csproj" />
   </Folder>
+  <Folder Name="/src/providers/smlib/">
+    <Project Path="src/providers/smlib/TedToolkit.CppBindings.Smlib.Generator/TedToolkit.CppBindings.Smlib.Generator.csproj" />
+    <Project Path="src/providers/smlib/TedToolkit.CppBindings.Smlib.Windows/TedToolkit.CppBindings.Smlib.Windows.csproj" />
+  </Folder>
   <Folder Name="/src/tools/">
     <Project Path="src/tools/TedToolkit.CppBindings.Analyzers/TedToolkit.CppBindings.Analyzers.csproj" />
     <Project Path="src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj" />

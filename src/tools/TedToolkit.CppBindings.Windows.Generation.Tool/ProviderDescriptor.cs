@@ -39,6 +39,8 @@ internal sealed record ProviderDescriptor(
     IReadOnlyList<VcpkgInputPattern> VcpkgInputPatterns,
     IReadOnlyDictionary<string, string> Notices)
 {
+    internal bool UsesVcpkg { get; init; } = true;
+
     internal static ProviderDescriptor Create(string provider)
     {
         return provider switch
@@ -160,6 +162,41 @@ internal sealed record ProviderDescriptor(
                     ["Eigen.txt"] = "installed/x64-windows/share/eigen3/copyright",
                     ["Octomap.txt"] = "installed/x64-windows/share/octomap/copyright",
                 }),
+            "smlib" => new(
+                "smlib",
+                "SMLib",
+                Smlib.Generator.SmlibGenerationProvider.NativeLibraryBaseName + ".dll",
+                NativeBuildKind.VisualStudio,
+                ToolchainProfileKind.None,
+                WriteManagedManifest: false,
+                WriteOutputManifest: true,
+                IncludeVcpkgPathInFingerprint: false,
+                RequiredManagedFile: "Smlib.Bindings.g.cs",
+                [
+                    "src/shared/TedToolkit.CppBindings.Generator",
+                    "src/providers/smlib",
+                    "src/tools/TedToolkit.CppBindings.Windows.Generation.Tool",
+                    "externals/SMLib/source/SMLib",
+                    "externals/SMLib/source/SM_API",
+                ],
+                [
+                    "Directory.Build.props",
+                    "Directory.Packages.props",
+                    "Build/CgalCompilerIdentity.cmake",
+                    "externals/SMLib/VERSION",
+                    "externals/SMLib/LICENSE",
+                    "externals/SMLib/THIRD_PARTY_NOTICES.md",
+                ],
+                [],
+                [],
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["SMLib-LICENSE.txt"] = "externals/SMLib/LICENSE",
+                    ["SMLib-THIRD-PARTY-NOTICES.txt"] = "externals/SMLib/THIRD_PARTY_NOTICES.md",
+                })
+            {
+                UsesVcpkg = false,
+            },
             _ => throw new ArgumentException($"Unknown Windows provider '{provider}'.", nameof(provider)),
         };
     }

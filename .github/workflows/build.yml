@@ -24,13 +24,6 @@ jobs:
         with:
           submodules: recursive
 
-      - name: Checkout locked vcpkg baseline
-        uses: actions/checkout@v4
-        with:
-          repository: microsoft/vcpkg
-          ref: 30ef65cad98f08e7197c9a1656fbd871bcb72f2d
-          path: .vcpkg
-
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
@@ -44,6 +37,17 @@ jobs:
           python -m pip install --disable-pip-version-check --no-warn-script-location cmake==4.4.3
           $cmakeBin = python -c "import cmake; print(cmake.CMAKE_BIN_DIR)"
           $cmakeBin | Out-File -FilePath $env:GITHUB_PATH -Encoding utf8 -Append
+
+      - name: Verify source-built SMLib NuGet package
+        shell: pwsh
+        run: pwsh -NoProfile -File Build/VerifySmlibWindowsPackage.ps1
+
+      - name: Checkout locked vcpkg baseline
+        uses: actions/checkout@v4
+        with:
+          repository: microsoft/vcpkg
+          ref: 30ef65cad98f08e7197c9a1656fbd871bcb72f2d
+          path: .vcpkg
 
       - name: Restore vcpkg binary packages
         id: vcpkg-cache-restore
@@ -70,7 +74,17 @@ jobs:
                   $_.FullName), $_.Length
               }
           ) -join "`n"
-          & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+          for ($attempt = 1; $attempt -le 3; $attempt++) {
+            try {
+              & "$env:VCPKG_ROOT\bootstrap-vcpkg.bat" -disableMetrics
+              break
+            }
+            catch {
+              if ($attempt -eq 3) { throw }
+              Write-Warning "vcpkg bootstrap failed on attempt $attempt. Retrying the pinned download."
+              Start-Sleep -Seconds (5 * $attempt)
+            }
+          }
           & "$env:VCPKG_ROOT\vcpkg.exe" install `
             opencascade:x64-windows `
             cgal:x64-windows `
@@ -126,6 +140,7 @@ jobs:
             output/providers/cgal/csharp/
             output/providers/manifold/csharp/
             output/providers/fcl/csharp/
+            output/providers/smlib/csharp/
             output/windows-generation-summary.json
           retention-days: 2
           if-no-files-found: error

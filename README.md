@@ -1,8 +1,8 @@
 # TedToolkit.CppBindings
 
 TedToolkit.CppBindings is a .NET platform for generating C++ bindings. This repository provides
-Open CASCADE Technology (OCCT), Computational Geometry Algorithms Library (CGAL), Manifold, and
-Flexible Collision Library (FCL) providers.
+Open CASCADE Technology (OCCT), Computational Geometry Algorithms Library (CGAL), Manifold,
+Flexible Collision Library (FCL), and SMLib providers.
 Each builds one normalized semantic model and emits a matched C++ ABI boundary and C# API through
 the shared generation platform.
 
@@ -10,7 +10,7 @@ the shared generation platform.
 > The project is under active development. The complete Windows binding package can be built and
 > verified locally, but they are not yet published to a remote package feed. Current ready-to-use
 > artifacts target `win-x64` and `net8.0`: OCCT 8.0.1, the finite CGAL 6.2 EPICK profile,
-> the finite Manifold 3.5.2 profile, and the finite FCL 0.7.0 OBBRSS profile.
+> the finite Manifold 3.5.2 and FCL 0.7.0 OBBRSS profiles, and the finite SMLib 1.0.1 profile.
 
 ## What this repository provides
 
@@ -39,6 +39,7 @@ the shared generation platform.
 | Generate the finite Manifold profile | [Manifold Generator](src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/README.md) |
 | Use the finite FCL package | [FCL Windows bindings](src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/README.md) |
 | Generate the finite FCL profile | [FCL Generator](src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/README.md) |
+| Build SMLib directly from source | [SMLib provider](src/providers/smlib/README.md) |
 | Generate OCCT bindings | [OCCT Generator](src/providers/occt/TedToolkit.CppBindings.Occt.Generator/README.md) |
 | Use provider-neutral generation stages | [Generator](src/shared/TedToolkit.CppBindings.Generator/README.md) |
 | Understand ownership and generated-code contracts | [Runtime](src/shared/TedToolkit.CppBindings.Runtime/README.md) |
@@ -96,19 +97,19 @@ convenience policy in generated bindings.
 
 | Concern | Current support |
 | --- | --- |
-| Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows`, `TedToolkit.CppBindings.Manifold.Windows`, `TedToolkit.CppBindings.Fcl.Windows` |
-| Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal`, `TedToolkit.CppBindings.Manifold`, `TedToolkit.CppBindings.Fcl` |
+| Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows`, `TedToolkit.CppBindings.Manifold.Windows`, `TedToolkit.CppBindings.Fcl.Windows`, `TedToolkit.CppBindings.Smlib.Windows` |
+| Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal`, `TedToolkit.CppBindings.Manifold`, `TedToolkit.CppBindings.Fcl`, `TedToolkit.CppBindings.Smlib` |
 | Runtime identifier | `win-x64` |
-| Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v2`; Manifold 3.5.2 `manifold-3.5.2-windows-v2`; FCL 0.7.0 `fcl-0.7.0-obbrss-double-windows-v2` |
+| Native profiles | OCCT 8.0.1, CGAL 6.2 `epick-windows-v2`, Manifold 3.5.2 `manifold-3.5.2-windows-v2`, FCL 0.7.0 `fcl-0.7.0-obbrss-double-windows-v2`, and SMLib 1.0.1 box solids |
 | Binding target framework | `net8.0` |
 | Generator and development host | .NET 10 |
-| Native toolchain | Visual C++; C++17 for OCCT/CGAL and C++20 for Manifold/FCL; CMake 3.28 or later |
+| Native toolchain | Visual C++ with C++17 for OCCT, CGAL and SMLib, C++20 for Manifold and FCL, and CMake 3.28 or later |
 
 The repository root does not contain a `vcpkg.json` manifest. OCCT generation uses the installation
 under `VCPKG_ROOT`; the CGAL and Manifold Generator packages embed their locked profile manifests
-and registry configurations; FCL does the same for FCL, libccd, Eigen, and Octomap. A new platform,
-architecture, compiler ABI, or header scope requires
-fresh compiler and native-behavior proof.
+and registry configurations. FCL does the same for FCL, libccd, Eigen, and Octomap. SMLib builds
+from the pinned `externals/SMLib` source checkout. A new platform, architecture, compiler ABI, or
+header scope requires fresh compiler and native-behavior proof.
 
 ## Build and generate locally
 
@@ -199,6 +200,8 @@ MSVC object-path limits.
 | `TedToolkit.CppBindings.Fcl.Generator` | Locked FCL OBBRSS profile and deterministic paired-source generation |
 | `TedToolkit.CppBindings.Fcl.Runtime` | FCL diagnostic ownership and exception taxonomy |
 | `TedToolkit.CppBindings.Fcl.Windows` | Self-contained `win-x64` FCL binding and exact native closure |
+| `TedToolkit.CppBindings.Smlib.Generator` | Paired-source generation from an official USD BRep checkout |
+| `TedToolkit.CppBindings.Smlib.Windows` | Source-built `win-x64` SMLib binding and exact native closure |
 | `TedToolkit.CppBindings.Windows.Generation.Tool` | The only non-packable repository tool that runs each provider Generator and owns Windows generation, native build, caching, staging, and notices |
 | `Build` | Repository build, test, native fixture, and integration gates |
 

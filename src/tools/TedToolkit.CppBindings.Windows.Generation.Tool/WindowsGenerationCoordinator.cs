@@ -39,7 +39,10 @@ internal sealed partial class WindowsGenerationCoordinator(
         var descriptor = ProviderDescriptor.Create(options.Provider.ToLowerInvariant());
         var repository = Path.GetFullPath(options.RepositoryRoot.FullName);
         var output = Path.GetFullPath(options.OutputRoot.FullName);
-        var vcpkg = Path.GetFullPath(options.VcpkgRoot.FullName);
+        var vcpkg = descriptor.UsesVcpkg
+            ? Path.GetFullPath(options.VcpkgRoot?.FullName
+                ?? throw new ArgumentException("This provider requires --vcpkg-root.", nameof(options)))
+            : "";
         EnsureOwnedOutputRoot(repository, output);
 
         var mutexName = GetMutexName(descriptor, output);
@@ -146,7 +149,7 @@ internal sealed partial class WindowsGenerationCoordinator(
         Directory.CreateDirectory(output);
         EnsureExecutionDiskBoundary(output, $"{descriptor.DisplayName} generation");
         ResetGeneratedSourceDirectories(output);
-        await GenerateProviderAsync(descriptor, output, vcpkg, cancellationToken)
+        await GenerateProviderAsync(descriptor, repository, output, vcpkg, cancellationToken)
             .ConfigureAwait(false);
         ResetNativeBuildDirectory(output);
         EnsureExecutionDiskBoundary(output, $"{descriptor.DisplayName} native compilation");
@@ -165,12 +168,12 @@ internal sealed partial class WindowsGenerationCoordinator(
                 compiler,
                 nativeLibrary,
                 dependencyDirectory,
-                Path.Combine(vcpkg, "installed", "x64-windows", "bin"),
+                descriptor.UsesVcpkg ? Path.Combine(vcpkg, "installed", "x64-windows", "bin") : "",
                 output,
                 repository,
                 cancellationToken)
             .ConfigureAwait(false);
-        StageNotices(descriptor, output, vcpkg);
+        StageNotices(descriptor, output, descriptor.UsesVcpkg ? vcpkg : repository);
         WriteManagedManifestIfRequired(descriptor, output, managedManifest);
         if (descriptor.WriteOutputManifest)
         {
@@ -203,12 +206,13 @@ internal sealed partial class WindowsGenerationCoordinator(
 
     private Task GenerateProviderAsync(
         ProviderDescriptor descriptor,
+        string repository,
         string output,
         string vcpkg,
         CancellationToken cancellationToken)
     {
         return operations is null
-            ? ProviderGenerators.GenerateAsync(descriptor.Id, new(output), new(vcpkg), cancellationToken)
+            ? ProviderGenerators.GenerateAsync(descriptor.Id, new(output), new(repository), vcpkg, cancellationToken)
             : operations.GenerateAsync(descriptor, output, vcpkg, cancellationToken);
     }
 
@@ -402,11 +406,17 @@ internal sealed partial class WindowsGenerationCoordinator(
             "--fresh", "-G", "Visual Studio 18 2026", "-A", "x64",
             "-S", Path.Combine(output, "cpp"),
             "-B", Path.Combine(output, "native-build"),
-            $"-DCMAKE_TOOLCHAIN_FILE={Path.Combine(vcpkg, "scripts", "buildsystems", "vcpkg.cmake")}",
-            "-DVCPKG_TARGET_TRIPLET=x64-windows",
-            "-DVCPKG_APPLOCAL_DEPS=OFF",
         };
-        if (descriptor.ToolchainProfile is ToolchainProfileKind.Cgal)
+        if (descriptor.UsesVcpkg)
+        {
+            configureArguments.AddRange([
+                $"-DCMAKE_TOOLCHAIN_FILE={Path.Combine(vcpkg, "scripts", "buildsystems", "vcpkg.cmake")}",
+                "-DVCPKG_TARGET_TRIPLET=x64-windows",
+                "-DVCPKG_APPLOCAL_DEPS=OFF",
+            ]);
+        }
+
+        if (!descriptor.UsesVcpkg || descriptor.ToolchainProfile is ToolchainProfileKind.Cgal)
         {
             configureArguments.Add($"-DCMAKE_PROJECT_INCLUDE={Path.Combine(repository, "Build", "CgalCompilerIdentity.cmake")}");
         }
@@ -438,6 +448,11 @@ internal sealed partial class WindowsGenerationCoordinator(
         if (parts.Length is not 3 || !File.Exists(parts[2]))
         {
             throw new InvalidOperationException($"CMake selected an invalid compiler identity '{string.Join('|', parts)}'.");
+        }
+
+        if (!descriptor.UsesVcpkg)
+        {
+            return parts[2];
         }
 
         var expected = await ReadExpectedToolchainAsync(descriptor, output, cancellationToken).ConfigureAwait(false);
@@ -636,14 +651,14 @@ internal sealed partial class WindowsGenerationCoordinator(
         }
 
         var vcpkgStatus = Path.Combine(vcpkg, "installed", "vcpkg", "status");
-        if (File.Exists(vcpkgStatus))
+        if (descriptor.UsesVcpkg && File.Exists(vcpkgStatus))
         {
             files.Add(vcpkgStatus);
         }
 
         foreach (var notice in descriptor.Notices.Values)
         {
-            var path = Path.Combine(vcpkg, NormalizeRelativePath(notice));
+            var path = Path.Combine(descriptor.UsesVcpkg ? vcpkg : repository, NormalizeRelativePath(notice));
             if (File.Exists(path))
             {
                 files.Add(path);
@@ -894,7 +909,7 @@ internal sealed partial class WindowsGenerationCoordinator(
             : [];
     }
 
-    private static void StageNotices(ProviderDescriptor descriptor, string output, string vcpkg)
+    private static void StageNotices(ProviderDescriptor descriptor, string output, string noticeRoot)
     {
         if (descriptor.Notices.Count is 0)
         {
@@ -911,7 +926,7 @@ internal sealed partial class WindowsGenerationCoordinator(
         Directory.CreateDirectory(destination);
         foreach (var notice in descriptor.Notices)
         {
-            var source = Path.Combine(vcpkg, NormalizeRelativePath(notice.Value));
+            var source = Path.Combine(noticeRoot, NormalizeRelativePath(notice.Value));
             EnsureNonemptyFile(source, "Required notice input is missing");
             File.Copy(source, Path.Combine(destination, notice.Key));
         }
