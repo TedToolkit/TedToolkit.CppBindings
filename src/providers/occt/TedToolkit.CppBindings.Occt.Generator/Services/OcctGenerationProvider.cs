@@ -99,7 +99,7 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
                 .Where(dependency => catalog.ContainsKey(dependency.Type.CppTypeName))
                 .Select(static dependency => dependency.Type.CppTypeName))).ToArray();
         var managed = new List<BindingSourceDefinition>();
-        var admissionReport = "Target: win-x64; supported sequential native alignments: 1, 2, 4, 8.\n"
+        var admissionReport = $"Target: {_options.Value.RuntimeIdentifier}; supported native alignments: 1, 2, 4, 8.\n"
             + string.Join("\n", _records.UnsupportedDeclarations) + "\n";
         managed.Add(new BindingSourceDefinition("unsupported-declarations.txt",
             (writer, token) => writer.WriteAsync(admissionReport.AsMemory(), token)));

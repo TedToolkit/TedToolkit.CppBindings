@@ -28,10 +28,13 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
     {
         ArgumentNullException.ThrowIfNull(options);
         _options = options;
-        Profile = options.ProfileManifestFile is null
+        var manifest = options.ProfileManifestFile is null
             ? CgalProfileManifest.LoadDefault()
             : CgalProfileManifest.Load(options.ProfileManifestFile.Value);
-        ValidateOptions();
+        ValidateOptions(manifest);
+        Profile = options.ProfileManifestFile is null
+            ? SelectPlatformProfile(manifest, options.RuntimeIdentifier)
+            : manifest;
         Inventory = CgalProfileDiscovery.Resolve(options, Profile);
     }
 
@@ -144,19 +147,40 @@ public sealed class CgalGenerationProvider : SemanticGenerationProvider
         return new(path, (writer, token) => writer.WriteAsync(text.AsMemory(), token));
     }
 
-    private void ValidateOptions()
+    private static CgalProfileManifest SelectPlatformProfile(CgalProfileManifest profile, string runtimeIdentifier)
     {
-        if (!string.Equals(_options.ProfileId, Profile.ProfileId, StringComparison.Ordinal))
+        if (runtimeIdentifier == "win-x64")
+        {
+            return profile;
+        }
+
+        var triplet = runtimeIdentifier switch
+        {
+            "linux-x64" => "x64-linux",
+            "osx-arm64" => "arm64-osx",
+            _ => throw new NotSupportedException($"Unsupported CGAL target '{runtimeIdentifier}'."),
+        };
+        return profile with
+        {
+            ProfileId = $"epick-{triplet}-v2",
+            Triplet = triplet,
+            Toolchain = profile.Toolchain with { Msvc = "", },
+        };
+    }
+
+    private void ValidateOptions(CgalProfileManifest manifest)
+    {
+        if (!string.Equals(_options.ProfileId, manifest.ProfileId, StringComparison.Ordinal))
         {
             throw new InvalidOperationException(
-                $"Requested profile '{_options.ProfileId}' does not match manifest '{Profile.ProfileId}'.");
+                $"Requested profile '{_options.ProfileId}' does not match manifest '{manifest.ProfileId}'.");
         }
 
         if (_options.ProfileManifestFile is not null
-            || (string.Equals(Profile.CgalVersion, "6.2", StringComparison.Ordinal)
-                && string.Equals(Profile.Triplet, "x64-windows", StringComparison.Ordinal)
+            || (string.Equals(manifest.CgalVersion, "6.2", StringComparison.Ordinal)
+                && string.Equals(manifest.Triplet, "x64-windows", StringComparison.Ordinal)
                 && string.Equals(
-                    Profile.VcpkgBuiltinBaseline,
+                    manifest.VcpkgBuiltinBaseline,
                     "30ef65cad98f08e7197c9a1656fbd871bcb72f2d",
                     StringComparison.Ordinal)))
         {

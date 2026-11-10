@@ -247,7 +247,7 @@ internal static class FclFiniteProfile
                  find_package(fcl{{versionRequirement}} CONFIG REQUIRED)
                  add_library({{libraryBaseName}} SHARED {{sourceList}})
                  target_compile_features({{libraryBaseName}} PRIVATE cxx_std_20)
-                 target_compile_options({{libraryBaseName}} PRIVATE /MP1)
+                 target_compile_options({{libraryBaseName}} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP1>)
                  target_link_libraries({{libraryBaseName}} PRIVATE fcl)
                  """;
     }

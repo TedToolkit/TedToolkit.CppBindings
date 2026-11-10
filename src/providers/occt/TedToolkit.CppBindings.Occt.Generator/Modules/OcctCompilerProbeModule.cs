@@ -74,11 +74,12 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         try
         {
             var sourcePath = Path.Combine(temporaryDirectory.FullName, "probe.cpp");
-            var executablePath = Path.Combine(temporaryDirectory.FullName, "probe.exe");
+            var executablePath = Path.Combine(temporaryDirectory.FullName, OperatingSystem.IsWindows() ? "probe.exe" : "probe");
             await File.WriteAllTextAsync(sourcePath, CreateSource(records), cancellationToken)
                 .ConfigureAwait(false);
             await CompileAsync(sourcePath, executablePath, cancellationToken).ConfigureAwait(false);
-            CompleteRecords(records, await RunAsync(executablePath, cancellationToken).ConfigureAwait(false));
+            CompleteRecords(records, await RunAsync(executablePath, cancellationToken).ConfigureAwait(false),
+                verifyParsedAlignment: !OperatingSystem.IsWindows());
             return true;
         }
         finally
@@ -120,6 +121,12 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         CancellationToken cancellationToken)
     {
         var triplet = _options.Value.GetTriplet(_defaultsResolver);
+        if (!OperatingSystem.IsWindows())
+        {
+            await CompileUnixAsync(sourcePath, triplet, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var startInfo = CreateStartInfo("clang++");
         startInfo.ArgumentList.Add($"-std=c++{_options.Value.CppVersion}");
         startInfo.ArgumentList.Add("-I" + _vcpkgEnvironment.GetOcctIncludeFolder(triplet));
@@ -146,20 +153,78 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         _ = await RunProcessAsync(startInfo, cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task CompileUnixAsync(
+        string sourcePath,
+        string triplet,
+        CancellationToken cancellationToken)
+    {
+        var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
+        var buildDirectory = Path.Combine(sourceDirectory, "build");
+        var versionRequirement = _options.Value.NativeLibraryVersion is { } version ? $" {version} EXACT" : "";
+        var compilerOptions = string.Join(" ", _options.Value.CommandLineArgs.Select(QuoteCMakeArgument));
+        var dependencyIncludes = QuoteCMakeArgument(_vcpkgEnvironment.GetIncludeFolder(triplet).Replace('\\', '/'));
+        var source = $$"""
+            cmake_minimum_required(VERSION 3.28)
+            project(OcctCompilerProbe LANGUAGES CXX)
+            find_package(OpenCASCADE{{versionRequirement}} CONFIG REQUIRED)
+            add_executable(probe probe.cpp)
+            target_compile_features(probe PRIVATE cxx_std_{{_options.Value.CppVersion}})
+            target_include_directories(probe PRIVATE "${OpenCASCADE_INCLUDE_DIR}" {{dependencyIncludes}})
+            target_compile_options(probe PRIVATE {{compilerOptions}})
+            target_link_libraries(probe PRIVATE ${OpenCASCADE_LIBRARIES})
+            set_target_properties(probe PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
+            """;
+        await File.WriteAllTextAsync(Path.Combine(sourceDirectory, "CMakeLists.txt"), source, cancellationToken)
+            .ConfigureAwait(false);
+
+        var configure = CreateStartInfo("cmake");
+        string[] arguments =
+        [
+            "-S", sourceDirectory, "-B", buildDirectory, "-G", "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_CXX_COMPILER=clang++", "-DVCPKG_MANIFEST_MODE=OFF",
+            "-DCMAKE_TOOLCHAIN_FILE=" + Path.Combine(_vcpkgEnvironment.GetRoot(), "scripts", "buildsystems", "vcpkg.cmake"),
+            "-DVCPKG_TARGET_TRIPLET=" + triplet,
+        ];
+        foreach (var argument in arguments)
+        {
+            configure.ArgumentList.Add(argument);
+        }
+
+        if (triplet == "arm64-osx")
+        {
+            configure.ArgumentList.Add("-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0");
+        }
+
+        _ = await RunProcessAsync(configure, cancellationToken).ConfigureAwait(false);
+        var build = CreateStartInfo("cmake");
+        build.ArgumentList.Add("--build");
+        build.ArgumentList.Add(buildDirectory);
+        _ = await RunProcessAsync(build, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string QuoteCMakeArgument(string value)
+    {
+        var delimiter = "=";
+        while (value.Contains($"]{delimiter}]", StringComparison.Ordinal))
+        {
+            delimiter += "=";
+        }
+
+        return $"[{delimiter}[{value}]{delimiter}]";
+    }
+
     private Task<string> RunAsync(
         string executablePath,
         in CancellationToken cancellationToken)
     {
         var startInfo = CreateStartInfo(executablePath);
         var triplet = _options.Value.GetTriplet(_defaultsResolver);
-        var nativeDirectory = Path.Combine(
-            _vcpkgEnvironment.GetRoot(),
-            "installed",
-            triplet,
-            "bin");
-        startInfo.Environment["PATH"] = nativeDirectory
-                                        + Path.PathSeparator
-                                        + Environment.GetEnvironmentVariable("PATH");
+        if (OperatingSystem.IsWindows())
+        {
+            var nativeDirectory = Path.Combine(_vcpkgEnvironment.GetRoot(), "installed", triplet, "bin");
+            startInfo.Environment["PATH"] = nativeDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+        }
+
         return RunProcessAsync(startInfo, cancellationToken);
     }
 
@@ -200,10 +265,11 @@ public sealed class OcctCompilerProbeModule : Module<bool>
     /// </summary>
     /// <param name="records">The records in probe order.</param>
     /// <param name="output">The probe process output.</param>
+    /// <param name="verifyParsedAlignment">Whether parsed alignment must match the native compiler.</param>
     /// <exception cref="InvalidOperationException">
     /// The output is incomplete, malformed, duplicated, or disagrees with parsed size evidence.
     /// </exception>
-    internal static void CompleteRecords(RecordModel[] records, string output)
+    internal static void CompleteRecords(RecordModel[] records, string output, bool verifyParsedAlignment = false)
     {
         var lines = output.Split(['\r', '\n',], StringSplitOptions.RemoveEmptyEntries);
         if (lines.Length != records.Length)
@@ -231,11 +297,11 @@ public sealed class OcctCompilerProbeModule : Module<bool>
             }
 
             var record = records[index];
-            if (size != record.Size || alignment < 1)
+            if (size != record.Size || alignment < 1 || (verifyParsedAlignment && alignment != record.Alignment))
             {
                 throw new InvalidOperationException(
                     $"Native compiler probe disagrees with parsed layout for '{record.Type.CppTypeName}': "
-                    + $"size {size}/{record.Size}, alignment {alignment}.");
+                    + $"size {size}/{record.Size}, alignment {alignment}/{record.Alignment}.");
             }
 
             record.Alignment = alignment;

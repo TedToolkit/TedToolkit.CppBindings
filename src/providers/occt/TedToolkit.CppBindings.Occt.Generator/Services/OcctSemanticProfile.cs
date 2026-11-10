@@ -87,7 +87,7 @@ internal static class OcctSemanticProfile
             return layout.Alignment is 1 or 2 or 4 or 8
                 ? BindingAdmission.Admitted
                 : BindingAdmission.Reject(
-                    $"Native alignment {layout.Alignment} is not supported by win-x64 sequential storage.");
+                    $"Native alignment {layout.Alignment} is not supported by managed storage.");
         }
     }
 

@@ -171,6 +171,7 @@ internal sealed class RecordModelManager(
             .Where(f => isOcctType || f.Access is CX_CXXAccessSpecifier.CX_CXXPublic)
             .Where(options.Value.FieldTypeToGenerate)
             .Where(static f => IsDefined(f.Type))
+            .Where(field => HasProvedFieldStorage(result, field))
             .Select(field => ToModel(field, record, templateProjection))
             .ToArray();
         if (result.TemplateProjection is not null && !HasGenericPhysicalLayout(result))
@@ -216,6 +217,25 @@ internal sealed class RecordModelManager(
         NativeExportNameBuilder.Assign(result);
 
         return result;
+    }
+
+    private bool HasProvedFieldStorage(RecordModel record, FieldDecl field)
+    {
+        if (!field.IsBitField && field.Type.CanonicalType is not ReferenceType)
+        {
+            return true;
+        }
+
+        using var target = field.TranslationUnit.Handle.TargetInfo;
+        var triple = target.Triple.CString;
+        if (target.PointerWidth == 64 && triple.Contains("windows-msvc", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        _unsupportedDeclarations.Add($"field {field.Name} in {record.Type.CppTypeName}: storage is not proved for "
+            + $"{triple}; field omitted from the managed projection.");
+        return false;
     }
 
     private static bool HasGenericPhysicalLayout(RecordModel record)

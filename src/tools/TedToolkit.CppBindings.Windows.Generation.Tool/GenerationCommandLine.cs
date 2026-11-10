@@ -32,12 +32,23 @@ internal static class GenerationCommandLine
         var vcpkgRoot = provider.UsesVcpkg
             ? new DirectoryPath(Require(values, "--vcpkg-root"))
             : (DirectoryPath?)null;
+        var runtimeIdentifier = values.GetValueOrDefault("--runtime-identifier", "win-x64");
+        var generateOnly = values.GetValueOrDefault("--generate-only", "false");
+        if (runtimeIdentifier == "win-x64" ? generateOnly != "false"
+            : generateOnly != "true" || runtimeIdentifier is not ("linux-x64" or "osx-arm64"))
+        {
+            throw Usage();
+        }
+
         return new(
             provider,
             new(Require(values, "--repository-root")),
             new(Require(values, "--output-root")),
             vcpkgRoot,
-            Require(values, "--configuration"));
+            Require(values, "--configuration"))
+        {
+            RuntimeIdentifier = runtimeIdentifier,
+        };
     }
 
     private static string Require(IReadOnlyDictionary<string, string> values, string name)
@@ -54,7 +65,8 @@ internal static class GenerationCommandLine
     {
         return new(
             "Expected --provider <occt|cgal|manifold|fcl|smlib> --repository-root <path> "
-            + "--output-root <path> --configuration <name> and --vcpkg-root <path> for vcpkg providers.");
+            + "--output-root <path> --configuration <name> and --vcpkg-root <path> for vcpkg providers. "
+            + "On Linux and macOS pass --runtime-identifier <linux-x64|osx-arm64> --generate-only true.");
     }
 }
 
@@ -63,4 +75,7 @@ internal sealed record WindowsGenerationOptions(
     DirectoryPath RepositoryRoot,
     DirectoryPath OutputRoot,
     DirectoryPath? VcpkgRoot,
-    string Configuration);
+    string Configuration)
+{
+    internal string RuntimeIdentifier { get; init; } = "win-x64";
+}

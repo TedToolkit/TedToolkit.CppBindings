@@ -56,6 +56,11 @@ public sealed record CgalGenerationOptions : GenerationOptions
     public bool RequireLockedHeaderInventory { get; init; } = true;
 
     /// <summary>
+    /// Gets additional Clang arguments for discovery on the configured native target.
+    /// </summary>
+    public IReadOnlyList<string> CommandLineArgs { get; init; } = [];
+
+    /// <summary>
     /// Gets a value indicating whether installed packages, CMake, and MSVC must match the profile identity.
     /// </summary>
     public bool RequireLockedToolchain { get; init; } = true;

@@ -28,12 +28,14 @@ internal static class CgalCompilerDiscovery
     /// <param name="selectedHeaders">The finite profile roots.</param>
     /// <param name="reachableHeaders">The recursively closed CGAL header set.</param>
     /// <param name="profile">The closed profile whose projections must compile.</param>
+    /// <param name="commandLineArgs">Additional arguments for the target compiler.</param>
     /// <returns>The deterministic compiler declaration inventory.</returns>
     internal static IReadOnlyList<CgalCompilerDeclaration> Discover(
         string includeRoot,
         IReadOnlyList<string> selectedHeaders,
         IReadOnlySet<string> reachableHeaders,
-        CgalProfileManifest profile)
+        CgalProfileManifest profile,
+        IReadOnlyList<string> commandLineArgs)
     {
         var relay = string.Join(
             Environment.NewLine,
@@ -42,15 +44,16 @@ internal static class CgalCompilerDiscovery
             + CgalSemanticCatalog.RenderCompilerProbe(profile);
         using var unsaved = CXUnsavedFile.Create(RelayFileName, relay);
         using var index = CXIndex.Create();
-        var arguments = new string[]
-        {
+        string[] arguments =
+        [
             "-std=c++20",
             "-x",
             "c++",
             "-DCGAL_DEBUG",
             "-D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING",
             "-I" + includeRoot,
-        };
+            .. commandLineArgs,
+        ];
         var translationUnit = CXTranslationUnit.Parse(
             index,
             RelayFileName,

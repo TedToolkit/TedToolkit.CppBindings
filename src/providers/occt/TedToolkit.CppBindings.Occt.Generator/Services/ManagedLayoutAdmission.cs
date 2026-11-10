@@ -27,7 +27,7 @@ internal static class ManagedLayoutAdmission
         {
             _ = rejected.Add(record);
             diagnostics.Add($"record {record.Type.CppTypeName}: native alignment {record.Alignment} is not proved "
-                + "by win-x64 sequential storage (supported: 1, 2, 4, 8); declaration and its operations omitted.");
+                + "by managed storage (supported: 1, 2, 4, 8); declaration and its operations omitted.");
         }
 
         CloseInheritance(records, rejected, diagnostics);
