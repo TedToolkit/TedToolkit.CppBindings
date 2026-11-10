@@ -191,7 +191,7 @@ internal sealed class RecordModelManager(
             .SelectMany(ExpandDefaultArgumentOverloads)
             .GroupBy(GetProjectedMethodSignatureKey)
             .Select(SelectProjectedOverload)
-            .Where(method => IsInstantiableTemplateMember(result.Type.CppTypeName, method))
+            .Where(method => IsInstantiableTemplateMember(record, result.Type.CppTypeName, method))
             .ToArray();
 
         result.NativeRequiredHeaders = GetNativeRequiredHeaders(record);
@@ -1693,7 +1693,7 @@ internal sealed class RecordModelManager(
         ]);
     }
 
-    private static bool IsInstantiableTemplateMember(string cppTypeName, MethodModel method)
+    private static bool IsInstantiableTemplateMember(CXXRecordDecl record, string cppTypeName, MethodModel method)
     {
         // IntPolyh_Array<T>::Dump() requires T::Dump(). IntPolyh_Edge only provides Dump(int),
         // so this concrete member cannot be instantiated even though Clang exposes its declaration.
@@ -1710,6 +1710,15 @@ internal sealed class RecordModelManager(
         if (cppTypeName is "NCollection_Vec3<unsigned long>" or "NCollection_Vec3<unsigned long long>")
         {
             return method.MethodName is not "cwiseAbs";
+        }
+
+        if (method.NativeMethodName is "operator[]"
+            && cppTypeName.StartsWith("std::shared_ptr<", StringComparison.Ordinal)
+            && record is ClassTemplateSpecializationDecl { TemplateArgs: [var element,], }
+            && element.Kind is CXTemplateArgumentKind.CXTemplateArgumentKind_Type
+            && element.AsType.CanonicalType is not ArrayType)
+        {
+            return false;
         }
 
         if (cppTypeName is "BVH_PairTraverse<double, 3>"

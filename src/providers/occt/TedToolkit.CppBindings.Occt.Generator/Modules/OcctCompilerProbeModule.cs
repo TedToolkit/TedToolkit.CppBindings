@@ -380,8 +380,9 @@ public sealed class OcctCompilerProbeModule : Module<bool>
     private static bool CanGenerateImplicitValueDestructor(RecordModel record, string runtimeIdentifier)
     {
         // OCCT 8.0.1 defines BRepGraph_CacheMesh::Slot only inside the implementation.
-        // Apple Clang needs that definition to instantiate the explicit destructor call.
-        return runtimeIdentifier != "osx-arm64" || record.Type.CppTypeName != "BRepGraph_CacheMesh";
+        // Unix Clang needs that definition to instantiate the explicit destructor call.
+        return runtimeIdentifier is not ("linux-x64" or "osx-arm64")
+               || record.Type.CppTypeName != "BRepGraph_CacheMesh";
     }
 
     private static void AddHandleReleaseOperations(RecordModel[] records)
