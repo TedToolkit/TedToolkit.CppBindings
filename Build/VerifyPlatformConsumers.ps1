@@ -32,6 +32,7 @@ foreach ($name in @('Runtime', 'Occt.Runtime', 'Cgal.Runtime', 'Manifold.Runtime
 
 try {
     $nativeFiles = [System.Collections.Generic.Dictionary[string, string]]::new([StringComparer]::OrdinalIgnoreCase)
+    $nativeByProvider = @{}
     $nativePrefix = "runtimes/$Lane/native/"
     foreach ($provider in $providers) {
         $id = "TedToolkit.CppBindings.$provider.$platform"
@@ -58,6 +59,7 @@ try {
                 $nativeFiles[$entry.Name] = $hash
             }
             if ($names.Count -eq 0) { throw "$id contains no native assets for $Lane." }
+            $nativeByProvider[$provider] = $names
         }
         finally {
             $archive.Dispose()
@@ -118,7 +120,60 @@ $references
                 throw "$($dependency.Key) did not restore from the verified package."
             }
         }
-        dotnet run --project $project -c Release --no-restore --no-launch-profile -- $Lane
+        if ($Lane -eq 'win-x64') {
+            dotnet run --project $project -c Release --no-restore --no-launch-profile -- $Lane
+            continue
+        }
+
+        $output = Join-Path $consumer 'application'
+        dotnet build $project -c Release --no-restore -o $output
+        $trace = Join-Path $consumer 'loader.log'
+        $loaderVariables = @(
+            'LD_LIBRARY_PATH', 'LD_PRELOAD', 'LD_AUDIT', 'LD_DEBUG_OUTPUT',
+            'DYLD_LIBRARY_PATH', 'DYLD_FALLBACK_LIBRARY_PATH', 'DYLD_VERSIONED_LIBRARY_PATH',
+            'DYLD_FRAMEWORK_PATH', 'DYLD_FALLBACK_FRAMEWORK_PATH', 'DYLD_VERSIONED_FRAMEWORK_PATH',
+            'DYLD_INSERT_LIBRARIES', 'DYLD_ROOT_PATH')
+        $cleanEnvironment = @($loaderVariables | ForEach-Object { '-u'; $_ })
+        $traceSetting, $loadPattern = if ($Lane -eq 'linux-x64') {
+            'LD_DEBUG=libs', 'calling init:\s+(?<path>/\S.*)'
+        }
+        else {
+            'DYLD_PRINT_LIBRARIES=1', '^dyld\[\d+\]:\s+(?:<[^>]+>\s+)?(?<path>/\S.*)'
+        }
+        try {
+            env @cleanEnvironment $traceSetting dotnet (Join-Path $output 'Consumer.dll') $Lane *> $trace
+        }
+        catch {
+            Get-Content -LiteralPath $trace -Tail 40
+            throw
+        }
+
+        $allowedRoots = @(
+            (realpath $output) + '/'
+            (realpath $restoreCache) + '/')
+        $expected = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($provider in $selected) { $expected.UnionWith($nativeByProvider[$provider]) }
+        $loaded = [System.Collections.Generic.HashSet[string]]::new([StringComparer]::Ordinal)
+        foreach ($line in [IO.File]::ReadLines($trace)) {
+            $match = [regex]::Match($line, $loadPattern)
+            if (-not $match.Success) { continue }
+            $path = $match.Groups['path'].Value.Trim()
+            $name = [IO.Path]::GetFileName($path)
+            if (-not $nativeFiles.ContainsKey($name)) { continue }
+            if ($Lane -eq 'osx-arm64' -and ($path.StartsWith('/usr/lib/') -or $path.StartsWith('/System/Library/'))) {
+                continue
+            }
+            $resolved = realpath $path
+            if ($Lane -eq 'linux-x64' -and $resolved.StartsWith('/usr/lib/x86_64-linux-gnu/')) { continue }
+            if (-not ($allowedRoots | Where-Object { $resolved.StartsWith($_, [StringComparison]::Ordinal) })) {
+                throw "$scenario loaded $name outside the restored package or application directory: $resolved"
+            }
+            $null = $loaded.Add($name)
+        }
+        if (-not $expected.SetEquals($loaded)) {
+            throw "$scenario loaded an unexpected set of packaged native files: $($loaded -join ', '). Expected: $($expected -join ', ')."
+        }
+        Write-Output "$scenario loaded $($loaded.Count) verified native files on $Lane."
     }
 }
 finally {

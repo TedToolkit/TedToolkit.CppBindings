@@ -231,11 +231,13 @@ jobs:
         run: |
           if [[ "$LANE" == linux-x64 ]]; then
             sudo apt-get update
-            sudo apt-get install -y autoconf automake libtool ninja-build clang pkg-config patchelf binutils \
+            sudo apt-get install -y autoconf autoconf-archive automake libtool ninja-build clang pkg-config patchelf binutils \
               libgl-dev libglu1-mesa-dev libx11-dev libxext-dev libxi-dev libxmu-dev libxrandr-dev libxrender-dev
           else
             xcode-select -p
             ninja --version
+            HOMEBREW_NO_AUTO_UPDATE=1 HOMEBREW_NO_INSTALL_UPGRADE=1 \
+              brew install autoconf autoconf-archive automake libtool
           fi
           python -m pip install --disable-pip-version-check cmake==4.4.3
           cmake --version
@@ -345,6 +347,33 @@ jobs:
         run: |
           ./Build/ReleasePackages.ps1 -Mode Validate -Directory (Join-Path $env:RUNNER_TEMP 'release-packages') -Commit $env:GITHUB_SHA -Version $env:CPPBINDINGS_PACKAGE_VERSION
 
+  prepare-release:
+    needs: release-check
+    if: github.ref == 'refs/heads/development'
+    runs-on: ubuntu-24.04
+    permissions:
+      contents: read
+      pull-requests: write
+    concurrency:
+      group: cppbindings-release-pr
+    steps:
+      - name: Keep a draft release PR open
+        shell: bash
+        env:
+          GH_TOKEN: ${{ github.token }}
+        run: |
+          verified_head=$(gh api "repos/$GITHUB_REPOSITORY/git/ref/heads/development" --jq '.object.sha')
+          if [[ "$verified_head" != "$GITHUB_SHA" ]]; then
+            exit 0
+          fi
+          open_pr=$(gh pr list --repo "$GITHUB_REPOSITORY" --state open --head development --base main \
+            --json number --jq '.[0].number // empty')
+          ahead=$(gh api "repos/$GITHUB_REPOSITORY/compare/main...development" --jq '.ahead_by')
+          if [[ -z "$open_pr" && "$ahead" -gt 0 ]]; then
+            gh pr create --repo "$GITHUB_REPOSITORY" --draft --head development --base main \
+              --title "🔖 Release" --body "Verified Windows x64, Linux x64, and macOS Arm64 packages from $GITHUB_SHA."
+          fi
+
   publish:
     needs: [release-inputs, release-check]
     if: github.ref == 'refs/heads/main'
@@ -378,8 +407,18 @@ jobs:
           if ($tag.Count -gt 0 -and ($tag[-1] -split '\s+')[0] -cne $env:GITHUB_SHA) {
             throw "Release tag $version belongs to another commit."
           }
+          $headers = @{ Authorization = "Bearer $env:GH_TOKEN"; Accept = 'application/vnd.github+json' }
+          $releaseUrl = "$env:GITHUB_API_URL/repos/$env:GITHUB_REPOSITORY/releases/tags/$version"
+          $existing = $null
+          try {
+            $existing = Invoke-RestMethod -Uri $releaseUrl -Headers $headers -MaximumRedirection 0
+          }
+          catch {
+            if ($_.Exception -isnot [Microsoft.PowerShell.Commands.HttpResponseException] -or
+                [int]$_.Exception.Response.StatusCode -ne 404) { throw }
+          }
           ./Build/ReleasePackages.ps1 -Mode Publish -Directory (Join-Path $env:RUNNER_TEMP 'release-packages') -Commit $env:GITHUB_SHA -Version $version
-          $existing = gh release list --limit 100 --json tagName --jq ('any(.[]; .tagName == "' + $version + '")')
-          if ($existing -eq 'false') {
-            gh release create $version --target $env:GITHUB_SHA --title $version --generate-notes
+          if (-not $existing) {
+            $tagArgs = if ($tag.Count -gt 0) { @('--verify-tag') } else { @() }
+            gh release create $version --target $env:GITHUB_SHA --title $version --generate-notes @tagArgs
           }
