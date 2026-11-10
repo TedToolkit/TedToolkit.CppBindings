@@ -278,7 +278,6 @@ def build(args):
         configure.extend((
             f"-DCMAKE_TOOLCHAIN_FILE={vcpkg / 'scripts' / 'buildsystems' / 'vcpkg.cmake'}",
             f"-DVCPKG_TARGET_TRIPLET={triplet}",
-            f"-DVCPKG_OVERLAY_TRIPLETS={args.repository_root / 'Build' / 'UnixTriplets'}",
             "-DVCPKG_MANIFEST_MODE=OFF",
         ))
 

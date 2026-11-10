@@ -274,12 +274,15 @@ jobs:
           LANE: ${{ matrix.lane }}
         run: |
           $ErrorActionPreference = 'Stop'
-          $PSNativeCommandUseErrorActionPreference = $true
+          $PSNativeCommandUseErrorActionPreference = $false
           Copy-Item 'externals/TedToolkit/.editorconfig' .editorconfig
           $packages = Join-Path $env:RUNNER_TEMP $env:LANE
+          $failed = [System.Collections.Generic.List[string]]::new()
           foreach ($project in @(./Build/ReleasePackages.ps1 -Mode Projects -Lane $env:LANE)) {
             dotnet pack $project -c Release -o $packages -p:GeneratePackageOnBuild=false -p:ContinuousIntegrationBuild=true
+            if ($LASTEXITCODE -ne 0) { $failed.Add($project) }
           }
+          if ($failed.Count -gt 0) { throw "Failed to pack native providers: $($failed -join ', ')" }
       - uses: actions/upload-artifact@v4
         with:
           name: packed-${{ matrix.lane }}
