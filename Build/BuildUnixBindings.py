@@ -234,8 +234,8 @@ def stage_notices(args, destination, vcpkg, triplet):
         return
     installation = vcpkg / "installed"
     for name in installed_port_dependencies(installation, triplet, port):
-        # vcpkg's OpenGL port is an empty system package on Unix.
-        if name != "opengl":
+        # These vcpkg ports install no third-party headers or libraries.
+        if name not in {"opengl", "boost-uninstall"}:
             copy_notice(installation / triplet / "share" / name / "copyright",
                         destination / f"{name}.txt")
 

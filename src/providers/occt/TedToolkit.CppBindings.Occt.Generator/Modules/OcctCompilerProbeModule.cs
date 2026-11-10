@@ -79,7 +79,8 @@ public sealed class OcctCompilerProbeModule : Module<bool>
                 .ConfigureAwait(false);
             await CompileAsync(sourcePath, executablePath, cancellationToken).ConfigureAwait(false);
             CompleteRecords(records, await RunAsync(executablePath, cancellationToken).ConfigureAwait(false),
-                verifyParsedAlignment: !OperatingSystem.IsWindows());
+                verifyParsedAlignment: !OperatingSystem.IsWindows(),
+                runtimeIdentifier: _options.Value.RuntimeIdentifier);
             return true;
         }
         finally
@@ -264,10 +265,12 @@ public sealed class OcctCompilerProbeModule : Module<bool>
     /// <param name="records">The records in probe order.</param>
     /// <param name="output">The probe process output.</param>
     /// <param name="verifyParsedAlignment">Whether parsed alignment must match the native compiler.</param>
+    /// <param name="runtimeIdentifier">The native target runtime.</param>
     /// <exception cref="InvalidOperationException">
     /// The output is incomplete, malformed, duplicated, or disagrees with parsed size evidence.
     /// </exception>
-    internal static void CompleteRecords(RecordModel[] records, string output, bool verifyParsedAlignment = false)
+    internal static void CompleteRecords(
+        RecordModel[] records, string output, bool verifyParsedAlignment = false, string runtimeIdentifier = "win-x64")
     {
         var lines = output.Split(['\r', '\n',], StringSplitOptions.RemoveEmptyEntries);
         if (lines.Length != records.Length)
@@ -325,6 +328,7 @@ public sealed class OcctCompilerProbeModule : Module<bool>
             }
             else if (record.ObjectKind is NativeObjectKind.IntrusiveHandle
                      && isDestructible
+                     && CanGenerateImplicitValueDestructor(record, runtimeIdentifier)
                      && !record.MethodModels.Any(static method =>
                          method.Type is MethodModelType.VALUE_DELETE))
             {
@@ -371,6 +375,13 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         return !record.Type.CppTypeName.StartsWith(
             "std::unique_ptr<Geom_OsculatingSurface",
             StringComparison.Ordinal);
+    }
+
+    private static bool CanGenerateImplicitValueDestructor(RecordModel record, string runtimeIdentifier)
+    {
+        // OCCT 8.0.1 defines BRepGraph_CacheMesh::Slot only inside the implementation.
+        // Apple Clang needs that definition to instantiate the explicit destructor call.
+        return runtimeIdentifier != "osx-arm64" || record.Type.CppTypeName != "BRepGraph_CacheMesh";
     }
 
     private static void AddHandleReleaseOperations(RecordModel[] records)

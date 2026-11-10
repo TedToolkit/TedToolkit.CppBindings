@@ -1707,7 +1707,7 @@ internal sealed class RecordModelManager(
             return method.MethodName is not "Remove";
         }
 
-        if (cppTypeName is "NCollection_Vec3<unsigned long long>")
+        if (cppTypeName is "NCollection_Vec3<unsigned long>" or "NCollection_Vec3<unsigned long long>")
         {
             return method.MethodName is not "cwiseAbs";
         }

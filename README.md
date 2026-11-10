@@ -110,6 +110,9 @@ The packages target .NET 8. Linux consumers use the Ubuntu OpenGL and X11 system
 for OCCT. Each platform package supplies its app-local native dependencies. Use the verified
 OS versions when validating deployments.
 
+On macOS, the OCCT 8.0.1 bindings omit the by-value destruction entry point for
+`BRepGraph_CacheMesh` because Apple Clang requires a private type defined in the OCCT implementation.
+
 The [Build workflow](.github/workflows/build.yml) packs and verifies the three platform sets
 and checks their combined release inventory. It pushes those same archives on `main` after
 verification. If a feed push stops partway through, rerun the failed publish job while the

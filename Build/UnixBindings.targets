@@ -39,7 +39,8 @@
     <Error Condition="'$(BindingsProvider)' != 'smlib' and '$(VcpkgRoot)' == ''"
            Text="Set VcpkgRoot or VCPKG_ROOT to the pinned vcpkg installation." />
     <Exec Command="&quot;$(UnixBindingsPython)&quot; &quot;$(_UnixBindingsScript)&quot; --provider &quot;$(BindingsProvider)&quot; --runtime-identifier &quot;$(BindingsRuntimeIdentifier)&quot; --library-name &quot;$(BindingsLibraryName)&quot; --repository-root &quot;$(_UnixBindingsRepository)&quot; --output-root &quot;$(_UnixBindingsOutput)&quot; --generator &quot;@(UnixGenerationHost)&quot; --configuration &quot;$(Configuration)&quot;"
-          EnvironmentVariables="VCPKG_ROOT=$(VcpkgRoot)" />
+          EnvironmentVariables="VCPKG_ROOT=$(VcpkgRoot)"
+          IgnoreStandardErrorWarningFormat="true" />
     <ItemGroup>
       <Compile Include="$(_UnixBindingsOutput)csharp/**/*.cs" />
     </ItemGroup>
