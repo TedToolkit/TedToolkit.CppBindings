@@ -10,6 +10,7 @@
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TedToolkit.CppBindings.Windows.Generation.Tool" />
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
     <PackageReference Include="ClangSharp" />
     <PackageReference Include="libclang.runtime.win-x64" />

@@ -258,7 +258,7 @@ def build(args):
         os.environ.get("DOTNET_HOST_PATH") or "dotnet",
         args.generator, "--provider", args.provider, "--repository-root", args.repository_root,
         "--output-root", output, "--configuration", args.configuration,
-        "--runtime-identifier", args.runtime_identifier, "--generate-only", "true",
+        "--runtime-identifier", args.runtime_identifier,
     ]
     configure = [
         "cmake", "-S", output / "cpp", "-B", output / "native-build", "-G", "Ninja",
