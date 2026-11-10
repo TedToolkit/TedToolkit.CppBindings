@@ -125,7 +125,7 @@ internal static class HeaderCompilerDiscovery
                 }
             }
 
-            return new BindingFreeFunctionParameter(name, ProjectType(parameter.Type, qualifiedName, records));
+            return (name, ProjectType(parameter.Type, qualifiedName, records));
         }).ToArray();
         var isNoexcept = function.ExceptionSpecType is
             CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_BasicNoexcept
@@ -172,18 +172,17 @@ internal static class HeaderCompilerDiscovery
             throw UnsupportedType(type.Handle, context);
         }
 
-        var isRecordValue = !isReference && value is RecordType;
-        if (isRecordValue && value is RecordType record
-            && (records.Resolve(record, context).ObjectKind != NativeObjectKind.Value || native.SizeOf <= 0))
+        var record = value is RecordType nativeRecord ? records.Resolve(nativeRecord, context) : null;
+        if (!isReference && record is not null && (record.ObjectKind != NativeObjectKind.Value || native.SizeOf <= 0))
         {
             throw new NotSupportedException($"'{context}' requires a complete copyable value layout for '{native.Spelling.CString}'.");
         }
 
         return new(
             native.Spelling.CString,
-            ManagedType(value, context, records),
+            record?.Type.CSharpTypeName ?? ManagedType(value, context, records),
             isReference,
-            isReference && native.IsConstQualified) { IsRecordValue = isRecordValue, };
+            isReference && native.IsConstQualified) { IsRecordValue = !isReference && record is not null, };
     }
 
     private static string ManagedType(ClangSharp.Type type, string context, HeaderRecordDiscovery records)

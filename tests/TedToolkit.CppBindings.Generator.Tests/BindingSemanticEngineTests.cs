@@ -784,9 +784,12 @@ internal sealed class BindingSemanticEngineTests
     /// <summary>
     /// Verifies that header functions reuse a provider's record identity and preserve the member slot.
     /// </summary>
+    /// <param name="withFiniteProfile">Whether the provider also emits a finite native profile.</param>
     /// <returns>A task that completes after inspecting the shared plan.</returns>
     [Test]
-    public async Task Should_reuse_provider_layout_and_append_header_function_slots_Async()
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Should_reuse_provider_layout_and_append_header_function_slots_Async(bool withFiniteProfile)
     {
         var root = DirectoryPath.CreateTempSubdirectory("CppBindings.SharedHeaders.");
         try
@@ -796,8 +799,10 @@ internal sealed class BindingSemanticEngineTests
                 "struct Point { int value; int other; static int Measure(const int&) noexcept; };\n"
                 + "extern \"C\" Point Translate(Point value) noexcept;").ConfigureAwait(false);
             var declaration = CreateDeclaration("Point", "ExistingPoint", false, [], "Point_Measure");
+            var finiteApi = withFiniteProfile ? CreateManifoldShapedFiniteApi() : null;
             var model = new BindingProviderModel(
-                [declaration,], [], CreateEmissionProfile(), [], [], [], "source-stem", "source-stem", nativeProject: null);
+                [declaration,], [], CreateEmissionProfile(), [], [], [], "source-stem", "source-stem",
+                nativeProject: null, finiteProfileApis: finiteApi is null ? [] : [finiteApi,]);
             var provider = new HeaderTestProvider(CreateEngine([new TypeRule(true, "ExistingPoint"),]), model);
             var options = new GenerationOptions()
             {
@@ -809,13 +814,16 @@ internal sealed class BindingSemanticEngineTests
 
             var plan = await provider.CreatePlanAsync(options, CancellationToken.None).ConfigureAwait(false);
 
-            await Assert.That(plan.NativeExports[0]).IsEqualTo("Point_Measure");
-            await Assert.That(plan.NativeExports[2]).IsEqualTo("TedToolkit_FreeFunction_Call_Translate");
+            var finiteSlots = finiteApi?.NativeExportOrder ?? [];
+            var headerSlot = finiteSlots.Count + 2;
+            await Assert.That(plan.NativeExports.Take(finiteSlots.Count).SequenceEqual(finiteSlots)).IsTrue();
+            await Assert.That(plan.NativeExports[finiteSlots.Count]).IsEqualTo("Point_Measure");
+            await Assert.That(plan.NativeExports[headerSlot]).IsEqualTo("TedToolkit_FreeFunction_Call_Translate");
             await Assert.That(plan.CSharpSources.Any(static source => source.RelativePath == "Headers/Layouts.g.cs")).IsFalse();
             var functions = await RenderAsync(plan.CSharpSources.Single(static source =>
                 source.RelativePath == "Headers/Functions.g.cs")).ConfigureAwait(false);
             await Assert.That(functions).Contains("static ExistingPoint Translate(");
-            await Assert.That(functions).Contains("NativeApi.GetFunction(2)");
+            await Assert.That(functions).Contains($"NativeApi.GetFunction({headerSlot})");
         }
         finally
         {

@@ -34,4 +34,10 @@ public sealed record BindingFiniteProfileApi(
     string NativePreamble,
     string NativeUnknownExceptionMessage,
     IReadOnlyList<string> NativeExportOrder,
-    IReadOnlyList<BindingNativeExportDefinition> AdditionalNativeExports);
+    IReadOnlyList<BindingNativeExportDefinition> AdditionalNativeExports)
+{
+    /// <summary>
+    /// Gets the header profile's independent diagnostic policy and marks its slots for appending.
+    /// </summary>
+    internal BindingEmissionProfile? HeaderProfile { get; init; }
+}

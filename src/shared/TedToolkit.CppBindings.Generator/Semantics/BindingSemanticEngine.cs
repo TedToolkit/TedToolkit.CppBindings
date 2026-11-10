@@ -176,14 +176,6 @@ public sealed class BindingSemanticEngine
         var native = CreateNativeSources(model);
         native.AddRange(CreateFiniteProfileNativeSources(model));
         native.AddRange(model.Provider.NativeSources.Select(ToGeneratedSource));
-        if (model.Provider.HeaderApi is { } header)
-        {
-            managed.Add(new GeneratedSource(header.Api.ManagedRelativePath, (writer, token) =>
-                writer.WriteAsync(BindingFiniteProfileEmitter.RenderManaged(header.Api, header.Profile, slots).AsMemory(), token)));
-            native.Add(new GeneratedSource(header.Api.NativeRelativePath, (writer, token) =>
-                writer.WriteAsync(BindingFiniteProfileEmitter.RenderNative(header.Api, header.Profile).AsMemory(), token)));
-        }
-
         AddNativeProject(model.Provider.NativeProject, native);
         return new(managed, native, model.NativeExports);
     }
@@ -231,12 +223,7 @@ public sealed class BindingSemanticEngine
 
         foreach (var api in providerModel.FiniteProfileApis)
         {
-            BindingFiniteProfileValidator.Validate(api, providerModel.EmissionProfile);
-        }
-
-        if (providerModel.HeaderApi is { } header)
-        {
-            BindingFiniteProfileValidator.Validate(header.Api, header.Profile);
+            BindingFiniteProfileValidator.Validate(api, api.HeaderProfile ?? providerModel.EmissionProfile);
         }
 
         if (providerModel.NativeProject is null)
@@ -549,19 +536,15 @@ public sealed class BindingSemanticEngine
         IReadOnlyList<BindingSemanticDeclaration> declarations)
     {
         var declarationExports = declarations.SelectMany(static declaration => declaration.NativeExports);
-        var headerExports = providerModel.HeaderApi?.Api.NativeExportOrder ?? [];
-        if (providerModel.FiniteProfileApis.Count > 0)
-        {
-            return providerModel.FiniteProfileApis.SelectMany(static api => api.NativeExportOrder)
+        var apis = providerModel.FiniteProfileApis;
+        var providerApis = apis.Where(static api => api.HeaderProfile is null).ToArray();
+        var providerExports = providerApis.Length == 0
+            ? providerModel.NativeExports.Concat(declarationExports).Order(StringComparer.Ordinal)
+            : providerApis.SelectMany(static api => api.NativeExportOrder)
                 .Concat(providerModel.NativeExports.Order(StringComparer.Ordinal))
-                .Concat(declarationExports.Order(StringComparer.Ordinal))
-                .Concat(headerExports)
-                .ToArray();
-        }
-
-        return providerModel.NativeExports.Concat(declarationExports)
-            .Order(StringComparer.Ordinal)
-            .Concat(headerExports)
+                .Concat(declarationExports.Order(StringComparer.Ordinal));
+        return providerExports
+            .Concat(apis.Where(static api => api.HeaderProfile is not null).SelectMany(static api => api.NativeExportOrder))
             .ToArray();
     }
 

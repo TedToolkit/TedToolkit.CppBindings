@@ -333,32 +333,10 @@ internal static class BindingFiniteProfileValidator
             throw new ArgumentException($"Free function '{function.MethodName}' matches its containing type.");
         }
 
-        ValidateFreeFunctionType(function.ReturnType);
-        RequireCollection(function.Parameters, nameof(function.Parameters));
         foreach (var parameter in function.Parameters)
         {
             RequireIdentifier(parameter.Name, nameof(parameter.Name));
-            ValidateFreeFunctionType(parameter.Type);
-            if (parameter.Type.ManagedType == "void")
-            {
-                throw new ArgumentException($"Free function parameter '{parameter.Name}' cannot have type void.");
-            }
         }
-
-        EnsureUnique(function.Parameters.Select(static parameter => parameter.Name), "free function parameter");
-    }
-
-    private static void ValidateFreeFunctionType(BindingFreeFunctionType type)
-    {
-        ArgumentNullException.ThrowIfNull(type);
-        RequireText(type.NativeType, nameof(type.NativeType));
-        RequireText(type.ManagedType, nameof(type.ManagedType));
-        if (type.IsReference ? type.ManagedType != "void" : !type.IsReadOnly)
-        {
-            return;
-        }
-
-        throw new ArgumentException("The free function type has invalid reference qualifiers.", nameof(type));
     }
 
     private static void ValidateOwner(BindingFiniteProfileApi api, BindingOwnerParameterDefinition owner)

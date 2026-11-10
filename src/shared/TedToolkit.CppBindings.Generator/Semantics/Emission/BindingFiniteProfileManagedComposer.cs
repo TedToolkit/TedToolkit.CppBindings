@@ -62,7 +62,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
                      .GroupBy(GetContainingType, StringComparer.Ordinal))
         {
             var declaration = new TypeDeclaration(group.Key, TypeDeclarationType.CLASS).Static.Unsafe;
-            declaration = profile.IsInternal && group.All(static operation => operation is BindingFreeFunctionDefinition)
+            declaration = profile.IsInternal && api.HeaderProfile is not null
                 ? declaration.Internal
                 : declaration.Public;
             foreach (var operation in group)

@@ -39,7 +39,7 @@ internal sealed class BindingSemanticGraphSnapshot
             source.ManagedSourceStemEmitter,
             source.NativeSourceStemEmitter,
             source.NativeProject,
-            source.FiniteProfileApis) { HeaderApi = source.HeaderApi, };
+            source.FiniteProfileApis);
     }
 
     private BindingDeclaration CloneDeclaration(BindingDeclaration source)

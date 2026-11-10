@@ -100,11 +100,11 @@ internal static class HeaderBindingGeneration
             + includes + "\n\n" + records.GetNativeLayoutAssertions(),
             "An external C linkage function threw an unknown native exception.",
             operations.Select(static operation => operation.NativeExport).Prepend(profile.NativeErrorClearExport).ToArray(),
-            []);
+            []) { HeaderProfile = profile, };
         return new(
             declarations, model.Enums, model.EmissionProfile, model.ManagedSources, model.NativeSources,
             model.NativeExports, model.ManagedSourceStemEmitter, model.NativeSourceStemEmitter, model.NativeProject,
-            model.FiniteProfileApis) { HeaderApi = (api, profile), };
+            model.FiniteProfileApis.Append(api));
     }
 
     private static BindingEmissionProfile CreateEmissionProfile(string managedNamespace, bool isInternal, string exportPrefix)

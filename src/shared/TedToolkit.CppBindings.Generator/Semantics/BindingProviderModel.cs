@@ -109,11 +109,6 @@ public sealed class BindingProviderModel
     /// </summary>
     public IReadOnlyList<BindingFiniteProfileApi> FiniteProfileApis { get; }
 
-    /// <summary>
-    /// Gets the shared header functions and their independent diagnostic exports.
-    /// </summary>
-    internal (BindingFiniteProfileApi Api, BindingEmissionProfile Profile)? HeaderApi { get; init; }
-
     private static BindingFiniteProfileApi SnapshotFiniteProfileApi(BindingFiniteProfileApi source)
     {
         ArgumentNullException.ThrowIfNull(source);
@@ -141,7 +136,7 @@ public sealed class BindingProviderModel
             source.NativePreamble,
             source.NativeUnknownExceptionMessage,
             Array.AsReadOnly(source.NativeExportOrder.ToArray()),
-            Array.AsReadOnly(source.AdditionalNativeExports.ToArray()));
+            Array.AsReadOnly(source.AdditionalNativeExports.ToArray())) { HeaderProfile = source.HeaderProfile?.Snapshot(), };
     }
 
     private static BindingFiniteOperationDefinition SnapshotOperation(BindingFiniteOperationDefinition source)
