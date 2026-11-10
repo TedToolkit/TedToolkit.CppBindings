@@ -52,6 +52,8 @@ internal sealed class RecordModelManager(
 
     private readonly List<string> _unsupportedDeclarations = [];
 
+    private Dictionary<string, string>? _unixHeaderOwners;
+
     private bool _managedTemplateReferencesFinalized;
 
     private RecordModel[] _managedRecords = [];
@@ -152,7 +154,7 @@ internal sealed class RecordModelManager(
             IsPubliclyAccessible = IsPubliclyAccessible(record),
             IsClosedTemplateSpecialization = IsClosedTemplateSpecialization(record),
             DescriptionItems = commentProjection.DescriptionItems,
-            SourceHeader = Path.GetFileName(file.Name.CString),
+            SourceHeader = GetNativeHeader(record, file.Name.CString),
             Type = projectedType,
             Size = size,
             Alignment = clang.Type_getAlignOf(type),
@@ -1218,13 +1220,13 @@ internal sealed class RecordModelManager(
         return ApplyRequiredHeaders(result.Type, type);
     }
 
-    private static TypeModel ApplyRequiredHeaders(TypeModel typeModel, ClangSharp.Type type)
+    private TypeModel ApplyRequiredHeaders(TypeModel typeModel, ClangSharp.Type type)
     {
         typeModel.RequiredHeaders = GetRequiredHeaders(type);
         return typeModel;
     }
 
-    private static IReadOnlyList<string> GetRequiredHeaders(ClangSharp.Type type)
+    private IReadOnlyList<string> GetRequiredHeaders(ClangSharp.Type type)
     {
         var headers = new HashSet<string>(StringComparer.Ordinal);
         var visitedTypes = new HashSet<CXType>();
@@ -1235,7 +1237,7 @@ internal sealed class RecordModelManager(
         return [.. headers,];
     }
 
-    private static void CollectRequiredHeaders(
+    private void CollectRequiredHeaders(
         ClangSharp.Type? type,
         HashSet<string> headers,
         HashSet<CXType> visitedTypes,
@@ -1296,7 +1298,7 @@ internal sealed class RecordModelManager(
         }
     }
 
-    private static void CollectRequiredHeaders(
+    private void CollectRequiredHeaders(
         TemplateArgument templateArgument,
         HashSet<string> headers,
         HashSet<CXType> visitedTypes,
@@ -1318,7 +1320,7 @@ internal sealed class RecordModelManager(
         }
     }
 
-    private static void AddHeader(Decl decl, HashSet<string> headers, HashSet<CXCursor> visitedDecls)
+    private void AddHeader(Decl decl, HashSet<string> headers, HashSet<CXCursor> visitedDecls)
     {
         if (!visitedDecls.Add(decl.Handle))
         {
@@ -1331,10 +1333,59 @@ internal sealed class RecordModelManager(
             return;
         }
 
-        var header = Path.GetFileName(file.Name.CString);
+        var header = GetNativeHeader(decl, file.Name.CString);
         headers.Add(string.Equals(header, "winnt.h", StringComparison.OrdinalIgnoreCase)
             ? "Windows.h"
             : header);
+    }
+
+    private string GetNativeHeader(Decl declaration, string path)
+    {
+        if (options.Value.RuntimeIdentifier is "linux-x64" or "osx-arm64")
+        {
+            _unixHeaderOwners ??= FindUnixHeaderOwners(declaration.TranslationUnit.Handle);
+            if (_unixHeaderOwners.TryGetValue(path, out var owner))
+            {
+                return owner;
+            }
+        }
+
+        return Path.GetFileName(path);
+    }
+
+    private unsafe Dictionary<string, string> FindUnixHeaderOwners(CXTranslationUnit unit)
+    {
+        var triplet = options.Value.GetTriplet(defaultsResolver);
+        var includeRoot = Path.TrimEndingDirectorySeparator(vcpkgEnvironment.GetOcctIncludeFolder(triplet));
+        var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+        unit.GetInclusions((file, stack, depth, _) =>
+        {
+            using var includedFile = ((CXFile)file).Name;
+            var path = includedFile.CString;
+            if (IsOcctHeader(path))
+            {
+                return;
+            }
+
+            // SDK internals are reached through the public OCCT header that brought them into the translation unit.
+            for (var index = 0u; index < depth; index++)
+            {
+                stack[index].GetFileLocation(out var includingFile, out uint _, out uint _, out uint _);
+                using var includingName = includingFile.Name;
+                var includingPath = includingName.CString;
+                if (IsOcctHeader(includingPath))
+                {
+                    owners.TryAdd(path, Path.GetFileName(includingPath));
+                    break;
+                }
+            }
+        }, default);
+        return owners;
+
+        bool IsOcctHeader(string path)
+        {
+            return string.Equals(Path.GetDirectoryName(path), includeRoot, StringComparison.Ordinal);
+        }
     }
 
     private static bool TryGetEnumDecl(ClangSharp.Type type, [NotNullWhen(true)] out EnumDecl? enumDecl)
