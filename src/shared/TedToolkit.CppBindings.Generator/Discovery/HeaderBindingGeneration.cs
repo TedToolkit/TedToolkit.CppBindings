@@ -38,7 +38,7 @@ internal static class HeaderBindingGeneration
                 options.CppVersion,
                 [],
                 compileDefinitions: options.CompileDefinitions.Select(QuoteCMakeArgument),
-                compileOptions: ["/EHs", "/EHc-",],
+                compileOptions: ["$<$<CXX_COMPILER_ID:MSVC>:/EHs>", "$<$<CXX_COMPILER_ID:MSVC>:/EHc->",],
                 includeDirectories: GetIncludeDirectories(options).Select(QuotePath),
                 linkLibraries: GetLinkLibraries(options).Select(QuotePath))
             { LinkDirectories = GetLinkDirectories(options).Select(QuotePath).ToArray(), }));
@@ -67,14 +67,16 @@ internal static class HeaderBindingGeneration
             return model;
         }
 
-        if (options.RuntimeIdentifier != "win-x64")
+        var (triple, longSize, wideCharSize) = options.RuntimeIdentifier switch
         {
-            throw new NotSupportedException("Shared header discovery currently requires the win-x64 MSVC ABI.");
-        }
+            "win-x64" => ("x86_64-pc-windows-msvc", 4, 2),
+            "linux-x64" => ("x86_64-unknown-linux-gnu", 8, 4),
+            _ => throw new NotSupportedException($"Shared header discovery does not support '{options.RuntimeIdentifier}'."),
+        };
 
         string[] arguments =
         [
-            "-x", "c++", "--target=x86_64-pc-windows-msvc", "-std=c++" + options.CppVersion,
+            "-x", "c++", "--target=" + triple, "-std=c++" + options.CppVersion,
             .. includeDirectories.Select(static directory => "-I" + directory),
             .. options.CompileDefinitions.Select(static definition => "-D" + definition),
         ];
@@ -93,6 +95,8 @@ internal static class HeaderBindingGeneration
         var operations = functions.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
             .Select(pair => pair.Value with { NativeExport = exportPrefix + "Call_" + pair.Key, })
             .ToArray();
+        var abiCheck = $"static_assert(sizeof(void*) == 8 && sizeof(long) == {longSize} && "
+            + $"sizeof(wchar_t) == {wideCharSize}, \"Header target ABI mismatch\");\n";
         var api = new BindingFiniteProfileApi(
             "Headers/Functions.g.cs",
             "Headers/Functions.cpp",
@@ -100,7 +104,7 @@ internal static class HeaderBindingGeneration
             operations,
             "#include <cstdlib>\n#include <cstring>\n#include <memory>\n#include <new>\n#include <stdexcept>\n"
             + "#include <typeinfo>\n#include <type_traits>\n#include <cstddef>\n"
-            + includes + "\n\n" + records.GetNativeLayoutAssertions(),
+            + includes + "\n\n" + abiCheck + records.GetNativeLayoutAssertions(),
             "An external C linkage function threw an unknown native exception.",
             operations.Select(static operation => operation.NativeExport).Prepend(profile.NativeErrorClearExport).ToArray(),
             []) { HeaderProfile = profile, };
@@ -148,10 +152,11 @@ internal static class HeaderBindingGeneration
         var nativeHeaders = options.NativeInputs is { } inputs
             ? inputs.PublicHeaders.Select(header => new BindingHeader(new FilePath(Path.GetFullPath(header, inputs.IncludeRoot.FullName))))
             : [];
+        var pathComparer = OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal;
         return nativeHeaders.Concat(options.Headers)
-            .GroupBy(static header => Path.GetFullPath(header.Path.FullName), StringComparer.OrdinalIgnoreCase)
-            .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static group => group.Key, static group => GetWrapperName(group.Last()), StringComparer.OrdinalIgnoreCase);
+            .GroupBy(static header => Path.GetFullPath(header.Path.FullName), pathComparer)
+            .OrderBy(static group => group.Key, pathComparer)
+            .ToDictionary(static group => group.Key, static group => GetWrapperName(group.Last()), pathComparer);
     }
 
     private static IEnumerable<string> GetIncludeDirectories(GenerationOptions options)
@@ -161,7 +166,7 @@ internal static class HeaderBindingGeneration
             : [];
         return nativeDirectories.Concat(options.IncludeDirectories)
             .Select(static path => Path.GetFullPath(path.FullName))
-            .Distinct(StringComparer.OrdinalIgnoreCase);
+            .Distinct(OperatingSystem.IsWindows() ? StringComparer.OrdinalIgnoreCase : StringComparer.Ordinal);
     }
 
     private static IEnumerable<string> GetLinkDirectories(GenerationOptions options)
@@ -185,18 +190,11 @@ internal static class HeaderBindingGeneration
             .Concat(model.Enums.Select(static value => value.Name))
             .Concat(model.FiniteProfileApis.SelectMany(BindingFiniteProfileManagedComposer.GetDeclaredTypeNames))
             .ToHashSet(StringComparer.Ordinal);
-        var methods = new HashSet<(string ContainingType, string MethodName)>();
         foreach (var function in functions)
         {
             if (typeNames.Contains(function.ContainingType))
             {
                 throw new InvalidOperationException($"Wrapper name '{function.ContainingType}' conflicts with a generated type.");
-            }
-
-            if (function.MethodName == function.ContainingType || !methods.Add((function.ContainingType, function.MethodName)))
-            {
-                throw new InvalidOperationException(
-                    $"Method '{function.MethodName}' is not unique in wrapper '{function.ContainingType}'.");
             }
         }
     }

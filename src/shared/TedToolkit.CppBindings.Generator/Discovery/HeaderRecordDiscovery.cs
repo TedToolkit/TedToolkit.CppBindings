@@ -160,12 +160,11 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
         }
 
         var type = HeaderCompilerDiscovery.ProjectType(field.Type, recordName + "." + field.Name, this);
-        if (type.IsReference)
+        if (type.Transport.FirstIndirection is TypeIndirectionKind.LValueReference)
         {
             throw new NotSupportedException($"'{recordName}.{field.Name}' uses reference storage.");
         }
 
-        var managed = new DataType(type.ManagedType);
         return new()
         {
             Name = field.Name,
@@ -174,13 +173,7 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
             Alignment = native.AlignOf,
             IsManagedStoragePrivate = native.IsConstQualified || field.Access != CX_CXXAccessSpecifier.CX_CXXPublic,
             DescriptionItems = [],
-            Type = new()
-            {
-                CppTypeName = type.NativeType,
-                CSharpPInvokeType = managed,
-                CSharpPublicType = managed,
-                IsRecord = type.IsRecordValue,
-            },
+            Type = type,
         };
     }
 

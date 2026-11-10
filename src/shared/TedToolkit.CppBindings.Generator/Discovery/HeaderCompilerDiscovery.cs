@@ -11,6 +11,8 @@ using ClangSharp.Interop;
 using Microsoft.CodeAnalysis.CSharp;
 
 using TedToolkit.CppBindings.Generator.Semantics;
+using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
 namespace TedToolkit.CppBindings.Generator;
 
@@ -45,6 +47,8 @@ internal static class HeaderCompilerDiscovery
         using var unit = TranslationUnit.GetOrCreate(translationUnit);
         ThrowForDiagnostics(translationUnit);
         ValidateInclusions(translationUnit, options);
+        var platformConvention = options.RuntimeIdentifier == "win-x64" ? CXCallingConv.CXCallingConv_Win64
+            : CXCallingConv.CXCallingConv_X86_64SysV;
 
         var functions = new Dictionary<string, BindingFreeFunctionDefinition>(StringComparer.Ordinal);
         var pending = new Stack<Cursor>(unit.TranslationUnitDecl.CursorChildren.Reverse());
@@ -64,7 +68,7 @@ internal static class HeaderCompilerDiscovery
                      && headers.TryGetValue(header, out var wrapper)
                      && GetQualifiedName(function) is { } qualifiedName)
             {
-                functions.Add(function.Spelling, Project(function, qualifiedName, wrapper, records));
+                functions.Add(function.Spelling, Project(function, qualifiedName, wrapper, records, platformConvention));
             }
         }
 
@@ -122,13 +126,14 @@ internal static class HeaderCompilerDiscovery
         FunctionDecl function,
         string qualifiedName,
         string wrapperClassName,
-        HeaderRecordDiscovery records)
+        HeaderRecordDiscovery records,
+        CXCallingConv platformConvention)
     {
         if (function.IsVariadic || function.Type.CanonicalType is not FunctionProtoType prototype
-            || prototype.Handle.FunctionTypeCallingConv is not
-                (CXCallingConv.CXCallingConv_C or CXCallingConv.CXCallingConv_Win64))
+            || (prototype.Handle.FunctionTypeCallingConv != CXCallingConv.CXCallingConv_C
+                && prototype.Handle.FunctionTypeCallingConv != platformConvention))
         {
-            throw new NotSupportedException($"Free function '{qualifiedName}' must have a fixed Windows x64 C ABI.");
+            throw new NotSupportedException($"Free function '{qualifiedName}' must have a fixed platform-default C ABI.");
         }
 
         var usedNames = new HashSet<string>(StringComparer.Ordinal);
@@ -157,7 +162,9 @@ internal static class HeaderCompilerDiscovery
             methodName,
             qualifiedName,
             returnType,
-            returnType.IsReference ? returnType.NativeType + "&" : NativeTypeSpelling(function.ReturnType.Handle.CanonicalType),
+            returnType.Transport.FirstIndirection is TypeIndirectionKind.LValueReference
+                ? returnType.CppTypeName
+                : NativeTypeSpelling(function.ReturnType.Handle.CanonicalType),
             parameters,
             function.Spelling,
             isNoexcept);
@@ -182,28 +189,43 @@ internal static class HeaderCompilerDiscovery
     /// <param name="records">The shared record discovery context.</param>
     /// <returns>The callable and field type projection.</returns>
     /// <exception cref="NotSupportedException">The type has no supported value or reference transport.</exception>
-    internal static BindingFreeFunctionType ProjectType(ClangSharp.Type type, string context, HeaderRecordDiscovery records)
+    internal static TypeModel ProjectType(ClangSharp.Type type, string context, HeaderRecordDiscovery records)
     {
         type = type.CanonicalType;
+        var transport = TypeTransportModel.FromClang(type, out var terminal);
         var isReference = type is LValueReferenceType;
         var value = isReference ? type.PointeeType.CanonicalType : type;
         var native = isReference ? value.Handle : value.Handle.UnqualifiedType;
-        if (isReference && native.IsVolatileQualified)
+        if (type is RValueReferenceType || (isReference && native.IsVolatileQualified))
         {
             throw UnsupportedType(type.Handle, context);
         }
 
-        var record = value is RecordType nativeRecord ? records.Resolve(nativeRecord, context) : null;
-        if (!isReference && record is not null && (record.ObjectKind != NativeObjectKind.Value || native.SizeOf <= 0))
+        var record = terminal is RecordType nativeRecord ? records.Resolve(nativeRecord, context) : null;
+        if (transport.FirstIndirection is null && record is not null
+            && (record.ObjectKind != NativeObjectKind.Value || native.SizeOf <= 0))
         {
             throw new NotSupportedException($"'{context}' requires a complete copyable value layout for '{native.Spelling.CString}'.");
         }
 
-        return new(
-            NativeTypeSpelling(native),
-            record?.Type.CSharpTypeName ?? ManagedType(value, context, records),
-            isReference,
-            isReference && native.IsConstQualified) { IsRecordValue = !isReference && record is not null, };
+        var pointerDepth = transport.Indirections.Count(static item => item.Kind is TypeIndirectionKind.PointerIndirection);
+        var managed = (record?.Type.CSharpTypeName ?? ManagedScalar(terminal.Handle, context)) + new string('*', pointerDepth);
+        var publicType = new DataType(managed);
+        if (isReference)
+        {
+            publicType = transport.ReferencedValueIsConst ? publicType.RefReadonly : publicType.Ref;
+        }
+
+        return new()
+        {
+            CppTypeName = NativeTypeSpelling(native) + (isReference ? "&" : ""),
+            CppValueTypeName = terminal.Handle.UnqualifiedType.Spelling.CString,
+            CSharpPInvokeType = new(managed + (isReference ? "*" : "")),
+            CSharpPublicType = publicType,
+            IsRecord = record is not null,
+            ReferencedRecord = record,
+            Transport = transport,
+        };
     }
 
     /// <summary>
@@ -244,16 +266,6 @@ internal static class HeaderCompilerDiscovery
         return spelling.Insert(qualifiedName.Length - name.Length, tag);
     }
 
-    private static string ManagedType(ClangSharp.Type type, string context, HeaderRecordDiscovery records)
-    {
-        return type switch
-        {
-            RecordType record => records.Resolve(record, context).Type.CSharpTypeName,
-            PointerType pointer => ManagedType(pointer.PointeeType.CanonicalType, context, records) + "*",
-            _ => ManagedScalar(type.Handle, context),
-        };
-    }
-
     private static string ManagedScalar(CXType type, string functionName)
     {
         return type.kind switch
@@ -263,14 +275,19 @@ internal static class HeaderCompilerDiscovery
             CXTypeKind.CXType_Char_S or CXTypeKind.CXType_SChar => "sbyte",
             CXTypeKind.CXType_Char_U or CXTypeKind.CXType_UChar => "byte",
             CXTypeKind.CXType_Short => "short",
-            CXTypeKind.CXType_UShort or CXTypeKind.CXType_WChar => "ushort",
+            CXTypeKind.CXType_UShort => "ushort",
+            CXTypeKind.CXType_WChar when type.SizeOf == 2 => "ushort",
+            CXTypeKind.CXType_WChar when type.SizeOf == 4 => "int",
             CXTypeKind.CXType_Char16 => "char",
-            CXTypeKind.CXType_Int or CXTypeKind.CXType_Long => "int",
-            CXTypeKind.CXType_UInt or CXTypeKind.CXType_ULong or CXTypeKind.CXType_Char32 => "uint",
-            CXTypeKind.CXType_LongLong => "long",
-            CXTypeKind.CXType_ULongLong => "ulong",
+            CXTypeKind.CXType_Int => "int",
+            CXTypeKind.CXType_UInt or CXTypeKind.CXType_Char32 => "uint",
+            CXTypeKind.CXType_Long when type.SizeOf == 4 => "int",
+            CXTypeKind.CXType_ULong when type.SizeOf == 4 => "uint",
+            CXTypeKind.CXType_Long or CXTypeKind.CXType_LongLong when type.SizeOf == 8 => "long",
+            CXTypeKind.CXType_ULong or CXTypeKind.CXType_ULongLong when type.SizeOf == 8 => "ulong",
             CXTypeKind.CXType_Float => "float",
-            CXTypeKind.CXType_Double or CXTypeKind.CXType_LongDouble => "double",
+            CXTypeKind.CXType_Double => "double",
+            CXTypeKind.CXType_LongDouble when type.SizeOf == 8 => "double",
             CXTypeKind.CXType_Enum => ManagedScalar(type.Declaration.EnumDecl_IntegerType.CanonicalType, functionName),
             _ => throw UnsupportedType(type, functionName),
         };

@@ -67,7 +67,7 @@ public record GenerationOptions
     /// <summary>
     /// Gets the native target RID available to the generation provider.
     /// </summary>
-    /// <remarks>Shared source emission uses the C++ compiler's target and does not filter RIDs.</remarks>
+    /// <remarks>Shared header discovery supports <c>win-x64</c> and <c>linux-x64</c>.</remarks>
     public string RuntimeIdentifier { get; init; } = "win-x64";
 
     /// <summary>

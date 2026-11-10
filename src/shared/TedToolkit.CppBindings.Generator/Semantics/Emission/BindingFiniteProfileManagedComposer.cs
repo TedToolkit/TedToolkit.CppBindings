@@ -381,14 +381,9 @@ internal sealed class BindingFiniteProfileManagedComposer(
     private Method ComposeFreeFunction(BindingFreeFunctionDefinition function)
     {
         var result = function.ReturnType;
-        var returnType = new DataType(result.ManagedType);
-        if (result.IsReference)
-        {
-            returnType = result.IsReadOnly ? returnType.RefReadonly : returnType.Ref;
-        }
-
-        var declaration = new Method(function.MethodName, ReturnType(returnType)).Public.Static;
-        if (result.IsReference)
+        var returnsReference = result.Transport.FirstIndirection is TypeIndirectionKind.LValueReference;
+        var declaration = new Method(function.MethodName, ReturnType(result.CSharpPublicType)).Public.Static;
+        if (returnsReference)
         {
             declaration.AddRootDescription(new DescriptionRemarks([
                 new DescriptionText("The returned reference is borrowed from native storage. "
@@ -407,13 +402,14 @@ internal sealed class BindingFiniteProfileManagedComposer(
 
         foreach (var parameter in function.Parameters)
         {
-            var type = new DataType(parameter.Type.ManagedType);
-            types.Add(parameter.Type.ManagedTransportType);
-            if (parameter.Type.IsReference)
+            var type = parameter.Type.CSharpPublicType;
+            types.Add(parameter.Type.CSharpPInvokeType.ToCode() + (parameter.Type.IsRecordValue ? "*" : ""));
+            if (parameter.Type.Transport.FirstIndirection is TypeIndirectionKind.LValueReference)
             {
-                type = parameter.Type.IsReadOnly ? type.In : type.Ref;
+                var valueType = parameter.Type.ManagedValueType;
                 var pointerName = local + "Arg" + arguments.Count;
-                pins.Add((parameter.Type.ManagedType, pointerName, "&" + parameter.Name));
+                pins.Add((valueType.ToCode(), pointerName, "&" + parameter.Name));
+                type = parameter.Type.Transport.ReferencedValueIsConst ? valueType.In : valueType.Ref;
                 arguments.Add(pointerName);
             }
             else
@@ -428,9 +424,9 @@ internal sealed class BindingFiniteProfileManagedComposer(
         var resultName = local + "Result";
         if (result.IsRecordValue)
         {
-            types.Add(result.ManagedTransportType);
+            types.Add(result.CSharpPInvokeType.ToCode() + "*");
             arguments.Add("&" + resultName);
-            statements.Add(result.ManagedType + " " + resultName + " = default;");
+            statements.Add(result.CSharpTypeName + " " + resultName + " = default;");
         }
 
         var error = local + "Error";
@@ -441,10 +437,10 @@ internal sealed class BindingFiniteProfileManagedComposer(
             statements.Add("global::TedToolkit.CppBindings.NativeError " + error + " = default;");
         }
 
-        types.Add(result.IsRecordValue ? "void" : result.ManagedTransportType);
+        types.Add(result.IsRecordValue ? "void" : result.CSharpPInvokeType.ToCode());
         var nativeApi = "global::" + profile.CSharpNamespace + ".NativeApi";
         var invocation = Invoke(function.NativeExport, types, arguments, nativeApi);
-        var hasResult = result.ManagedType != "void";
+        var hasResult = result.CSharpTypeName != "void";
         statements.Add(hasResult && !result.IsRecordValue ? "var " + resultName + " = " + invocation : invocation);
         if (!function.IsNoexcept)
         {
@@ -453,7 +449,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
 
         if (hasResult)
         {
-            statements.Add("return " + (result.IsReference ? "ref *" : "") + resultName + ";");
+            statements.Add("return " + (returnsReference ? "ref *" : "") + resultName + ";");
         }
 
         declaration.AddStatement(new Custom(pins.Count == 0 ? JoinLines(statements) : ComposeFixedBlock(pins, statements)));

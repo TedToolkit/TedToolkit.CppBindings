@@ -66,6 +66,29 @@ public class TypeModel
     public TypeTransportModel Transport { get; set; } = TypeTransportModel.Value;
 
     /// <summary>
+    /// Gets whether this type is a record passed by value.
+    /// </summary>
+    internal bool IsRecordValue
+    {
+        get
+        {
+            return IsRecord && Transport.FirstIndirection is null;
+        }
+    }
+
+    /// <summary>
+    /// Gets the public C# value type without any reference storage modifier.
+    /// </summary>
+    internal DataType ManagedValueType
+    {
+        get
+        {
+            var source = CSharpPublicType;
+            return new(source.Type) { IsArray = source.IsArray, PointCounter = source.PointCounter, };
+        }
+    }
+
+    /// <summary>
     /// Gets the additional native headers required to use the projected C++ type.
     /// </summary>
     public IReadOnlyList<string> RequiredHeaders { get; set; } = [];

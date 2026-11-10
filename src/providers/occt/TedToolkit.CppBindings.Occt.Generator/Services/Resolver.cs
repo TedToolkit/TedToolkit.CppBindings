@@ -25,7 +25,7 @@ internal sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
     public TypeResolveResult Resolve(ClangSharp.Type type)
     {
         ArgumentNullException.ThrowIfNull(type);
-        var transport = CreateTransport(type, out var terminalType);
+        var transport = TypeTransportModel.FromClang(type, out var terminalType);
         type = type.CanonicalType;
 
         if (TryGetEnumDecl(terminalType, out var enumDecl)
@@ -91,37 +91,6 @@ internal sealed class Resolver(IEnumerable<ITypeRule> typeRules) : IResolver
         }
 
         return result;
-    }
-
-    /// <summary>
-    /// Extracts structural const and indirection facts from a compiler type.
-    /// </summary>
-    /// <param name="type">The compiler type.</param>
-    /// <param name="terminalType">The type after removing pointer and reference layers.</param>
-    /// <returns>The structural transport facts.</returns>
-    /// <exception cref="InvalidOperationException">The compiler exposes an unsupported indirection.</exception>
-    internal static TypeTransportModel CreateTransport(
-        ClangSharp.Type type,
-        out ClangSharp.Type terminalType)
-    {
-        var indirections = new List<TypeIndirectionModel>();
-        var current = type;
-        while (current.CanonicalType is PointerType or LValueReferenceType or RValueReferenceType)
-        {
-            var canonical = current.CanonicalType;
-            var kind = canonical switch
-            {
-                PointerType => TypeIndirectionKind.PointerIndirection,
-                LValueReferenceType => TypeIndirectionKind.LValueReference,
-                RValueReferenceType => TypeIndirectionKind.RValueReference,
-                _ => throw new InvalidOperationException("Unsupported native indirection."),
-            };
-            indirections.Add(new(kind, current.IsLocalConstQualified || canonical.IsLocalConstQualified));
-            current = canonical.PointeeType;
-        }
-
-        terminalType = current.CanonicalType;
-        return new(current.IsLocalConstQualified || terminalType.IsLocalConstQualified, indirections);
     }
 
     private static bool TryGetEnumDecl(ClangSharp.Type type, [NotNullWhen(true)] out EnumDecl? enumDecl)

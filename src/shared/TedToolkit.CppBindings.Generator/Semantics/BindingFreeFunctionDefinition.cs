@@ -22,8 +22,8 @@ internal sealed record BindingFreeFunctionDefinition(
     string ContainingType,
     string MethodName,
     string QualifiedNativeName,
-    BindingFreeFunctionType ReturnType,
+    TypeModel ReturnType,
     string NativeSourceReturnType,
-    IReadOnlyList<(string Name, BindingFreeFunctionType Type)> Parameters,
+    IReadOnlyList<(string Name, TypeModel Type)> Parameters,
     string NativeExport,
     bool IsNoexcept) : BindingFiniteOperationDefinition(NativeExport, "");

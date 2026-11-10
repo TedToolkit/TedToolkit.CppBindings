@@ -189,12 +189,12 @@ public static class BindingFiniteProfileEmitter
     {
         const string DiagnosticScope = FreeFunctionDiagnosticScope + "::";
         var returnsRecord = function.ReturnType.IsRecordValue;
-        var returnType = returnsRecord ? "void" : function.ReturnType.NativeTransportType;
+        var returnType = returnsRecord ? "void" : FreeFunctionTransportType(function.ReturnType);
         var parameters = function.Parameters.Select(static (parameter, index) =>
-            parameter.Type.NativeTransportType + " argument" + index);
+            FreeFunctionTransportType(parameter.Type) + " argument" + index);
         if (returnsRecord)
         {
-            parameters = parameters.Append(function.ReturnType.NativeType + "* result");
+            parameters = parameters.Append(function.ReturnType.CppTypeName + "* result");
         }
 
         if (!function.IsNoexcept)
@@ -202,20 +202,21 @@ public static class BindingFiniteProfileEmitter
             parameters = parameters.Append(DiagnosticScope + "NativeError* error");
         }
 
-        _ = builder.Append("extern \"C\" ").Append(returnType).Append(" __cdecl ")
+        _ = builder.Append("extern \"C\" ").Append(returnType).Append(' ')
             .Append(function.NativeExport).Append('(').AppendJoin(", ", parameters).Append(") noexcept\n{\n");
         var arguments = function.Parameters.Select(static (parameter, index) =>
-            (parameter.Type.IsPassedByAddress ? "*" : "") + "argument" + index);
-        var signature = string.Join(", ", function.Parameters.Select(static parameter => NativeSourceType(parameter.Type)));
-        var invocation = "static_cast<" + function.NativeSourceReturnType + " (__cdecl*)(" + signature
+            (parameter.Type.IsRecordValue || parameter.Type.Transport.FirstIndirection is TypeIndirectionKind.LValueReference
+                ? "*" : "") + "argument" + index);
+        var signature = string.Join(", ", function.Parameters.Select(static parameter => parameter.Type.CppTypeName));
+        var invocation = "static_cast<" + function.NativeSourceReturnType + " (*)(" + signature
             + ")>(&" + function.QualifiedNativeName + ")(" + string.Join(", ", arguments) + ")";
-        if (function.ReturnType.IsReference)
+        if (function.ReturnType.Transport.FirstIndirection is TypeIndirectionKind.LValueReference)
         {
             invocation = "std::addressof(" + invocation + ")";
         }
         else if (returnsRecord)
         {
-            invocation = "::new (result) " + function.ReturnType.NativeType + "(" + invocation + ")";
+            invocation = "::new (result) " + function.ReturnType.CppTypeName + "(" + invocation + ")";
         }
 
         if (function.IsNoexcept)
@@ -238,9 +239,14 @@ public static class BindingFiniteProfileEmitter
         _ = builder.Append("}\n\n");
     }
 
-    private static string NativeSourceType(BindingFreeFunctionType type)
+    private static string FreeFunctionTransportType(TypeModel type)
     {
-        return type.NativeType + (type.IsReference ? "&" : "");
+        if (type.Transport.FirstIndirection is TypeIndirectionKind.LValueReference)
+        {
+            return type.CppTypeName[..^1] + "*";
+        }
+
+        return type.IsRecordValue ? "const " + type.CppTypeName + "*" : type.CppTypeName;
     }
 
     private static void AppendNativeTwoPhaseOperation(

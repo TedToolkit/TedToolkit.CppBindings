@@ -92,12 +92,16 @@ Complete plain value records discovered from headers pass through the same exact
 Typed pointers and borrowed references preserve the admitted type. Value transport uses pointers
 to caller storage. Unproved layouts and value lifetimes produce a diagnostic naming the signature.
 
-Shared header discovery currently targets the Windows x64 MSVC ABI. The default CMake project uses
+Shared header discovery supports the Windows x64 MSVC and Linux x64 GNU ABIs. Select
+`RuntimeIdentifier = "linux-x64"` for Linux. Scalar widths come from the target compiler and
+the generated native adapter checks that the native build uses the same ABI.
+The default CMake project uses
 `IncludeDirectories`, `CompileDefinitions`, and `LinkLibraries`, including library search directories
 from `NativeInputs`. Exact `NativeLibraryVersion` selection requires a version-aware provider.
 An existing provider supplies its own native build metadata and must use matching compilation
 settings for its public inputs.
-Build the generated CMake project with MSVC. If the vendor ships only a DLL, obtain its import
+Build the generated CMake project with a compiler for the selected target. On Windows, if the
+vendor ships only a DLL, obtain its import
 library or generate one with MSVC `lib /DEF` from verified named function exports. Deploy the DLL
 and its native dependencies alongside the adapter. The managed project compiling generated code
 references `TedToolkit.CppBindings.Runtime` and enables unsafe code.

@@ -73,11 +73,12 @@ internal static class GenerationOutput
     {
         var managed = options.CSharpFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
         var native = options.CppFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
         foreach (var path in paths)
         {
             var input = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
-            if (input.Equals(managed, StringComparison.OrdinalIgnoreCase) || IsBelow(input, managed)
-                || input.Equals(native, StringComparison.OrdinalIgnoreCase) || IsBelow(input, native))
+            if (input.Equals(managed, comparison) || IsBelow(input, managed, comparison)
+                || input.Equals(native, comparison) || IsBelow(input, native, comparison))
             {
                 throw new ArgumentException($"Native input '{input}' is inside a generation output directory.", nameof(options));
             }
@@ -222,9 +223,9 @@ internal static class GenerationOutput
         return path;
     }
 
-    private static bool IsBelow(string path, string root)
+    private static bool IsBelow(string path, string root, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
     {
-        return path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return path.StartsWith(root + Path.DirectorySeparatorChar, comparison);
     }
 
     private static void ValidateRoot(string path)

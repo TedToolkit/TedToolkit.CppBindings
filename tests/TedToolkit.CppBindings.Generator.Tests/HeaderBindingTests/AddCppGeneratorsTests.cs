@@ -126,9 +126,9 @@ internal sealed class AddCppGeneratorsTests
         await Assert.That(native).Contains("offsetof(struct Point, y) == 4");
         await Assert.That(native).Contains("const struct Point* argument0");
         await Assert.That(native).Contains("struct Point* result");
-        await Assert.That(native).Contains("static_cast<const struct Point (__cdecl*)(struct Point *)>(&::Copy)");
-        await Assert.That(native).Contains("static_cast<int (__cdecl*)(struct Packet *)>(&::Packet)");
-        await Assert.That(native).Contains("static_cast<const struct c& (__cdecl*)(const struct c&)>(&::Peek)");
+        await Assert.That(native).Contains("static_cast<const struct Point (*)(struct Point *)>(&::Copy)");
+        await Assert.That(native).Contains("static_cast<int (*)(struct Packet *)>(&::Packet)");
+        await Assert.That(native).Contains("static_cast<const struct c& (*)(const struct c&)>(&::Peek)");
         await Assert.That(managed).Contains("NativeApi.GetFunction(1))(left, right)");
         await Assert.That(table).Contains("(&TedToolkit_FreeFunction_Call_Add)");
         await Assert.That(table).Contains("(&TedToolkit_FreeFunction_Call_Current)");
@@ -137,6 +137,43 @@ internal sealed class AddCppGeneratorsTests
         await Assert.That(cmake).Contains("target_link_directories(");
         await Assert.That(cmake).Contains(_root.FullName.Replace('\\', '/'));
         await Assert.That(cmake).Contains("\"fixture\"");
+    }
+
+    /// <summary>
+    /// Verifies the generated signatures and ABI check against the selected compiler target.
+    /// </summary>
+    /// <param name="rid">The target runtime identifier.</param>
+    /// <param name="integer">The C# projection of C++ long.</param>
+    /// <param name="wideChar">The C# projection of wchar_t.</param>
+    /// <param name="widths">The generated native width assertion.</param>
+    /// <returns>A task that completes after checking the paired output.</returns>
+    [Test]
+    [Arguments("win-x64", "int", "ushort", "sizeof(long) == 4 && sizeof(wchar_t) == 2")]
+    [Arguments("linux-x64", "long", "int", "sizeof(long) == 8 && sizeof(wchar_t) == 4")]
+    public async Task Should_project_scalar_widths_for_the_target_Async(string rid, string integer, string wideChar, string widths)
+    {
+        var header = _root / new FileName("Widths.h");
+        await header.WriteAllTextAsync("extern \"C\" long Echo(long value, const wchar_t* code) noexcept;")
+            .ConfigureAwait(false);
+        var options = new GenerationOptions()
+        {
+            CSharpFolder = _root / "managed",
+            CppFolder = _root / "native",
+            RuntimeIdentifier = rid,
+            Headers = [new(header),],
+        };
+        var pipeline = await CreateBuilder().AddCppGenerators(options).BuildAsync().ConfigureAwait(false);
+
+        var summary = await pipeline.RunAsync().ConfigureAwait(false);
+
+        await Assert.That(summary.Status).IsEqualTo(Status.Successful);
+        var managed = await (options.CSharpFolder / "Headers" / new FileName("Functions.g.cs"))
+            .ReadAllTextAsync().ConfigureAwait(false);
+        var native = await (options.CppFolder / "Headers" / new FileName("Functions.cpp"))
+            .ReadAllTextAsync().ConfigureAwait(false);
+        await Assert.That(managed).Contains("static " + integer + " Echo(");
+        await Assert.That(managed).Contains(wideChar + "* code)");
+        await Assert.That(native).Contains(widths);
     }
 
     /// <summary>
