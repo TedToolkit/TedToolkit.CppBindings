@@ -207,7 +207,7 @@ public static class BindingFiniteProfileEmitter
         var arguments = function.Parameters.Select(static (parameter, index) =>
             (parameter.Type.IsPassedByAddress ? "*" : "") + "argument" + index);
         var signature = string.Join(", ", function.Parameters.Select(static parameter => NativeSourceType(parameter.Type)));
-        var invocation = "static_cast<" + NativeSourceType(function.ReturnType) + " (__cdecl*)(" + signature
+        var invocation = "static_cast<" + function.NativeSourceReturnType + " (__cdecl*)(" + signature
             + ")>(&" + function.QualifiedNativeName + ")(" + string.Join(", ", arguments) + ")";
         if (function.ReturnType.IsReference)
         {

@@ -148,12 +148,16 @@ public sealed class BindingSemanticEngine
         ValidateProviderInputs(providerModel);
         providerModel = new BindingSemanticGraphSnapshot().Create(providerModel);
         var candidates = CreateCandidateCatalog(providerModel.Declarations);
-        var closure = CloseDependencies(candidates);
-        var declarations = closure
+        var closure = new Dictionary<string, BindingDeclaration>(StringComparer.Ordinal);
+        IncludeDependencies(candidates, closure, candidates.Values.Where(static declaration => declaration.IsRoot));
+        var providerTypes = closure.Keys.ToHashSet(StringComparer.Ordinal);
+        IncludeDependencies(candidates, closure,
+            candidates.Values.Where(static declaration => declaration.IsHeaderLayout || declaration.IsHeaderRoot));
+        var declarations = closure.Values
             .Select(ValidateDeclaration)
             .OrderBy(static declaration => declaration.Type.NativeTypeName, StringComparer.Ordinal)
             .ToArray();
-        var nativeExports = CreateNativeExportOrder(providerModel, declarations);
+        var nativeExports = CreateNativeExportOrder(providerModel, declarations, providerTypes);
         GenerationOutput.ValidateExports(nativeExports);
         return new(providerModel, declarations, nativeExports);
     }
@@ -164,6 +168,26 @@ public sealed class BindingSemanticEngine
     /// <param name="providerModel">The provider roots, policies, renderers, and native metadata.</param>
     /// <returns>The completed plan consumed by the existing generation pipeline.</returns>
     public GenerationPlan CreatePlan(BindingProviderModel providerModel)
+    {
+        return CreatePlan(providerModel, processedPublicHeaders: false);
+    }
+
+    /// <summary>
+    /// Creates one plan after Shared has processed the configured input headers.
+    /// </summary>
+    /// <param name="providerModel">The existing semantic input.</param>
+    /// <param name="options">The compiler and header inputs.</param>
+    /// <param name="cancellationToken">Cancellation for discovery.</param>
+    /// <returns>The completed plan, including the shared header discovery result.</returns>
+    internal GenerationPlan CreatePlanWithHeaders(
+        BindingProviderModel providerModel,
+        GenerationOptions options,
+        in CancellationToken cancellationToken)
+    {
+        return CreatePlan(HeaderBindingGeneration.AddHeaders(options, providerModel, cancellationToken), processedPublicHeaders: true);
+    }
+
+    private GenerationPlan CreatePlan(BindingProviderModel providerModel, bool processedPublicHeaders)
     {
         var model = CreateModel(providerModel);
         var slots = new ReadOnlyDictionary<string, int>(model.NativeExports
@@ -177,7 +201,7 @@ public sealed class BindingSemanticEngine
         native.AddRange(CreateFiniteProfileNativeSources(model));
         native.AddRange(model.Provider.NativeSources.Select(ToGeneratedSource));
         AddNativeProject(model.Provider.NativeProject, native);
-        return new(managed, native, model.NativeExports);
+        return new(managed, native, model.NativeExports) { ProcessedPublicHeaders = processedPublicHeaders, };
     }
 
     private static void ValidateProviderInputs(BindingProviderModel providerModel)
@@ -251,12 +275,12 @@ public sealed class BindingSemanticEngine
         return candidates;
     }
 
-    private static BindingDeclaration[] CloseDependencies(
-        IReadOnlyDictionary<string, BindingDeclaration> candidates)
+    private static void IncludeDependencies(
+        Dictionary<string, BindingDeclaration> candidates,
+        Dictionary<string, BindingDeclaration> closure,
+        IEnumerable<BindingDeclaration> roots)
     {
-        var closure = new Dictionary<string, BindingDeclaration>(StringComparer.Ordinal);
-        var pending = new Queue<BindingDeclaration>(candidates.Values
-            .Where(static declaration => declaration.IsRoot)
+        var pending = new Queue<BindingDeclaration>(roots
             .OrderBy(static declaration => declaration.Type.NativeName, StringComparer.Ordinal));
         while (pending.TryDequeue(out var declaration))
         {
@@ -277,8 +301,6 @@ public sealed class BindingSemanticEngine
                 pending.Enqueue(dependency);
             }
         }
-
-        return closure.Values.ToArray();
     }
 
     private BindingSemanticDeclaration ValidateDeclaration(BindingDeclaration declaration)
@@ -533,9 +555,13 @@ public sealed class BindingSemanticEngine
 
     private static string[] CreateNativeExportOrder(
         BindingProviderModel providerModel,
-        IReadOnlyList<BindingSemanticDeclaration> declarations)
+        IReadOnlyList<BindingSemanticDeclaration> declarations,
+        HashSet<string> providerTypes)
     {
-        var declarationExports = declarations.SelectMany(static declaration => declaration.NativeExports);
+        var declarationExports = declarations.Where(declaration => providerTypes.Contains(declaration.Source.Type.NativeName))
+            .SelectMany(static declaration => declaration.NativeExports);
+        var additionalExports = declarations.Where(declaration => !providerTypes.Contains(declaration.Source.Type.NativeName))
+            .SelectMany(static declaration => declaration.NativeExports).Order(StringComparer.Ordinal);
         var apis = providerModel.FiniteProfileApis;
         var providerApis = apis.Where(static api => api.HeaderProfile is null).ToArray();
         var providerExports = providerApis.Length == 0
@@ -544,6 +570,7 @@ public sealed class BindingSemanticEngine
                 .Concat(providerModel.NativeExports.Order(StringComparer.Ordinal))
                 .Concat(declarationExports.Order(StringComparer.Ordinal));
         return providerExports
+            .Concat(additionalExports)
             .Concat(apis.Where(static api => api.HeaderProfile is not null).SelectMany(static api => api.NativeExportOrder))
             .ToArray();
     }

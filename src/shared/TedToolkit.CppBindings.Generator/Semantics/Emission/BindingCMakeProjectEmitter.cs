@@ -85,6 +85,8 @@ public static class BindingCMakeProjectEmitter
         AppendTargetProperties(builder, definition);
         AppendTargetCommand(builder, "target_include_directories", definition.LibraryBaseName,
             definition.IncludeDirectories);
+        AppendTargetCommand(builder, "target_link_directories", definition.LibraryBaseName,
+            definition.LinkDirectories);
         AppendTargetCommand(builder, "target_link_libraries", definition.LibraryBaseName,
             definition.LinkLibraries);
         return builder.ToString();

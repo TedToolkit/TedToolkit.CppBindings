@@ -45,4 +45,9 @@ public sealed class GenerationPlan
     /// Gets the exact ordered native function names shared by provider renderers and the function table.
     /// </summary>
     public IReadOnlyList<string> NativeExports { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether Shared processed the requested public header inputs.
+    /// </summary>
+    internal bool ProcessedPublicHeaders { get; init; }
 }

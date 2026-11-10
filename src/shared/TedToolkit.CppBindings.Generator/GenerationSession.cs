@@ -52,6 +52,11 @@ internal sealed class GenerationSession(GenerationOptions options, IGenerationPr
             : await provider.CreatePlanAsync(Options, cancellationToken).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(providerPlan);
         cancellationToken.ThrowIfCancellationRequested();
+        if (Options.HasPublicHeaders && !providerPlan.ProcessedPublicHeaders)
+        {
+            throw new NotSupportedException("The generation plan did not process the requested public input headers.");
+        }
+
         var plan = new GenerationPlan(
             providerPlan.CSharpSources.Append(new GeneratedSource(
                 NativeApiGenerator.FileName,

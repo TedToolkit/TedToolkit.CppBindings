@@ -76,6 +76,22 @@ internal sealed class BindingFiniteProfileManagedComposer(
         return File().AddNameSpace(nameSpace);
     }
 
+    /// <summary>
+    /// Enumerates the type names declared by a finite profile in its managed namespace.
+    /// </summary>
+    /// <param name="api">The finite profile API.</param>
+    /// <returns>The names occupied by the emitted profile.</returns>
+    internal static IEnumerable<string> GetDeclaredTypeNames(BindingFiniteProfileApi api)
+    {
+        return api.Statuses.Select(static status => status.Name)
+            .Concat(api.ValueTypes.Select(static value => value.Name))
+            .Concat(api.OwnedResults.Select(static result => result.Name))
+            .Concat(api.CompositeResults.Select(static result => result.Name))
+            .Concat(api.Owners.Select(static owner => owner.Name))
+            .Concat(api.Operations.Where(static operation => operation is not BindingBufferOwnerOperationDefinition)
+                .Select(GetContainingType));
+    }
+
     private static TedToolkit.RoslynHelper.Generators.Syntaxes.Enum ComposeStatus(BindingStatusDefinition status)
     {
         var declaration = new TedToolkit.RoslynHelper.Generators.Syntaxes.Enum(status.Name, DataType.Int).Public;

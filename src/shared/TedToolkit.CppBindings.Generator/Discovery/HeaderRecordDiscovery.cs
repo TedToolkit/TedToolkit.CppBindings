@@ -24,7 +24,7 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
     private readonly Dictionary<string, BindingDeclaration> _existing = existingDeclarations.ToDictionary(
         static declaration => declaration.Type.NativeName.TrimStart(':'), StringComparer.Ordinal);
 
-    private readonly Dictionary<string, RecordModel> _layouts = new(StringComparer.Ordinal);
+    private readonly Dictionary<string, (RecordModel Layout, string NativeType)> _layouts = new(StringComparer.Ordinal);
 
     private readonly HashSet<string> _referenced = new(StringComparer.Ordinal);
 
@@ -53,7 +53,7 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
 
         if (_layouts.TryGetValue(name, out var layout))
         {
-            return layout;
+            return layout.Layout;
         }
 
         if (record.Decl.Definition is not CXXRecordDecl definition || native.SizeOf <= 0)
@@ -82,7 +82,7 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
             new[] { declaration.Record.Type.CSharpTypeName, declaration.Record.Type.CSharpInterfaceName, })
             .ToHashSet(StringComparer.Ordinal);
         _ = names.Add("NativeApi");
-        foreach (var layout in _layouts.Values)
+        foreach (var (layout, _) in _layouts.Values)
         {
             if (!names.Add(layout.Type.CSharpTypeName) || !names.Add(layout.Type.CSharpInterfaceName))
             {
@@ -91,7 +91,8 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
         }
 
         return existingDeclarations.Select(IncludeReferencedRecord)
-            .Concat(_layouts.Values.Select(layout => new BindingDeclaration(layout, sourceGroup, true, []) { IsHeaderLayout = true, }))
+            .Concat(_layouts.Values.Select(entry => new BindingDeclaration(entry.Layout, sourceGroup, false, [])
+                { IsHeaderLayout = true, }))
             .ToArray();
     }
 
@@ -102,9 +103,8 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
     internal string GetNativeLayoutAssertions()
     {
         var builder = new StringBuilder();
-        foreach (var record in _layouts.Values.OrderBy(static record => record.Type.CppTypeName, StringComparer.Ordinal))
+        foreach (var (record, name) in _layouts.Values.OrderBy(static entry => entry.NativeType, StringComparer.Ordinal))
         {
-            var name = record.Type.CppTypeName;
             _ = builder.Append("static_assert(std::is_standard_layout<").Append(name).Append(">::value")
                 .Append(" && std::is_trivially_copyable<").Append(name).Append(">::value")
                 .Append(" && sizeof(").Append(name).Append(") == ").Append(record.Size)
@@ -143,7 +143,7 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
             ObjectKind = NativeObjectKind.Value,
             MethodModels = [],
         };
-        _layouts.Add(name, model);
+        _layouts.Add(name, (model, HeaderCompilerDiscovery.NativeTypeSpelling(native)));
         model.Type.ReferencedRecord = model;
         model.FieldModels = declaration.Fields.Select(field => ProjectField(field, name)).ToArray();
         return model;
@@ -188,6 +188,7 @@ internal sealed class HeaderRecordDiscovery(IReadOnlyList<BindingDeclaration> ex
     {
         return declaration.IsRoot || !_referenced.Contains(declaration.Type.NativeName.TrimStart(':'))
             ? declaration
-            : new BindingDeclaration(declaration.Record, declaration.ManagedSourceGroup, true, declaration.Dependencies);
+            : new BindingDeclaration(declaration.Record, declaration.ManagedSourceGroup, false, declaration.Dependencies)
+                { IsHeaderRoot = true, };
     }
 }

@@ -26,6 +26,7 @@ internal static class HeaderCompilerDiscovery
     /// <param name="includes">The public header includes compiled together.</param>
     /// <param name="arguments">The native target and preprocessor arguments.</param>
     /// <param name="records">The shared record discovery and reuse context.</param>
+    /// <param name="options">The output roots that must stay separate from included headers.</param>
     /// <param name="cancellationToken">The token that cancels discovery.</param>
     /// <returns>The eligible functions, once per C symbol.</returns>
     internal static Dictionary<string, BindingFreeFunctionDefinition> Discover(
@@ -33,6 +34,7 @@ internal static class HeaderCompilerDiscovery
         string includes,
         string[] arguments,
         HeaderRecordDiscovery records,
+        GenerationOptions options,
         in CancellationToken cancellationToken)
     {
         const string InputName = "TedToolkitHeaderBindings.cpp";
@@ -42,6 +44,7 @@ internal static class HeaderCompilerDiscovery
             index, InputName, arguments, [input,], CXTranslationUnit_Flags.CXTranslationUnit_SkipFunctionBodies);
         using var unit = TranslationUnit.GetOrCreate(translationUnit);
         ThrowForDiagnostics(translationUnit);
+        ValidateInclusions(translationUnit, options);
 
         var functions = new Dictionary<string, BindingFreeFunctionDefinition>(StringComparer.Ordinal);
         var pending = new Stack<Cursor>(unit.TranslationUnitDecl.CursorChildren.Reverse());
@@ -66,6 +69,22 @@ internal static class HeaderCompilerDiscovery
         }
 
         return functions;
+    }
+
+    private static unsafe void ValidateInclusions(CXTranslationUnit unit, GenerationOptions options)
+    {
+        var paths = new List<string>();
+        unit.GetInclusions((file, _, depth, _) =>
+        {
+            if (depth == 0)
+            {
+                return;
+            }
+
+            using var path = ((CXFile)file).Name;
+            paths.Add(path.CString);
+        }, default);
+        GenerationOutput.ValidateInputPaths(options, paths);
     }
 
     private static string? GetHeader(FunctionDecl function)
@@ -105,8 +124,8 @@ internal static class HeaderCompilerDiscovery
         string wrapperClassName,
         HeaderRecordDiscovery records)
     {
-        if (function.IsVariadic
-            || function.Type.Handle.FunctionTypeCallingConv is not
+        if (function.IsVariadic || function.Type.CanonicalType is not FunctionProtoType prototype
+            || prototype.Handle.FunctionTypeCallingConv is not
                 (CXCallingConv.CXCallingConv_C or CXCallingConv.CXCallingConv_Win64))
         {
             throw new NotSupportedException($"Free function '{qualifiedName}' must have a fixed Windows x64 C ABI.");
@@ -125,18 +144,20 @@ internal static class HeaderCompilerDiscovery
                 }
             }
 
-            return (name, ProjectType(parameter.Type, qualifiedName, records));
+            return (name, ProjectType(prototype.ParamTypes[index], qualifiedName, records));
         }).ToArray();
         var isNoexcept = function.ExceptionSpecType is
             CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_BasicNoexcept
             or CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_NoThrow
             or CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_DynamicNone;
         var methodName = IsManagedIdentifier(function.Spelling) ? function.Spelling : "_" + function.Spelling;
+        var returnType = ProjectType(function.ReturnType, qualifiedName, records);
         return new(
             wrapperClassName,
             methodName,
             qualifiedName,
-            ProjectType(function.ReturnType, qualifiedName, records),
+            returnType,
+            returnType.IsReference ? returnType.NativeType + "&" : NativeTypeSpelling(function.ReturnType.Handle.CanonicalType),
             parameters,
             function.Spelling,
             isNoexcept);
@@ -179,10 +200,48 @@ internal static class HeaderCompilerDiscovery
         }
 
         return new(
-            native.Spelling.CString,
+            NativeTypeSpelling(native),
             record?.Type.CSharpTypeName ?? ManagedType(value, context, records),
             isReference,
             isReference && native.IsConstQualified) { IsRecordValue = !isReference && record is not null, };
+    }
+
+    /// <summary>
+    /// Renders a native type while keeping tagged types visible when a function hides their names.
+    /// </summary>
+    /// <param name="type">The canonical compiler type.</param>
+    /// <returns>The C++ spelling used by the generated adapter.</returns>
+    internal static string NativeTypeSpelling(CXType type)
+    {
+        var spelling = type.Spelling.CString;
+        var element = type;
+        while (element.kind == CXTypeKind.CXType_Pointer)
+        {
+            element = element.PointeeType;
+        }
+
+        if (element.kind is not (CXTypeKind.CXType_Record or CXTypeKind.CXType_Enum) || element.Declaration.IsAnonymous)
+        {
+            return spelling;
+        }
+
+        var tag = element.Declaration.Kind switch
+        {
+            CXCursorKind.CXCursor_StructDecl => "struct ",
+            CXCursorKind.CXCursor_ClassDecl => "class ",
+            CXCursorKind.CXCursor_UnionDecl => "union ",
+            CXCursorKind.CXCursor_EnumDecl => "enum ",
+            _ => "",
+        };
+        var name = element.UnqualifiedType.Spelling.CString;
+        var qualifiedName = element.Spelling.CString;
+        if (name.StartsWith(tag, StringComparison.Ordinal) || !spelling.StartsWith(qualifiedName, StringComparison.Ordinal)
+            || !qualifiedName.EndsWith(name, StringComparison.Ordinal))
+        {
+            return spelling;
+        }
+
+        return spelling.Insert(qualifiedName.Length - name.Length, tag);
     }
 
     private static string ManagedType(ClangSharp.Type type, string context, HeaderRecordDiscovery records)

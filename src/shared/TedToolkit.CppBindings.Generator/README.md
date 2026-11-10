@@ -55,6 +55,7 @@ by `NativeSources`. `GenerationOptions.Headers` also accepts individual input pa
 wrapper name for a header already selected in the resolved inputs. The usual
 `AddCppGenerators` pipeline automatically includes external C-linkage functions declared in those
 headers. Definitions in headers included only as dependencies are used for type resolution.
+Keep native inputs, including transitive headers, outside both generated output directories.
 
 ```csharp
 using ModularPipelines;
@@ -86,13 +87,16 @@ identify the underlying symbols. Repeated declarations of the same C symbol shar
 Shared resolves C++ records in function signatures against the existing semantic model first.
 With an existing `SemanticGenerationProvider`, pass the same options to
 `AddCppGenerators(options, provider)` to include the header functions in the provider's function table.
+The provider's existing slots stay in place. Newly reached exports are appended.
 Complete plain value records discovered from headers pass through the same exact-layout C# emitter.
 Typed pointers and borrowed references preserve the admitted type. Value transport uses pointers
 to caller storage. Unproved layouts and value lifetimes produce a diagnostic naming the signature.
 
 Shared header discovery currently targets the Windows x64 MSVC ABI. The default CMake project uses
-`IncludeDirectories`, `CompileDefinitions`, and `LinkLibraries`. An existing provider supplies its
-own native build metadata and must use matching compilation settings for its public inputs.
+`IncludeDirectories`, `CompileDefinitions`, and `LinkLibraries`, including library search directories
+from `NativeInputs`. Exact `NativeLibraryVersion` selection requires a version-aware provider.
+An existing provider supplies its own native build metadata and must use matching compilation
+settings for its public inputs.
 Build the generated CMake project with MSVC. If the vendor ships only a DLL, obtain its import
 library or generate one with MSVC `lib /DEF` from verified named function exports. Deploy the DLL
 and its native dependencies alongside the adapter. The managed project compiling generated code

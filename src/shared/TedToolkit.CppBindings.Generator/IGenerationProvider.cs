@@ -31,8 +31,9 @@ public interface IGenerationProvider
     /// <param name="cancellationToken">Cancellation for preparation and plan creation.</param>
     /// <returns>The completed plan; failures and cancellation propagate to the pipeline.</returns>
     /// <exception cref="NotSupportedException">
-    /// A native library version was requested but this provider does not support version selection.
+    /// This provider does not handle the requested exact native library version or public input headers.
     /// </exception>
+    /// <remarks>Providers forwarding this overload should pass through the options and return the resulting plan.</remarks>
     public Task<GenerationPlan> CreatePlanAsync(
         in GenerationOptions options,
         in CancellationToken cancellationToken)
@@ -42,6 +43,11 @@ public interface IGenerationProvider
         {
             throw new NotSupportedException(
                 $"Provider '{GetType().FullName}' does not support exact native library version selection.");
+        }
+
+        if (options.HasPublicHeaders)
+        {
+            throw new NotSupportedException($"Provider '{GetType().FullName}' does not support public input headers.");
         }
 
         return CreatePlanAsync(cancellationToken);

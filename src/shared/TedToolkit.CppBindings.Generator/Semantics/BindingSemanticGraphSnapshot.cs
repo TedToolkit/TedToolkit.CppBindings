@@ -48,7 +48,7 @@ internal sealed class BindingSemanticGraphSnapshot
             CloneRecord(source.Record),
             source.ManagedSourceGroup,
             source.IsRoot,
-            source.Dependencies) { IsHeaderLayout = source.IsHeaderLayout, };
+            source.Dependencies) { IsHeaderLayout = source.IsHeaderLayout, IsHeaderRoot = source.IsHeaderRoot, };
     }
 
     private RecordModel CloneRecord(RecordModel source)

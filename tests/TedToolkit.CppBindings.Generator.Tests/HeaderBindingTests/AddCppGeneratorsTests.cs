@@ -48,8 +48,13 @@ internal sealed class AddCppGeneratorsTests
             namespace Alias { extern "C" int Add(int left, int right) noexcept; }
             int Ordinary(int left);
             extern "C" Point Translate(Point point, int offset) noexcept;
+            extern "C" const Point Copy(Point points[3]) noexcept;
             extern "C" Point* Identity(Point* point) noexcept;
             extern "C" Point& Borrow(Point& point) noexcept;
+            struct Packet { int size; };
+            extern "C" int Packet(Packet* packet) noexcept;
+            struct c { int value; };
+            extern "C" const c& Peek(const c& value) noexcept;
             namespace Native::Geometry
             {
                 extern "C" {
@@ -69,14 +74,10 @@ internal sealed class AddCppGeneratorsTests
             CSharpFolder = _root / "managed",
             CppFolder = _root / "native",
             Headers = [new(geometry), new(utilities, "Control"),],
+            NativeInputs = NativeSources.FromHeaders(_root, [], dependencyLibraryDirectories: [_root,]),
+            LinkLibraries = ["fixture",],
         };
-        var builder = Pipeline.CreateBuilder();
-        builder.Options.PrintLogo = false;
-        builder.Options.PrintResults = false;
-        builder.Options.ShowProgressInConsole = false;
-        builder.Options.DefaultRetryCount = 0;
-        builder.Options.ThrowOnPipelineFailure = true;
-        var pipeline = await builder.AddCppGenerators(options)
+        var pipeline = await CreateBuilder().AddCppGenerators(options)
             .BuildAsync().ConfigureAwait(false);
 
         var summary = await pipeline.RunAsync().ConfigureAwait(false);
@@ -90,6 +91,7 @@ internal sealed class AddCppGeneratorsTests
             .ReadAllTextAsync().ConfigureAwait(false);
         var table = await (options.CppFolder / new FileName("NativeFunctionTable.cpp"))
             .ReadAllTextAsync().ConfigureAwait(false);
+        var cmake = await (options.CppFolder / new FileName("CMakeLists.txt")).ReadAllTextAsync().ConfigureAwait(false);
         await Assert.That(managed).Contains("class GeometryWrapper");
         await Assert.That(managed).Contains("static int Add(");
         await Assert.That(managed).Contains("int left,");
@@ -106,6 +108,8 @@ internal sealed class AddCppGeneratorsTests
         await Assert.That(layout).Contains("int x;");
         await Assert.That(layout).Contains("int y;");
         await Assert.That(managed).Contains("static Point Translate(");
+        await Assert.That(managed).Contains("static Point Copy(");
+        await Assert.That(managed).Contains("Point* points)");
         await Assert.That(managed).Contains("Point point,");
         await Assert.That(managed).Contains("static Point* Identity(");
         await Assert.That(managed).Contains("static ref Point Borrow(");
@@ -118,14 +122,117 @@ internal sealed class AddCppGeneratorsTests
         await Assert.That(native).Contains("(&::Native::Geometry::Current)");
         await Assert.That(native).Contains("(&::Add)");
         await Assert.That(native).DoesNotContain("::Alias::Add");
-        await Assert.That(native).Contains("sizeof(Point) == 8");
-        await Assert.That(native).Contains("offsetof(Point, y) == 4");
-        await Assert.That(native).Contains("const Point* argument0");
-        await Assert.That(native).Contains("Point* result");
+        await Assert.That(native).Contains("sizeof(struct Point) == 8");
+        await Assert.That(native).Contains("offsetof(struct Point, y) == 4");
+        await Assert.That(native).Contains("const struct Point* argument0");
+        await Assert.That(native).Contains("struct Point* result");
+        await Assert.That(native).Contains("static_cast<const struct Point (__cdecl*)(struct Point *)>(&::Copy)");
+        await Assert.That(native).Contains("static_cast<int (__cdecl*)(struct Packet *)>(&::Packet)");
+        await Assert.That(native).Contains("static_cast<const struct c& (__cdecl*)(const struct c&)>(&::Peek)");
         await Assert.That(managed).Contains("NativeApi.GetFunction(1))(left, right)");
         await Assert.That(table).Contains("(&TedToolkit_FreeFunction_Call_Add)");
         await Assert.That(table).Contains("(&TedToolkit_FreeFunction_Call_Current)");
         await Assert.That(table).Contains("(&TedToolkit_FreeFunction_Call_Reset)");
         await Assert.That(table).Contains("(&TedToolkit_FreeFunction_Call_Translate)");
+        await Assert.That(cmake).Contains("target_link_directories(");
+        await Assert.That(cmake).Contains(_root.FullName.Replace('\\', '/'));
+        await Assert.That(cmake).Contains("\"fixture\"");
+    }
+
+    /// <summary>
+    /// Verifies that a selected or transitively included header survives a failed output overlap check.
+    /// </summary>
+    /// <param name="transitive">Whether the endangered file is included by a selected header.</param>
+    /// <returns>A task that completes after confirming the input is intact.</returns>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Should_preserve_input_headers_inside_output_Async(bool transitive)
+    {
+        var native = _root / "native";
+        native.Create();
+        var input = native / new FileName("Input.h");
+        await input.WriteAllTextAsync("extern \"C\" int Sample() noexcept;").ConfigureAwait(false);
+        var publicHeader = _root / new FileName("Public.h");
+        await publicHeader.WriteAllTextAsync("#include \"native/Input.h\"").ConfigureAwait(false);
+        var options = new GenerationOptions()
+        {
+            CSharpFolder = _root / "managed",
+            CppFolder = native,
+            Headers = [new(transitive ? publicHeader : input),],
+        };
+        var pipeline = await CreateBuilder().AddCppGenerators(options).BuildAsync().ConfigureAwait(false);
+
+        Func<Task> run = () => pipeline.RunAsync();
+        await Assert.That(run).Throws<Exception>()
+            .WithMessageContaining("inside a generation output directory", StringComparison.Ordinal);
+        await Assert.That(input.Exists).IsTrue();
+    }
+
+    /// <summary>
+    /// Verifies that the default entry rejects exact version selection without a version resolver.
+    /// </summary>
+    /// <returns>A task that completes after checking the registration error.</returns>
+    [Test]
+    public async Task Should_reject_an_unverified_native_version_Async()
+    {
+        var options = new GenerationOptions()
+        {
+            CSharpFolder = _root / "managed",
+            CppFolder = _root / "native",
+            NativeLibraryVersion = new(1, 2),
+        };
+
+        await Assert.That(() => CreateBuilder().AddCppGenerators(options)).Throws<NotSupportedException>();
+    }
+
+    /// <summary>
+    /// Verifies that a provider which ignores the configured inputs cannot publish an incomplete plan.
+    /// </summary>
+    /// <returns>A task that completes after checking the pipeline diagnostic.</returns>
+    [Test]
+    public async Task Should_reject_a_provider_plan_that_ignored_headers_Async()
+    {
+        var header = _root / new FileName("Input.h");
+        await header.WriteAllTextAsync("extern \"C\" int Sample() noexcept;").ConfigureAwait(false);
+        var options = new GenerationOptions()
+        {
+            CSharpFolder = _root / "managed",
+            CppFolder = _root / "native",
+            Headers = [new(header),],
+        };
+        var pipeline = await CreateBuilder().AddCppGenerators(options, new OptionsIgnoringProvider())
+            .BuildAsync().ConfigureAwait(false);
+
+        Func<Task> run = () => pipeline.RunAsync();
+        await Assert.That(run).Throws<Exception>()
+            .WithMessageContaining("did not process the requested public input headers", StringComparison.Ordinal);
+        await Assert.That(options.CppFolder.Exists).IsFalse();
+    }
+
+    private static PipelineBuilder CreateBuilder()
+    {
+        var builder = Pipeline.CreateBuilder();
+        builder.Options.PrintLogo = false;
+        builder.Options.PrintResults = false;
+        builder.Options.ShowProgressInConsole = false;
+        builder.Options.DefaultRetryCount = 0;
+        builder.Options.ThrowOnPipelineFailure = true;
+        return builder;
+    }
+
+    private sealed class OptionsIgnoringProvider : IGenerationProvider
+    {
+        public IReadOnlyList<Type> PreparationModules { get; } = [];
+
+        public Task<GenerationPlan> CreatePlanAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(new GenerationPlan([], [], []));
+        }
+
+        public Task<GenerationPlan> CreatePlanAsync(in GenerationOptions options, in CancellationToken cancellationToken)
+        {
+            return CreatePlanAsync(cancellationToken);
+        }
     }
 }

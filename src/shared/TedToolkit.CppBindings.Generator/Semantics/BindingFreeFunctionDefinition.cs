@@ -14,6 +14,7 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// <param name="MethodName">The managed method name.</param>
 /// <param name="QualifiedNativeName">The globally qualified C++ name used for source lookup.</param>
 /// <param name="ReturnType">The function's return projection.</param>
+/// <param name="NativeSourceReturnType">The exact C++ return type used for source function lookup.</param>
 /// <param name="Parameters">The function's ordered parameter projections.</param>
 /// <param name="NativeExport">The distinct C linkage name of the generated adapter.</param>
 /// <param name="IsNoexcept">Whether the source declaration proves that the function cannot throw.</param>
@@ -22,6 +23,7 @@ internal sealed record BindingFreeFunctionDefinition(
     string MethodName,
     string QualifiedNativeName,
     BindingFreeFunctionType ReturnType,
+    string NativeSourceReturnType,
     IReadOnlyList<(string Name, BindingFreeFunctionType Type)> Parameters,
     string NativeExport,
     bool IsNoexcept) : BindingFiniteOperationDefinition(NativeExport, "");

@@ -40,9 +40,9 @@ internal static class HeaderBindingGeneration
                 compileDefinitions: options.CompileDefinitions.Select(QuoteCMakeArgument),
                 compileOptions: ["/EHs", "/EHc-",],
                 includeDirectories: GetIncludeDirectories(options).Select(QuotePath),
-                linkLibraries: (options.NativeInputs?.DependencyLibraries.Select(static path => path.FullName) ?? [])
-                    .Concat(options.LinkLibraries).Select(QuotePath))));
-        return engine.CreatePlan(AddHeaders(options, model, cancellationToken));
+                linkLibraries: GetLinkLibraries(options).Select(QuotePath))
+            { LinkDirectories = GetLinkDirectories(options).Select(QuotePath).ToArray(), }));
+        return engine.CreatePlanWithHeaders(model, options, cancellationToken);
     }
 
     /// <summary>
@@ -58,7 +58,11 @@ internal static class HeaderBindingGeneration
         BindingProviderModel model,
         in CancellationToken cancellationToken)
     {
-        if (!options.HasPublicHeaders)
+        var headers = ResolveHeaders(options);
+        var includeDirectories = GetIncludeDirectories(options).ToArray();
+        GenerationOutput.ValidateInputPaths(options, headers.Keys.Concat(includeDirectories)
+            .Concat(GetLinkDirectories(options)).Concat(GetLinkLibraries(options).Where(Path.IsPathFullyQualified)));
+        if (headers.Count == 0)
         {
             return model;
         }
@@ -68,23 +72,22 @@ internal static class HeaderBindingGeneration
             throw new NotSupportedException("Shared header discovery currently requires the win-x64 MSVC ABI.");
         }
 
-        var headers = ResolveHeaders(options);
         string[] arguments =
         [
             "-x", "c++", "--target=x86_64-pc-windows-msvc", "-std=c++" + options.CppVersion,
-            .. GetIncludeDirectories(options).Select(static directory => "-I" + directory),
+            .. includeDirectories.Select(static directory => "-I" + directory),
             .. options.CompileDefinitions.Select(static definition => "-D" + definition),
         ];
         var includes = string.Join("\n", headers.Keys.Select(static header => "#include " + QuotePath(header)));
         var records = new HeaderRecordDiscovery(model.Declarations);
-        var functions = HeaderCompilerDiscovery.Discover(headers, includes, arguments, records, cancellationToken);
+        var functions = HeaderCompilerDiscovery.Discover(headers, includes, arguments, records, options, cancellationToken);
         if (functions.Count == 0)
         {
             return model;
         }
 
         var declarations = records.CompleteDeclarations(HeaderGroup);
-        ValidateWrapperNames(functions, declarations);
+        ValidateWrapperNames(functions.Values, declarations, model);
         var exportPrefix = ChooseExportPrefix(functions, model);
         var profile = CreateEmissionProfile(model.EmissionProfile.CSharpNamespace, model.EmissionProfile.IsInternal, exportPrefix);
         var operations = functions.OrderBy(static pair => pair.Key, StringComparer.Ordinal)
@@ -161,20 +164,41 @@ internal static class HeaderBindingGeneration
             .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
+    private static IEnumerable<string> GetLinkDirectories(GenerationOptions options)
+    {
+        return options.NativeInputs?.DependencyLibraryDirectories.Select(static path => path.FullName) ?? [];
+    }
+
+    private static IEnumerable<string> GetLinkLibraries(GenerationOptions options)
+    {
+        return (options.NativeInputs?.DependencyLibraries.Select(static path => path.FullName) ?? [])
+            .Concat(options.LinkLibraries);
+    }
+
     private static void ValidateWrapperNames(
-        IReadOnlyDictionary<string, BindingFreeFunctionDefinition> functions,
-        BindingDeclaration[] declarations)
+        IEnumerable<BindingFreeFunctionDefinition> functions,
+        BindingDeclaration[] declarations,
+        BindingProviderModel model)
     {
         var typeNames = declarations.SelectMany(static declaration =>
             new[] { declaration.Record.Type.CSharpTypeName, declaration.Record.Type.CSharpInterfaceName, })
+            .Concat(model.Enums.Select(static value => value.Name))
+            .Concat(model.FiniteProfileApis.SelectMany(BindingFiniteProfileManagedComposer.GetDeclaredTypeNames))
             .ToHashSet(StringComparer.Ordinal);
-        var collision = functions.Values.FirstOrDefault(function => typeNames.Contains(function.ContainingType));
-        if (collision is null)
+        var methods = new HashSet<(string ContainingType, string MethodName)>();
+        foreach (var function in functions)
         {
-            return;
-        }
+            if (typeNames.Contains(function.ContainingType))
+            {
+                throw new InvalidOperationException($"Wrapper name '{function.ContainingType}' conflicts with a generated type.");
+            }
 
-        throw new InvalidOperationException($"Wrapper name '{collision.ContainingType}' conflicts with a generated object type.");
+            if (function.MethodName == function.ContainingType || !methods.Add((function.ContainingType, function.MethodName)))
+            {
+                throw new InvalidOperationException(
+                    $"Method '{function.MethodName}' is not unique in wrapper '{function.ContainingType}'.");
+            }
+        }
     }
 
     private static string ChooseExportPrefix(

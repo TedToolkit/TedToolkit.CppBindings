@@ -9,8 +9,6 @@ using ModularPipelines;
 using ModularPipelines.Extensions;
 using ModularPipelines.Modules;
 
-using TedToolkit.CppBindings.Generator.Semantics;
-
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
@@ -24,11 +22,17 @@ public static class CppBindingsPipelineBuilderExtensions
     /// <param name="builder">The pipeline builder.</param>
     /// <param name="options">The input headers, native target, and dedicated output roots.</param>
     /// <returns>The same configured builder.</returns>
+    /// <exception cref="NotSupportedException">Exact native version selection requires a version-aware provider.</exception>
     public static PipelineBuilder AddCppGenerators(this PipelineBuilder builder, GenerationOptions options)
     {
         ArgumentNullException.ThrowIfNull(builder);
         ArgumentNullException.ThrowIfNull(options);
         GenerationOutput.ValidateOptions(options);
+        if (options.NativeLibraryVersion is not null)
+        {
+            throw new NotSupportedException("Exact native library version selection requires a version-aware provider.");
+        }
+
         return AddGenerationModules(builder, new GenerationSession(options, null));
     }
 
@@ -50,11 +54,6 @@ public static class CppBindingsPipelineBuilderExtensions
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(provider.PreparationModules);
         GenerationOutput.ValidateOptions(options);
-        if (options.HasPublicHeaders && provider is not SemanticGenerationProvider)
-        {
-            throw new ArgumentException("Input headers require a provider that supplies a shared semantic model.", nameof(provider));
-        }
-
         if (provider.PreparationModules.Any(static type =>
                 type?.IsAbstract != false || type.ContainsGenericParameters || !typeof(IModule).IsAssignableFrom(type)))
         {
