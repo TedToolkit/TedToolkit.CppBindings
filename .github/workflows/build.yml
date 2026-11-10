@@ -248,7 +248,9 @@ jobs:
           ref: 30ef65cad98f08e7197c9a1656fbd871bcb72f2d
           path: .vcpkg
           persist-credentials: false
-      - uses: actions/cache@v4
+      - name: Restore Unix vcpkg binary packages
+        id: unix-vcpkg-cache
+        uses: actions/cache/restore@v4
         with:
           path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
           key: vcpkg-${{ matrix.triplet }}-30ef65cad98f08e7197c9a1656fbd871bcb72f2d-${{ github.run_id }}
@@ -260,6 +262,12 @@ jobs:
           "$VCPKG_ROOT/bootstrap-vcpkg.sh" -disableMetrics
           "$VCPKG_ROOT/vcpkg" install "opencascade:$VCPKG_TRIPLET" "cgal:$VCPKG_TRIPLET" \
             "manifold:$VCPKG_TRIPLET" "fcl:$VCPKG_TRIPLET" --overlay-triplets=Build/UnixTriplets --clean-after-build
+      - name: Save Unix vcpkg binary packages
+        if: steps.unix-vcpkg-cache.outputs.cache-hit != 'true'
+        uses: actions/cache/save@v4
+        with:
+          path: ${{ env.VCPKG_DEFAULT_BINARY_CACHE }}
+          key: ${{ steps.unix-vcpkg-cache.outputs.cache-primary-key }}
       - name: Pack native providers
         shell: pwsh
         env:
