@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TedToolkit.CppBindings.Fcl</RootNamespace>
+    <Title>TedToolkit FCL macOS Arm64 bindings</Title>
+    <Description>Generated FCL bindings and their native libraries for macOS Arm64.</Description>
+    <BindingsProvider>fcl</BindingsProvider>
+    <BindingsRuntimeIdentifier>osx-arm64</BindingsRuntimeIdentifier>
+    <BindingsLibraryName>ted_toolkit_cpp_bindings_fcl</BindingsLibraryName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TedToolkit.CppBindings.Fcl.Runtime/TedToolkit.CppBindings.Fcl.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="../../../../Build/UnixBindings.targets" />
+</Project>

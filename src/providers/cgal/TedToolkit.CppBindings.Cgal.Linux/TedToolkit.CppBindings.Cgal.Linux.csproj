@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TedToolkit.CppBindings.Cgal</RootNamespace>
+    <Title>TedToolkit CGAL Linux x64 bindings</Title>
+    <Description>Generated CGAL bindings and their native libraries for Linux x64.</Description>
+    <BindingsProvider>cgal</BindingsProvider>
+    <BindingsRuntimeIdentifier>linux-x64</BindingsRuntimeIdentifier>
+    <BindingsLibraryName>ted_toolkit_cpp_bindings_cgal</BindingsLibraryName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="../../../../Build/UnixBindings.targets" />
+</Project>
