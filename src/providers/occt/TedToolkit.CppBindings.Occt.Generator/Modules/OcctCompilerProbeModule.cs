@@ -161,7 +161,6 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
         var buildDirectory = Path.Combine(sourceDirectory, "build");
         var versionRequirement = _options.Value.NativeLibraryVersion is { } version ? $" {version} EXACT" : "";
-        var compilerOptions = string.Join(" ", _options.Value.CommandLineArgs.Select(QuoteCMakeArgument));
         var dependencyIncludes = QuoteCMakeArgument(_vcpkgEnvironment.GetIncludeFolder(triplet).Replace('\\', '/'));
         var source = $$"""
             cmake_minimum_required(VERSION 3.28)
@@ -170,7 +169,6 @@ public sealed class OcctCompilerProbeModule : Module<bool>
             add_executable(probe probe.cpp)
             target_compile_features(probe PRIVATE cxx_std_{{_options.Value.CppVersion}})
             target_include_directories(probe PRIVATE "${OpenCASCADE_INCLUDE_DIR}" {{dependencyIncludes}})
-            target_compile_options(probe PRIVATE {{compilerOptions}})
             target_link_libraries(probe PRIVATE ${OpenCASCADE_LIBRARIES})
             set_target_properties(probe PROPERTIES RUNTIME_OUTPUT_DIRECTORY "${CMAKE_CURRENT_SOURCE_DIR}")
             """;
