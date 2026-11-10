@@ -8,7 +8,10 @@
 using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
+using ModularPipelines;
+
 using TedToolkit.CppBindings.Generator.Semantics;
+using TedToolkit.FileSystem;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -780,6 +783,93 @@ internal sealed class BindingSemanticEngineTests
             []);
     }
 
+    /// <summary>
+    /// Verifies that header functions reuse a provider's record identity and preserve the member slot.
+    /// </summary>
+    /// <param name="withFiniteProfile">Whether the provider also emits a finite native profile.</param>
+    /// <returns>A task that completes after inspecting the shared plan.</returns>
+    [Test]
+    [Arguments(false)]
+    [Arguments(true)]
+    public async Task Should_reuse_provider_layout_and_append_header_function_slots_Async(bool withFiniteProfile)
+    {
+        var root = DirectoryPath.CreateTempSubdirectory("CppBindings.SharedHeaders.");
+        try
+        {
+            var header = root / new FileName("Point.h");
+            await header.WriteAllTextAsync(
+                "struct Point { int value; int other; static int Measure(const int&) noexcept; };\n"
+                + "extern \"C\" Point Translate(Point value) noexcept;").ConfigureAwait(false);
+            var declaration = CreateDeclaration("Point", "ExistingPoint", false, [], "Point_Measure");
+            var rootDeclaration = CreateDeclaration("ZRecord", "ExistingRecord", true, [], "Z_Measure");
+            var finiteApi = withFiniteProfile ? CreateManifoldShapedFiniteApi() : null;
+            var model = new BindingProviderModel(
+                [declaration, rootDeclaration,], [], CreateEmissionProfile(), [], [], [], "source-stem", "source-stem",
+                nativeProject: null, finiteProfileApis: finiteApi is null ? [] : [finiteApi,]);
+            var provider = new ForwardingProvider(
+                new HeaderTestProvider(CreateEngine([new TypeRule(true, "ExistingPoint"),]), model));
+            var options = new GenerationOptions()
+            {
+                CSharpFolder = root / "managed",
+                CppFolder = root / "native",
+                CSharpNamespace = model.EmissionProfile.CSharpNamespace,
+                NativeInputs = NativeSources.FromHeaders(root, ["Point.h",]),
+            };
+
+            _ = Pipeline.CreateBuilder().AddCppGenerators(options, provider);
+            var baseline = await provider.CreatePlanAsync(CancellationToken.None).ConfigureAwait(false);
+            var plan = await provider.CreatePlanAsync(options, CancellationToken.None).ConfigureAwait(false);
+
+            var providerSlots = baseline.NativeExports;
+            var headerSlot = providerSlots.Count + 2;
+            await Assert.That(plan.NativeExports.Take(providerSlots.Count).SequenceEqual(providerSlots)).IsTrue();
+            await Assert.That(plan.NativeExports[providerSlots.Count]).IsEqualTo("Point_Measure");
+            await Assert.That(plan.NativeExports[headerSlot]).IsEqualTo("TedToolkit_FreeFunction_Call_Translate");
+            await Assert.That(plan.CSharpSources.Any(static source => source.RelativePath == "Headers/Layouts.g.cs")).IsFalse();
+            var functions = await RenderAsync(plan.CSharpSources.Single(static source =>
+                source.RelativePath == "Headers/Functions.g.cs")).ConfigureAwait(false);
+            await Assert.That(functions).Contains("static ExistingPoint Translate(");
+            await Assert.That(functions).Contains($"NativeApi.GetFunction({headerSlot})");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
+    /// Verifies that header wrappers cannot shadow a managed type already emitted by a finite profile.
+    /// </summary>
+    /// <returns>A task that completes after checking the naming diagnostic.</returns>
+    [Test]
+    public async Task Should_reject_a_wrapper_name_already_used_by_a_finite_profile_Async()
+    {
+        var root = DirectoryPath.CreateTempSubdirectory("CppBindings.HeaderWrapper.");
+        try
+        {
+            var header = root / new FileName("Fixture.h");
+            await header.WriteAllTextAsync("extern \"C\" int Sample() noexcept;").ConfigureAwait(false);
+            var model = new BindingProviderModel(
+                [], [], CreateEmissionProfile(), [], [], [], "source-stem", "source-stem",
+                nativeProject: null, finiteProfileApis: [CreateManifoldShapedFiniteApi(),]);
+            var provider = new HeaderTestProvider(CreateEngine([]), model);
+            var options = new GenerationOptions()
+            {
+                CSharpFolder = root / "managed",
+                CppFolder = root / "native",
+                Headers = [new(header, "ManifoldExtensions"),],
+            };
+
+            Func<Task> createPlan = () => provider.CreatePlanAsync(options, CancellationToken.None);
+            await Assert.That(createPlan).Throws<InvalidOperationException>()
+                .WithMessageContaining("ManifoldExtensions", StringComparison.Ordinal);
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static BindingDeclaration CreateDeclaration(
         string nativeName,
         string managedName,
@@ -905,6 +995,44 @@ internal sealed class BindingSemanticEngineTests
     private static BindingSemanticEngine CreateEngine(IEnumerable<IBindingTypeRule> rules)
     {
         return new(rules, new LayoutPolicy(), new TemplatePolicy(), [new SourceStemEmitter(),]);
+    }
+
+    private sealed class ForwardingProvider(IGenerationProvider provider) : IGenerationProvider
+    {
+        public IReadOnlyList<Type> PreparationModules
+        {
+            get
+            {
+                return provider.PreparationModules;
+            }
+        }
+
+        public Task<GenerationPlan> CreatePlanAsync(CancellationToken cancellationToken)
+        {
+            return provider.CreatePlanAsync(cancellationToken);
+        }
+
+        public Task<GenerationPlan> CreatePlanAsync(in GenerationOptions options, in CancellationToken cancellationToken)
+        {
+            return provider.CreatePlanAsync(options, cancellationToken);
+        }
+    }
+
+    private sealed class HeaderTestProvider(BindingSemanticEngine engine, BindingProviderModel model)
+        : SemanticGenerationProvider(engine)
+    {
+        public override IReadOnlyList<Type> PreparationModules
+        {
+            get
+            {
+                return [];
+            }
+        }
+
+        protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(model);
+        }
     }
 
     private sealed class TypeRule(bool matches, string managedName) : IBindingTypeRule

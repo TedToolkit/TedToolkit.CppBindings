@@ -164,6 +164,7 @@ internal static class Program
         var assembly = typeof(GenerationPlan).Assembly;
         string[] expectedTypes =
         [
+            "TedToolkit.CppBindings.Generator.BindingHeader",
             "TedToolkit.CppBindings.Generator.GenerationOptions",
             "TedToolkit.CppBindings.Generator.IGenerationProvider",
             "TedToolkit.CppBindings.Generator.NativeSourceInputs",

@@ -49,8 +49,8 @@ internal static class GenerationOutput
 
         ArgumentNullException.ThrowIfNull(options.CSharpFolder.FullName, nameof(options.CSharpFolder));
         ArgumentNullException.ThrowIfNull(options.CppFolder.FullName, nameof(options.CppFolder));
-        var managed = options.CSharpFolder.TrimEndingDirectorySeparator().FullName;
-        var native = options.CppFolder.TrimEndingDirectorySeparator().FullName;
+        var managed = options.CSharpFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
+        var native = options.CppFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
         ValidateRoot(managed);
         ValidateRoot(native);
         if (!managed.Equals(native, StringComparison.OrdinalIgnoreCase)
@@ -61,6 +61,28 @@ internal static class GenerationOutput
         }
 
         throw new ArgumentException("Language output roots must be distinct and non-overlapping.", nameof(options));
+    }
+
+    /// <summary>
+    /// Rejects native inputs that would be removed when the dedicated output roots are cleaned.
+    /// </summary>
+    /// <param name="options">The configured output roots.</param>
+    /// <param name="paths">The input file and directory paths.</param>
+    /// <exception cref="ArgumentException">An input is in a generation output root.</exception>
+    internal static void ValidateInputPaths(GenerationOptions options, IEnumerable<string> paths)
+    {
+        var managed = options.CSharpFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
+        var native = options.CppFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach (var path in paths)
+        {
+            var input = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            if (input.Equals(managed, comparison) || IsBelow(input, managed, comparison)
+                || input.Equals(native, comparison) || IsBelow(input, native, comparison))
+            {
+                throw new ArgumentException($"Native input '{input}' is inside a generation output directory.", nameof(options));
+            }
+        }
     }
 
     /// <summary>
@@ -201,9 +223,9 @@ internal static class GenerationOutput
         return path;
     }
 
-    private static bool IsBelow(string path, string root)
+    private static bool IsBelow(string path, string root, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
     {
-        return path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return path.StartsWith(root + Path.DirectorySeparatorChar, comparison);
     }
 
     private static void ValidateRoot(string path)

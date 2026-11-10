@@ -55,7 +55,7 @@ internal sealed class BindingManagedExtensionComposer(
                 ((concreteLayout is not null || record.TemplateProjection is not null)
                  && IsSupportedConstructor(method))
                 || (method.Type is MethodModelType.NORMAL
-                    && (GetFirstIndirection(method.ReturnType) is TypeIndirectionKind.LValueReference
+                    && (method.ReturnType.Transport.FirstIndirection is TypeIndirectionKind.LValueReference
                         || (method.ReturnType.IsIntrusiveHandle
                             && method.ReturnType.Transport.Indirections.Count is 0)
                         || (method.ReturnType.IsRecord
@@ -209,7 +209,7 @@ internal sealed class BindingManagedExtensionComposer(
 
     private Method ComposeExtension(MethodModel method, string recordName, bool borrowedHandleReceiver)
     {
-        if (GetFirstIndirection(method.ReturnType) is TypeIndirectionKind.LValueReference)
+        if (method.ReturnType.Transport.FirstIndirection is TypeIndirectionKind.LValueReference)
         {
             return ComposeReferenceReturn(method, recordName, borrowedHandleReceiver);
         }
@@ -359,13 +359,13 @@ internal sealed class BindingManagedExtensionComposer(
 
     private Method ComposeReferenceReturn(MethodModel method, string recordName, bool borrowedHandleReceiver)
     {
-        var returnType = GetCSharpValueType(method.ReturnType);
+        var returnType = method.ReturnType.ManagedValueType;
         var returnTypeName = returnType.ToCode();
         var shape = CreateCallShape(method, recordName, borrowedHandleReceiver);
         AddErrorTransport(method, shape);
         var declaration = CreateMethod(
             method,
-            IsReferencedValueConst(method.ReturnType) ? returnType.RefReadonly : returnType.Ref,
+            method.ReturnType.Transport.ReferencedValueIsConst ? returnType.RefReadonly : returnType.Ref,
             shape);
         declaration.AddRootDescription(new DescriptionRemarks([
             new DescriptionText("The returned reference is borrowed from native storage. "
@@ -442,10 +442,10 @@ internal sealed class BindingManagedExtensionComposer(
     private void AddParameter(ParameterModel parameter, CallShape shape)
     {
         var parameterName = parameter.Name.ToValidIdentifier();
-        var firstIndirection = GetFirstIndirection(parameter.Type);
+        var firstIndirection = parameter.Type.Transport.FirstIndirection;
         var isReference = firstIndirection is TypeIndirectionKind.LValueReference
             or TypeIndirectionKind.RValueReference;
-        var isRecordValue = parameter.Type.IsRecord && parameter.Type.Transport.Indirections.Count is 0;
+        var isRecordValue = parameter.Type.IsRecordValue;
         if (!parameter.Type.IsIntrusiveHandle
             && parameter.Type.IsRecord
             && recordCatalog is not null
@@ -483,9 +483,9 @@ internal sealed class BindingManagedExtensionComposer(
 
         if (isReference || isRecordValue)
         {
-            var referencedType = GetCSharpValueType(parameter.Type);
+            var referencedType = parameter.Type.ManagedValueType;
             var referencedTypeName = referencedType.ToCode();
-            var referencedDataType = IsReferencedValueConst(parameter.Type) || isRecordValue
+            var referencedDataType = parameter.Type.Transport.ReferencedValueIsConst || isRecordValue
                 ? referencedType.In
                 : referencedType.Ref;
             AddPublicParameter(shape, referencedDataType, parameterName);
@@ -503,7 +503,7 @@ internal sealed class BindingManagedExtensionComposer(
         if (firstIndirection is TypeIndirectionKind.PointerIndirection
             && publicDataType.StorageKind is not StorageKind.NONE)
         {
-            var valueTypeName = GetCSharpValueType(parameter.Type).ToCode();
+            var valueTypeName = parameter.Type.ManagedValueType.ToCode();
             AddPublicParameter(shape, publicDataType, parameterName);
             shape.NativeParameterTypes.Add(nativeType);
             var pointerName = parameterName + "Pointer";
@@ -827,28 +827,6 @@ internal sealed class BindingManagedExtensionComposer(
 
         path = [];
         return false;
-    }
-
-    private static TypeIndirectionKind? GetFirstIndirection(TypeModel type)
-    {
-        return type.Transport.Indirections.Count is 0 ? null : type.Transport.Indirections[0].Kind;
-    }
-
-    private static bool IsReferencedValueConst(TypeModel type)
-    {
-        return type.Transport.Indirections.Count > 1
-            ? type.Transport.Indirections[1].IsConstQualified
-            : type.Transport.ValueIsConst;
-    }
-
-    private static DataType GetCSharpValueType(TypeModel type)
-    {
-        var source = type.CSharpPublicType;
-        return new(source.Type)
-        {
-            IsArray = source.IsArray,
-            PointCounter = source.PointCounter,
-        };
     }
 
     private static string JoinLines(IEnumerable<string> lines)

@@ -3,9 +3,15 @@
   <Import Project="..\..\..\externals\TedToolkit\props\NugetPackage.props" />
   <PropertyGroup>
     <TargetFramework>net10.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Provider-neutral C++ binding generation stages, source publication, and Windows loading support.</Description>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="ClangSharp" />
+    <PackageReference Include="libclang.runtime.linux-x64" />
+    <PackageReference Include="libclang.runtime.win-x64" />
+    <PackageReference Include="libClangSharp.runtime.linux-x64" />
+    <PackageReference Include="libClangSharp.runtime.win-x64" />
     <PackageReference Include="ModularPipelines" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="TedToolkit.RoslynHelper" />

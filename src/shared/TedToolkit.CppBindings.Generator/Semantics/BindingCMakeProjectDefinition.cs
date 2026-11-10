@@ -122,6 +122,11 @@ public sealed class BindingCMakeProjectDefinition
     public IReadOnlyList<string> LinkLibraries { get; }
 
     /// <summary>
+    /// Gets the target library search directories for the default header project.
+    /// </summary>
+    internal IReadOnlyList<string> LinkDirectories { get; init; } = [];
+
+    /// <summary>
     /// Gets the target properties.
     /// </summary>
     public IReadOnlyList<BindingCMakeTargetProperty> TargetProperties { get; }

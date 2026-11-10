@@ -148,12 +148,16 @@ public sealed class BindingSemanticEngine
         ValidateProviderInputs(providerModel);
         providerModel = new BindingSemanticGraphSnapshot().Create(providerModel);
         var candidates = CreateCandidateCatalog(providerModel.Declarations);
-        var closure = CloseDependencies(candidates);
-        var declarations = closure
+        var closure = new Dictionary<string, BindingDeclaration>(StringComparer.Ordinal);
+        IncludeDependencies(candidates, closure, candidates.Values.Where(static declaration => declaration.IsRoot));
+        var providerTypes = closure.Keys.ToHashSet(StringComparer.Ordinal);
+        IncludeDependencies(candidates, closure,
+            candidates.Values.Where(static declaration => declaration.IsHeaderLayout || declaration.IsHeaderRoot));
+        var declarations = closure.Values
             .Select(ValidateDeclaration)
             .OrderBy(static declaration => declaration.Type.NativeTypeName, StringComparer.Ordinal)
             .ToArray();
-        var nativeExports = CreateNativeExportOrder(providerModel, declarations);
+        var nativeExports = CreateNativeExportOrder(providerModel, declarations, providerTypes);
         GenerationOutput.ValidateExports(nativeExports);
         return new(providerModel, declarations, nativeExports);
     }
@@ -164,6 +168,26 @@ public sealed class BindingSemanticEngine
     /// <param name="providerModel">The provider roots, policies, renderers, and native metadata.</param>
     /// <returns>The completed plan consumed by the existing generation pipeline.</returns>
     public GenerationPlan CreatePlan(BindingProviderModel providerModel)
+    {
+        return CreatePlan(providerModel, processedPublicHeaders: false);
+    }
+
+    /// <summary>
+    /// Creates one plan after Shared has processed the configured input headers.
+    /// </summary>
+    /// <param name="providerModel">The existing semantic input.</param>
+    /// <param name="options">The compiler and header inputs.</param>
+    /// <param name="cancellationToken">Cancellation for discovery.</param>
+    /// <returns>The completed plan, including the shared header discovery result.</returns>
+    internal GenerationPlan CreatePlanWithHeaders(
+        BindingProviderModel providerModel,
+        GenerationOptions options,
+        in CancellationToken cancellationToken)
+    {
+        return CreatePlan(HeaderBindingGeneration.AddHeaders(options, providerModel, cancellationToken), processedPublicHeaders: true);
+    }
+
+    private GenerationPlan CreatePlan(BindingProviderModel providerModel, bool processedPublicHeaders)
     {
         var model = CreateModel(providerModel);
         var slots = new ReadOnlyDictionary<string, int>(model.NativeExports
@@ -177,7 +201,7 @@ public sealed class BindingSemanticEngine
         native.AddRange(CreateFiniteProfileNativeSources(model));
         native.AddRange(model.Provider.NativeSources.Select(ToGeneratedSource));
         AddNativeProject(model.Provider.NativeProject, native);
-        return new(managed, native, model.NativeExports);
+        return new(managed, native, model.NativeExports) { ProcessedPublicHeaders = processedPublicHeaders, };
     }
 
     private static void ValidateProviderInputs(BindingProviderModel providerModel)
@@ -223,7 +247,7 @@ public sealed class BindingSemanticEngine
 
         foreach (var api in providerModel.FiniteProfileApis)
         {
-            BindingFiniteProfileValidator.Validate(api, providerModel.EmissionProfile);
+            BindingFiniteProfileValidator.Validate(api, api.HeaderProfile ?? providerModel.EmissionProfile);
         }
 
         if (providerModel.NativeProject is null)
@@ -251,12 +275,12 @@ public sealed class BindingSemanticEngine
         return candidates;
     }
 
-    private static BindingDeclaration[] CloseDependencies(
-        IReadOnlyDictionary<string, BindingDeclaration> candidates)
+    private static void IncludeDependencies(
+        Dictionary<string, BindingDeclaration> candidates,
+        Dictionary<string, BindingDeclaration> closure,
+        IEnumerable<BindingDeclaration> roots)
     {
-        var closure = new Dictionary<string, BindingDeclaration>(StringComparer.Ordinal);
-        var pending = new Queue<BindingDeclaration>(candidates.Values
-            .Where(static declaration => declaration.IsRoot)
+        var pending = new Queue<BindingDeclaration>(roots
             .OrderBy(static declaration => declaration.Type.NativeName, StringComparer.Ordinal));
         while (pending.TryDequeue(out var declaration))
         {
@@ -277,8 +301,6 @@ public sealed class BindingSemanticEngine
                 pending.Enqueue(dependency);
             }
         }
-
-        return closure.Values.ToArray();
     }
 
     private BindingSemanticDeclaration ValidateDeclaration(BindingDeclaration declaration)
@@ -290,6 +312,12 @@ public sealed class BindingSemanticEngine
         {
             throw new InvalidOperationException(
                 $"Declaration '{declaration.Type.NativeName}' has layout for '{declaration.Layout.NativeTypeName}'.");
+        }
+
+        if (declaration.IsHeaderLayout)
+        {
+            ValidateRecord(declaration.Record, applyProviderTypeRules: false);
+            return new(declaration, new(declaration.Type.NativeName, declaration.Record.Type.CSharpTypeName));
         }
 
         var type = ResolveType(declaration.Type);
@@ -315,7 +343,7 @@ public sealed class BindingSemanticEngine
         return new(declaration, type);
     }
 
-    private void ValidateRecord(RecordModel record)
+    private void ValidateRecord(RecordModel record, bool applyProviderTypeRules = true)
     {
         ArgumentNullException.ThrowIfNull(record.Type);
         ArgumentNullException.ThrowIfNull(record.FieldModels);
@@ -333,7 +361,7 @@ public sealed class BindingSemanticEngine
                 $"Declaration '{record.Type.CppTypeName}' uses intrusive ownership without proved reference-count lifetime.");
         }
 
-        ValidateType(record.Type, $"declaration '{record.Type.CppTypeName}'");
+        ValidateType(record.Type, $"declaration '{record.Type.CppTypeName}'", applyProviderTypeRules);
         foreach (var field in record.FieldModels)
         {
             ArgumentNullException.ThrowIfNull(field);
@@ -352,7 +380,7 @@ public sealed class BindingSemanticEngine
                     $"Field '{record.Type.CppTypeName}.{field.Name}' has an invalid managed read-only projection.");
             }
 
-            ValidateType(field.Type, $"field '{record.Type.CppTypeName}.{field.Name}'");
+            ValidateType(field.Type, $"field '{record.Type.CppTypeName}.{field.Name}'", applyProviderTypeRules);
         }
 
         foreach (var method in record.MethodModels)
@@ -377,12 +405,17 @@ public sealed class BindingSemanticEngine
         }
     }
 
-    private void ValidateType(TypeModel type, string owner)
+    private void ValidateType(TypeModel type, string owner, bool applyProviderTypeRules = true)
     {
         ArgumentNullException.ThrowIfNull(type);
         ArgumentException.ThrowIfNullOrWhiteSpace(type.CppTypeName);
         ArgumentNullException.ThrowIfNull(type.Transport);
         ArgumentNullException.ThrowIfNull(type.Transport.Indirections);
+        if (!applyProviderTypeRules)
+        {
+            return;
+        }
+
         try
         {
             _ = ResolveType(new(
@@ -406,8 +439,8 @@ public sealed class BindingSemanticEngine
             static declaration => declaration.Source.Record,
             StringComparer.Ordinal);
         return model.Declarations
-            .GroupBy(static declaration => declaration.ManagedSourceGroup, StringComparer.Ordinal)
-            .OrderBy(static group => group.Key, StringComparer.Ordinal)
+            .GroupBy(static declaration => (declaration.ManagedSourceGroup, declaration.Source.IsHeaderLayout))
+            .OrderBy(static group => group.Key.ManagedSourceGroup, StringComparer.Ordinal)
             .Select(group =>
             {
                 var declarations = group.OrderBy(
@@ -415,7 +448,9 @@ public sealed class BindingSemanticEngine
                         StringComparer.Ordinal)
                     .ToArray();
                 return new GeneratedSource(
-                    Emit(model.Provider.ManagedSourceStemEmitter, group.Key) + ".g.cs",
+                    group.Key.IsHeaderLayout
+                        ? "Headers/Layouts.g.cs"
+                        : Emit(model.Provider.ManagedSourceStemEmitter, group.Key.ManagedSourceGroup) + ".g.cs",
                     (writer, token) => RenderManagedGroupAsync(
                         declarations,
                         catalog,
@@ -430,6 +465,7 @@ public sealed class BindingSemanticEngine
     private List<GeneratedSource> CreateNativeSources(BindingSemanticModel model)
     {
         return model.Declarations
+            .Where(static declaration => !declaration.Source.IsHeaderLayout)
             .OrderBy(static declaration => declaration.Type.ManagedTypeName, StringComparer.Ordinal)
             .ThenBy(static declaration => declaration.Type.NativeTypeName, StringComparer.Ordinal)
             .Select(declaration => new GeneratedSource(
@@ -466,7 +502,7 @@ public sealed class BindingSemanticEngine
                         emissionProfile,
                         catalog,
                         slots,
-                        index is 0)
+                        declaration.Source.IsHeaderLayout || index is 0)
                     .AddTo(nameSpace);
             }
 
@@ -519,19 +555,23 @@ public sealed class BindingSemanticEngine
 
     private static string[] CreateNativeExportOrder(
         BindingProviderModel providerModel,
-        IReadOnlyList<BindingSemanticDeclaration> declarations)
+        IReadOnlyList<BindingSemanticDeclaration> declarations,
+        HashSet<string> providerTypes)
     {
-        var declarationExports = declarations.SelectMany(static declaration => declaration.NativeExports);
-        if (providerModel.FiniteProfileApis.Count > 0)
-        {
-            return providerModel.FiniteProfileApis.SelectMany(static api => api.NativeExportOrder)
+        var declarationExports = declarations.Where(declaration => providerTypes.Contains(declaration.Source.Type.NativeName))
+            .SelectMany(static declaration => declaration.NativeExports);
+        var additionalExports = declarations.Where(declaration => !providerTypes.Contains(declaration.Source.Type.NativeName))
+            .SelectMany(static declaration => declaration.NativeExports).Order(StringComparer.Ordinal);
+        var apis = providerModel.FiniteProfileApis;
+        var providerApis = apis.Where(static api => api.HeaderProfile is null).ToArray();
+        var providerExports = providerApis.Length == 0
+            ? providerModel.NativeExports.Concat(declarationExports).Order(StringComparer.Ordinal)
+            : providerApis.SelectMany(static api => api.NativeExportOrder)
                 .Concat(providerModel.NativeExports.Order(StringComparer.Ordinal))
-                .Concat(declarationExports.Order(StringComparer.Ordinal))
-                .ToArray();
-        }
-
-        return providerModel.NativeExports.Concat(declarationExports)
-            .Order(StringComparer.Ordinal)
+                .Concat(declarationExports.Order(StringComparer.Ordinal));
+        return providerExports
+            .Concat(additionalExports)
+            .Concat(apis.Where(static api => api.HeaderProfile is not null).SelectMany(static api => api.NativeExportOrder))
             .ToArray();
     }
 

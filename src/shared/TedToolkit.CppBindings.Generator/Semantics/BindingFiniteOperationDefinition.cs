@@ -11,5 +11,5 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// Identifies one composable finite-profile operation.
 /// </summary>
 /// <param name="NativeExport">The operation's native export.</param>
-/// <param name="NativeBody">The provider-owned native algorithm body.</param>
+/// <param name="NativeBody">The provider-owned native algorithm body, empty for declarative operations.</param>
 public abstract record BindingFiniteOperationDefinition(string NativeExport, string NativeBody);

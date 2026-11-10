@@ -620,7 +620,7 @@ internal sealed class RecordModelManager(
             return false;
         }
 
-        var transport = Resolver.CreateTransport(argument.AsType, out _);
+        var transport = TypeTransportModel.FromClang(argument.AsType, out _);
         if (transport.Indirections.Count is not 0)
         {
             return false;
