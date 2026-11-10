@@ -3,9 +3,9 @@
 <!-- change-format: 3 -->
 <!-- workflow-profile: controlled -->
 <!-- change-kind: behavior-change -->
-<!-- change-status: draft -->
+<!-- change-status: in-progress -->
 <!-- delivery-shape: multi-item -->
-<!-- approval-source: none -->
+<!-- approval-source: The maintainer approved the Linux x64 and Apple Silicon release contract and requested implementation in the 2026-11-10 conversation. -->
 <!-- candidate-binding: none -->
 
 <!-- section: goal-rationale -->
@@ -81,8 +81,8 @@ Scenario: Validate the release inventory for one release version
   version, and package digests. Publish the verified bytes. Any missing or invalid input blocks
   the entire feed push. If the feed accepts only part of the set, retry the same verified
   artifacts and version, using the existing duplicate handling.
-- Record the proposed platform package identities, Unix loader and dependency-closure rules,
-  and single publication gate in an accepted ADR before implementation. Revisit the scope if a
+- Apply the platform package identities, Unix loader and dependency-closure rules, and single
+  publication gate in [ADR-007](../../adr/ADR-007-platform-package-release.md). Revisit the scope if a
   provider needs a different dependency version, public profile, or licensing exception.
 
 <!-- section: start-conditions -->

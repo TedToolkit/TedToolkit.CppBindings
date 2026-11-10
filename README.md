@@ -7,10 +7,10 @@ Each builds one normalized semantic model and emits a matched C++ ABI boundary a
 the shared generation platform.
 
 > [!WARNING]
-> The project is under active development. The complete Windows binding package can be built and
-> verified locally, but they are not yet published to a remote package feed. Current ready-to-use
-> artifacts target `win-x64` and `net8.0`: OCCT 8.0.1, the finite CGAL 6.2 EPICK profile,
-> the finite Manifold 3.5.2 and FCL 0.7.0 OBBRSS profiles, and the finite SMLib 1.0.1 profile.
+> The project is under active development. The release workflow builds and verifies the platform
+> packages before publication. See [platform NuGet packages](#platform-nuget-packages) for the
+> target matrix and [GitHub releases](https://github.com/TedToolkit/TedToolkit.CppBindings/releases)
+> for published versions.
 
 ## What this repository provides
 
@@ -94,7 +94,28 @@ layout, dispatch, lifetime, and packaging contracts.
 These guarantees are governed by the [repository principles](docs/principles/README.md), not by
 convenience policy in generated bindings.
 
-## Supported profile
+## Platform NuGet packages
+
+For each provider, choose the package suffix for the machine where the consumer will run.
+For example, restore `TedToolkit.CppBindings.Occt.Linux` for Linux x64. The supported
+provider IDs are `Occt`, `Cgal`, `Manifold`, `Fcl`, and `Smlib`.
+
+| Package suffix | RID | Verification environment |
+| --- | --- | --- |
+| `.Windows` | `win-x64` | Windows x64 with MSVC |
+| `.Linux` | `linux-x64` | Ubuntu 24.04 x64 with glibc |
+| `.MacOS` | `osx-arm64` | macOS 15 on Apple Silicon |
+
+The packages target .NET 8. Linux consumers use the Ubuntu OpenGL and X11 system libraries
+for OCCT. Each platform package supplies its app-local native dependencies. Use the verified
+OS versions when validating deployments.
+
+The [Build workflow](.github/workflows/build.yml) packs and verifies the three platform sets
+and checks their combined release inventory. It pushes those same archives on `main` after
+verification. If a feed push stops partway through, rerun the failed publish job while the
+original workflow artifacts are retained. The retry uses the same version and archives.
+
+## Supported Windows profile
 
 | Concern | Current support |
 | --- | --- |

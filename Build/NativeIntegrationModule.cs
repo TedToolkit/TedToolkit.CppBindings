@@ -71,11 +71,8 @@ public sealed class NativeIntegrationModule(PipelineFiles files) : CompileCheckM
         if (OperatingSystem.IsWindows())
         {
             var reportName = $"bg-{Guid.NewGuid():N}"[..11];
-            var reportDirectory = Path.Combine(
-                repositoryRoot.FullName,
-                "out",
-                "verification",
-                reportName);
+            var reportDirectory = Environment.GetEnvironmentVariable("CPPBINDINGS_WINDOWS_ISOLATION_REPORT")
+                ?? Path.Combine(repositoryRoot.FullName, "out", "verification", reportName);
             await BuildProcess.RunAsync(
                     "pwsh",
                     [
