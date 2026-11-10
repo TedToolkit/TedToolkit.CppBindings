@@ -235,7 +235,7 @@ internal static class Helpers
     /// <returns>The normalized generated type name.</returns>
     public static string ToGeneratedTypeName(this string name)
     {
-        return BindingNameExtensions.ToGeneratedTypeName(name);
+        return NativeExportNameBuilder.GetTypeIdentifier(name);
     }
 
     /// <summary>
