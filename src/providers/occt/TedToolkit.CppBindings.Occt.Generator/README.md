@@ -142,3 +142,7 @@ through the native smoke test without generating code in the consumer.
 
 [Repository overview](../../../../README.md) · [Runtime](../TedToolkit.CppBindings.Occt.Runtime/README.md)
 · [Platform architecture](../../../../docs/architecture/cpp-bindings-platform.md)
+
+## Agent skill
+
+The `generate-cpp-bindings` skill ships in `TedToolkit.CppBindings.Generator`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Generator` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Generator@<resolved-version>`.

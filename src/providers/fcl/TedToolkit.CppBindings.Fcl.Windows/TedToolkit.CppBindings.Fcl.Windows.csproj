@@ -37,9 +37,4 @@
       <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
     </ItemGroup>
   </Target>
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/use-fcl-windows-bindings/**/*"
-          Pack="true" PackagePath="skills/use-fcl-windows-bindings/" />
-  </ItemGroup>
 </Project>

@@ -9,3 +9,7 @@ native path uses OBBRSS linear conservative advancement. Because FCL 0.7 can los
 mesh hit at zero separation, a reported miss is confirmed with FCL's exact translation solver.
 Initial/pre-endpoint collisions are explicit; both exact endpoint contact and a miss are
 `IsCollide == false` and `TimeOfContact == 1`.
+
+## Agent skill
+
+The `preserve-cpp-binding-lifetimes` skill ships in `TedToolkit.CppBindings.Runtime`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Runtime` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Runtime@<resolved-version>`.

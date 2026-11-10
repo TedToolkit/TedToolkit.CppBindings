@@ -13,9 +13,4 @@
   <ItemGroup>
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
   </ItemGroup>
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/use-fcl-binding-runtime/**/*"
-          Pack="true" PackagePath="skills/use-fcl-binding-runtime/" />
-  </ItemGroup>
 </Project>

@@ -16,9 +16,4 @@
     <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\manifold-3.5.2-windows-v2\" />
   </ItemGroup>
 
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/generate-manifold-bindings/**/*"
-          Pack="true" PackagePath="skills/generate-manifold-bindings/" />
-  </ItemGroup>
 </Project>

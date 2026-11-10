@@ -46,9 +46,4 @@
     </ItemGroup>
   </Target>
 
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/use-cgal-windows-bindings/**/*"
-          Pack="true" PackagePath="skills/use-cgal-windows-bindings/" />
-  </ItemGroup>
 </Project>

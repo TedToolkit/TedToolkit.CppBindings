@@ -44,9 +44,4 @@
       <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
     </ItemGroup>
   </Target>
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/use-occt-windows-bindings/**/*"
-          Pack="true" PackagePath="skills/use-occt-windows-bindings/" />
-  </ItemGroup>
 </Project>

@@ -17,9 +17,4 @@
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
   </ItemGroup>
 
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/use-cgal-binding-runtime/**/*"
-          Pack="true" PackagePath="skills/use-cgal-binding-runtime/" />
-  </ItemGroup>
 </Project>

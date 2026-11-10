@@ -21,3 +21,7 @@ Set `GenerationOptions.NativeLibraryVersion = new Version(3, 5, 2)` to require t
 Manifold version exactly; generated CMake then uses `find_package(manifold 3.5.2 EXACT ...)`. A
 different version is rejected by the finite profile before publication. Leaving the option unset
 retains the existing unversioned package lookup.
+
+## Agent skill
+
+The `generate-cpp-bindings` skill ships in `TedToolkit.CppBindings.Generator`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Generator` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Generator@<resolved-version>`.

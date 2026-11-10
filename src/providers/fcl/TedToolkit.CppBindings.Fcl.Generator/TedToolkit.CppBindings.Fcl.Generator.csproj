@@ -12,9 +12,4 @@
     <None Include="Resources\vcpkg.json" Pack="true" PackagePath="profiles\fcl-0.7.0-obbrss-double-windows-v2\" />
     <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\fcl-0.7.0-obbrss-double-windows-v2\" />
   </ItemGroup>
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/generate-fcl-bindings/**/*"
-          Pack="true" PackagePath="skills/generate-fcl-bindings/" />
-  </ItemGroup>
 </Project>

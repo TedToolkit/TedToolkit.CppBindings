@@ -20,3 +20,7 @@ FCL supplies only its finite profile facts, header inventory, native algorithm b
 dependency policy. Shared owns buffer pointer/length projection, validation, conditional `Owned<T>`
 construction, composite-result assembly, native-error catches, function-table slots, bootstrap source,
 and output publication. FCL has no private plan, output writer, or complete managed/native renderer.
+
+## Agent skill
+
+The `generate-cpp-bindings` skill ships in `TedToolkit.CppBindings.Generator`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Generator` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Generator@<resolved-version>`.

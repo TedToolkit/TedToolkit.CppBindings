@@ -32,9 +32,4 @@
       <TfmSpecificPackageFile Include="$(GeneratedRoot)\third-party-notices\*.txt" PackagePath="third-party-notices" />
     </ItemGroup>
   </Target>
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/use-smlib-windows-bindings/**/*"
-          Pack="true" PackagePath="skills/use-smlib-windows-bindings/" />
-  </ItemGroup>
 </Project>

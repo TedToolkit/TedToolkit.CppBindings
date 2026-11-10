@@ -13,3 +13,7 @@ double volume = box.ComputeVolume(1e-7); // 24
 
 The returned owner releases the native solid on disposal. Calls into the shared SMLib context are
 serialized by the binding. Build instructions are in the [provider guide](../README.md).
+
+## Agent skill
+
+The `preserve-cpp-binding-lifetimes` skill ships in `TedToolkit.CppBindings.Runtime`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Runtime` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Runtime@<resolved-version>`.

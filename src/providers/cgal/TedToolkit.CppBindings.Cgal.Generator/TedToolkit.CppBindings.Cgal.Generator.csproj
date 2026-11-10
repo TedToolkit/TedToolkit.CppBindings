@@ -21,9 +21,4 @@
     <None Include="Resources\vcpkg-configuration.json" Pack="true" PackagePath="profiles\epick-windows-v2\" />
   </ItemGroup>
 
-
-  <ItemGroup>
-    <None Include="../../../../.agents/skills/generate-cgal-bindings/**/*"
-          Pack="true" PackagePath="skills/generate-cgal-bindings/" />
-  </ItemGroup>
 </Project>
