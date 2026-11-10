@@ -176,9 +176,17 @@ internal static class BindingFiniteProfileValidator
     {
         ArgumentNullException.ThrowIfNull(operation);
         RequireIdentifier(operation.NativeExport, nameof(operation.NativeExport));
-        RequireText(operation.NativeBody, nameof(operation.NativeBody));
+        if (operation is not BindingFreeFunctionDefinition)
+        {
+            RequireText(operation.NativeBody, nameof(operation.NativeBody));
+        }
+
         switch (operation)
         {
+            case BindingFreeFunctionDefinition value:
+                ValidateFreeFunction(value);
+                break;
+
             case BindingBufferOwnerOperationDefinition value:
                 RequireIdentifier(value.MethodName, nameof(value.MethodName));
                 RequireReference(api.Owners, value.OwnerName, static item => item.Name, "owner");
@@ -310,6 +318,49 @@ internal static class BindingFiniteProfileValidator
             $"{methodName} parameter");
     }
 
+    private static void ValidateFreeFunction(BindingFreeFunctionDefinition function)
+    {
+        RequireIdentifier(function.ContainingType, nameof(function.ContainingType));
+        RequireIdentifier(function.MethodName, nameof(function.MethodName));
+        RequireText(function.QualifiedNativeName, nameof(function.QualifiedNativeName));
+        if (function.QualifiedNativeName.EndsWith("::NativeApi_GetFunctionTable", StringComparison.Ordinal))
+        {
+            throw new ArgumentException("The source C symbol 'NativeApi_GetFunctionTable' is reserved.");
+        }
+
+        if (function.ContainingType == function.MethodName)
+        {
+            throw new ArgumentException($"Free function '{function.MethodName}' matches its containing type.");
+        }
+
+        ValidateFreeFunctionType(function.ReturnType);
+        RequireCollection(function.Parameters, nameof(function.Parameters));
+        foreach (var parameter in function.Parameters)
+        {
+            RequireIdentifier(parameter.Name, nameof(parameter.Name));
+            ValidateFreeFunctionType(parameter.Type);
+            if (parameter.Type.ManagedType == "void")
+            {
+                throw new ArgumentException($"Free function parameter '{parameter.Name}' cannot have type void.");
+            }
+        }
+
+        EnsureUnique(function.Parameters.Select(static parameter => parameter.Name), "free function parameter");
+    }
+
+    private static void ValidateFreeFunctionType(BindingFreeFunctionType type)
+    {
+        ArgumentNullException.ThrowIfNull(type);
+        RequireText(type.NativeType, nameof(type.NativeType));
+        RequireText(type.ManagedType, nameof(type.ManagedType));
+        if (type.IsReference ? type.ManagedType != "void" : !type.IsReadOnly)
+        {
+            return;
+        }
+
+        throw new ArgumentException("The free function type has invalid reference qualifiers.", nameof(type));
+    }
+
     private static void ValidateOwner(BindingFiniteProfileApi api, BindingOwnerParameterDefinition owner)
     {
         ArgumentNullException.ThrowIfNull(owner);
@@ -356,6 +407,7 @@ internal static class BindingFiniteProfileValidator
             BindingCompositeOperationDefinition value => value.ContainingType + "." + value.MethodName,
             BindingOwnedOperationDefinition value => value.ContainingType + "." + value.MethodName,
             BindingScalarOperationDefinition value => value.ContainingType + "." + value.MethodName,
+            BindingFreeFunctionDefinition value => value.ContainingType + "." + value.MethodName,
             BindingTwoPhaseOperationDefinition value => value.ContainingType + "." + value.MethodName,
             _ => throw new ArgumentException($"Unsupported finite operation '{operation.GetType().Name}'."),
         };

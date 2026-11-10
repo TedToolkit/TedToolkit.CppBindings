@@ -163,6 +163,10 @@ public sealed class BindingProviderModel
                 Owners = Array.AsReadOnly(value.Owners.ToArray()),
                 Values = Array.AsReadOnly(value.Values.ToArray()),
             },
+            BindingFreeFunctionDefinition value => value with
+            {
+                Parameters = Array.AsReadOnly(value.Parameters.ToArray()),
+            },
             BindingTwoPhaseOperationDefinition value => value with
             {
                 Buffers = Array.AsReadOnly(value.Buffers.ToArray()),

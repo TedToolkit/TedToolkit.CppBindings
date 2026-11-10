@@ -61,7 +61,10 @@ internal sealed class BindingFiniteProfileManagedComposer(
                      .Where(static operation => operation is not BindingBufferOwnerOperationDefinition)
                      .GroupBy(GetContainingType, StringComparer.Ordinal))
         {
-            var declaration = new TypeDeclaration(group.Key, TypeDeclarationType.CLASS).Public.Static.Unsafe;
+            var declaration = new TypeDeclaration(group.Key, TypeDeclarationType.CLASS).Static.Unsafe;
+            declaration = profile.IsInternal && group.All(static operation => operation is BindingFreeFunctionDefinition)
+                ? declaration.Internal
+                : declaration.Public;
             foreach (var operation in group)
             {
                 declaration.AddMember(ComposeOperation(operation));
@@ -261,6 +264,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
             BindingCompositeOperationDefinition composite => ComposeCompositeOperation(composite),
             BindingOwnedOperationDefinition owned => ComposeOwnedOperation(owned),
             BindingScalarOperationDefinition scalar => ComposeScalarOperation(scalar),
+            BindingFreeFunctionDefinition function => ComposeFreeFunction(function),
             BindingTwoPhaseOperationDefinition twoPhase => ComposeTwoPhaseOperation(twoPhase),
             _ => throw new InvalidOperationException("A buffer owner operation is emitted on its owner type."),
         };
@@ -355,6 +359,81 @@ internal sealed class BindingFiniteProfileManagedComposer(
         callStatements.Add("return " + cast + "result;");
         statements.Add(ComposeFixedBlock(OwnerPins(operation.Owners), callStatements));
         declaration.AddStatement(new Custom(JoinLines(statements)));
+        return declaration;
+    }
+
+    private Method ComposeFreeFunction(BindingFreeFunctionDefinition function)
+    {
+        var result = function.ReturnType;
+        var returnType = new DataType(result.ManagedType);
+        if (result.IsReference)
+        {
+            returnType = result.IsReadOnly ? returnType.RefReadonly : returnType.Ref;
+        }
+
+        var declaration = new Method(function.MethodName, ReturnType(returnType)).Public.Static;
+        if (result.IsReference)
+        {
+            declaration.AddRootDescription(new DescriptionRemarks([
+                new DescriptionText("The returned reference is borrowed from native storage. "
+                                    + "The caller must preserve its native lifetime and obey its invalidation rules."),
+            ]));
+        }
+
+        var types = new List<string>();
+        var arguments = new List<string>();
+        var pins = new List<(string Type, string Name, string Expression)>();
+        var local = "__cpp";
+        while (function.Parameters.Any(parameter => parameter.Name.StartsWith(local, StringComparison.Ordinal)))
+        {
+            local += "_";
+        }
+
+        foreach (var parameter in function.Parameters)
+        {
+            var type = new DataType(parameter.Type.ManagedType);
+            types.Add(parameter.Type.ManagedTransportType);
+            if (parameter.Type.IsReference)
+            {
+                type = parameter.Type.IsReadOnly ? type.In : type.Ref;
+                var pointerName = local + "Arg" + arguments.Count;
+                pins.Add((parameter.Type.ManagedType, pointerName, "&" + parameter.Name));
+                arguments.Add(pointerName);
+            }
+            else
+            {
+                arguments.Add(parameter.Name);
+            }
+
+            declaration.AddParameter(Parameter(type, parameter.Name));
+        }
+
+        var statements = new List<string>();
+        var error = local + "Error";
+        if (!function.IsNoexcept)
+        {
+            types.Add("global::TedToolkit.CppBindings.NativeError*");
+            arguments.Add("&" + error);
+            statements.Add("global::TedToolkit.CppBindings.NativeError " + error + " = default;");
+        }
+
+        types.Add(result.ManagedTransportType);
+        var nativeApi = "global::" + profile.CSharpNamespace + ".NativeApi";
+        var invocation = Invoke(function.NativeExport, types, arguments, nativeApi);
+        var hasResult = result.ManagedType != "void";
+        var resultName = local + "Result";
+        statements.Add(hasResult ? "var " + resultName + " = " + invocation : invocation);
+        if (!function.IsNoexcept)
+        {
+            statements.Add(ManagedErrorCheck(error, nativeApi));
+        }
+
+        if (hasResult)
+        {
+            statements.Add("return " + (result.IsReference ? "ref *" : "") + resultName + ";");
+        }
+
+        declaration.AddStatement(new Custom(pins.Count == 0 ? JoinLines(statements) : ComposeFixedBlock(pins, statements)));
         return declaration;
     }
 
@@ -478,12 +557,12 @@ internal sealed class BindingFiniteProfileManagedComposer(
         return owners.Select(owner => "GC.KeepAlive(" + owner.Name + ");");
     }
 
-    private string ManagedErrorCheck()
+    private string ManagedErrorCheck(string error = "error", string nativeApi = "NativeApi")
     {
         return profile.ManagedNativeErrorProjection + ".ThrowIfFailed(\n"
-               + "    ref error,\n"
+               + "    ref " + error + ",\n"
                + "    (delegate* unmanaged[Cdecl]<global::TedToolkit.CppBindings.NativeError*, void>)"
-               + "NativeApi.GetFunction(" + slots[profile.NativeErrorClearExport] + "));";
+               + nativeApi + ".GetFunction(" + slots[profile.NativeErrorClearExport] + "));";
     }
 
     private static List<string> BufferValidation(IReadOnlyList<BindingBufferDefinition> buffers)
@@ -517,10 +596,11 @@ internal sealed class BindingFiniteProfileManagedComposer(
     private string Invoke(
         string exportName,
         IEnumerable<string> parameterTypes,
-        IEnumerable<string> arguments)
+        IEnumerable<string> arguments,
+        string nativeApi = "NativeApi")
     {
         return "((delegate* unmanaged[Cdecl]<" + string.Join(", ", parameterTypes) + ">)"
-               + "NativeApi.GetFunction(" + slots[exportName] + "))("
+               + nativeApi + ".GetFunction(" + slots[exportName] + "))("
                + string.Join(", ", arguments) + ");";
     }
 
@@ -556,6 +636,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
             BindingCompositeOperationDefinition value => value.ContainingType,
             BindingOwnedOperationDefinition value => value.ContainingType,
             BindingScalarOperationDefinition value => value.ContainingType,
+            BindingFreeFunctionDefinition value => value.ContainingType,
             BindingTwoPhaseOperationDefinition value => value.ContainingType,
             _ => throw new InvalidOperationException("A buffer owner operation is emitted on its owner type."),
         };
