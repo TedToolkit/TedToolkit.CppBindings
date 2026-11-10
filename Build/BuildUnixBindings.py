@@ -235,7 +235,7 @@ def stage_notices(args, destination, vcpkg, triplet):
     installation = vcpkg / "installed"
     for name in installed_port_dependencies(installation, triplet, port):
         # These vcpkg ports install no third-party headers or libraries.
-        if name not in {"opengl", "boost-uninstall"}:
+        if name not in {"opengl", "dirent", "boost-uninstall"}:
             copy_notice(installation / triplet / "share" / name / "copyright",
                         destination / f"{name}.txt")
 
@@ -281,18 +281,18 @@ def build(args):
             "-DVCPKG_MANIFEST_MODE=OFF",
         ))
 
-    run(*generate)
-    run(*configure)
-    run("cmake", "--build", output / "native-build", "--config", args.configuration)
-    if not any((output / "csharp").rglob("*.cs")):
-        raise ValueError("The provider generated no C# sources")
-
     with tempfile.TemporaryDirectory(prefix="stage-", dir=output) as temporary:
         stage = Path(temporary) / "package"
         stage.mkdir()
+        stage_notices(args, stage / "notices", vcpkg, triplet)
+        run(*generate)
+        run(*configure)
+        run("cmake", "--build", output / "native-build", "--config", args.configuration)
+        if not any((output / "csharp").rglob("*.cs")):
+            raise ValueError("The provider generated no C# sources")
+
         binding = library_dir / f"lib{args.library_name}{suffix}"
         stage_native(binding, stage / "native", lib_dir, is_macos)
-        stage_notices(args, stage / "notices", vcpkg, triplet)
         package = output / "package"
         if package.is_dir():
             shutil.rmtree(package)
