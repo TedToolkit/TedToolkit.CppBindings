@@ -33,4 +33,9 @@
     </ItemGroup>
   </Target>
 
+
+  <ItemGroup>
+    <None Include="../../../../.agents/skills/generate-occt-bindings/**/*"
+          Pack="true" PackagePath="skills/generate-occt-bindings/" />
+  </ItemGroup>
 </Project>

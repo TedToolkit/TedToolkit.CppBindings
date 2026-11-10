@@ -17,4 +17,9 @@
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
   </ItemGroup>
 
+
+  <ItemGroup>
+    <None Include="../../../../.agents/skills/use-manifold-binding-runtime/**/*"
+          Pack="true" PackagePath="skills/use-manifold-binding-runtime/" />
+  </ItemGroup>
 </Project>

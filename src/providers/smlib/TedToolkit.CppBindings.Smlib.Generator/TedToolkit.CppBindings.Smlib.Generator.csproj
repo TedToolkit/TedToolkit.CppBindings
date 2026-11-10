@@ -9,4 +9,9 @@
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
     <EmbeddedResource Include="SmlibSources.cmake" LogicalName="SmlibSources.cmake" />
   </ItemGroup>
+
+  <ItemGroup>
+    <None Include="../../../../.agents/skills/generate-smlib-bindings/**/*"
+          Pack="true" PackagePath="skills/generate-smlib-bindings/" />
+  </ItemGroup>
 </Project>

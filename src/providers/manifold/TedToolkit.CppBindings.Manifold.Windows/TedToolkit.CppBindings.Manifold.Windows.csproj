@@ -46,4 +46,9 @@
     </ItemGroup>
   </Target>
 
+
+  <ItemGroup>
+    <None Include="../../../../.agents/skills/use-manifold-windows-bindings/**/*"
+          Pack="true" PackagePath="skills/use-manifold-windows-bindings/" />
+  </ItemGroup>
 </Project>

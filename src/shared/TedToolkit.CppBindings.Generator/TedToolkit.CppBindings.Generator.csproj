@@ -22,4 +22,9 @@
       <Analyzer Remove="@(Analyzer)" Condition="'%(Filename)' == 'ModularPipelines.SourceGenerator'" />
     </ItemGroup>
   </Target>
+
+  <ItemGroup>
+    <None Include="../../../.agents/skills/generate-cpp-bindings/**/*"
+          Pack="true" PackagePath="skills/generate-cpp-bindings/" />
+  </ItemGroup>
 </Project>
