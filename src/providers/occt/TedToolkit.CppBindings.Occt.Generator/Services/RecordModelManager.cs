@@ -1734,12 +1734,21 @@ internal sealed class RecordModelManager(
             return false;
         }
 
-        if (method.MethodName is "swap"
-            && (cppTypeName.StartsWith("std::variant<std::monostate, Geom2dGridEval_", StringComparison.Ordinal)
-                || cppTypeName.StartsWith("std::variant<std::monostate, GeomBndLib_", StringComparison.Ordinal)
-                || cppTypeName.StartsWith("std::variant<std::monostate, GeomGridEval_", StringComparison.Ordinal)))
+        var variantPrefix = method.NativeMethodName switch
         {
-            return false;
+            "swap" => "std::variant<",
+            "__swap" => "std::__variant_detail::__impl<",
+            _ => null,
+        };
+        if (variantPrefix is not null && cppTypeName.StartsWith(variantPrefix, StringComparison.Ordinal))
+        {
+            var arguments = cppTypeName.AsSpan(variantPrefix.Length);
+            if (arguments.StartsWith("std::monostate, Geom2dGridEval_", StringComparison.Ordinal)
+                || arguments.StartsWith("std::monostate, GeomBndLib_", StringComparison.Ordinal)
+                || arguments.StartsWith("std::monostate, GeomGridEval_", StringComparison.Ordinal))
+            {
+                return false;
+            }
         }
 
         if (cppTypeName is not "NCollection_Sequence<CSLib_Class2d>")
