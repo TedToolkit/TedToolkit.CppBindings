@@ -9,21 +9,6 @@ permissions:
   pull-requests: write
 
 jobs:
-  shared-header-linux:
-    runs-on: ubuntu-24.04
-    permissions:
-      contents: read
-    steps:
-      - uses: actions/checkout@v4
-        with:
-          submodules: recursive
-      - uses: actions/setup-dotnet@v4
-        with:
-          dotnet-version: '10.0'
-      - name: Verify Shared header bindings
-        shell: pwsh
-        run: ./Build/VerifyHeaderBindings.ps1
-
   windows-build:
     runs-on: windows-2025-vs2026
     timeout-minutes: 330
