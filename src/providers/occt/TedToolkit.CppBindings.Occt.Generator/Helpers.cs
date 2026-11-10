@@ -15,6 +15,7 @@ using ClangSharp.Interop;
 
 using Cysharp.Text;
 
+using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -234,63 +235,7 @@ internal static class Helpers
     /// <returns>The normalized generated type name.</returns>
     public static string ToGeneratedTypeName(this string name)
     {
-        ArgumentNullException.ThrowIfNull(name);
-
-        using var builder = ZString.CreateStringBuilder();
-        var needsSeparator = false;
-        var endsWithUnderscore = false;
-        for (var index = 0; index < name.Length; index++)
-        {
-            var c = name[index];
-            if (char.IsLetterOrDigit(c))
-            {
-                if (builder.Length is 0 && char.IsNumber(c))
-                {
-                    builder.Append('_');
-                }
-
-                if (needsSeparator && builder.Length > 0 && !endsWithUnderscore)
-                {
-                    builder.Append('_');
-                }
-
-                builder.Append(c);
-                needsSeparator = false;
-                endsWithUnderscore = false;
-                continue;
-            }
-
-            var token = c switch
-            {
-                '*' => "Ptr",
-                '&' when index + 1 < name.Length && name[index + 1] == '&' => "RRef",
-                '&' => "Ref",
-                _ => null,
-            };
-
-            if (token is not null)
-            {
-                if (c == '&' && token == "RRef")
-                {
-                    index++;
-                }
-
-                if (builder.Length > 0 && !endsWithUnderscore)
-                {
-                    builder.Append('_');
-                }
-
-                builder.Append(token);
-                needsSeparator = true;
-                endsWithUnderscore = false;
-            }
-            else
-            {
-                needsSeparator = builder.Length > 0;
-            }
-        }
-
-        return builder.ToString();
+        return BindingNameExtensions.ToGeneratedTypeName(name);
     }
 
     /// <summary>

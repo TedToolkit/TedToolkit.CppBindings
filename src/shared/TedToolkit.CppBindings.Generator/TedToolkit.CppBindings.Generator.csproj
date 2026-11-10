@@ -7,6 +7,7 @@
     <Description>Provider-neutral C++ binding generation stages, source publication, and Windows loading support.</Description>
   </PropertyGroup>
   <ItemGroup>
+    <InternalsVisibleTo Include="TedToolkit.CppBindings.Occt.Generator" />
     <PackageReference Include="ClangSharp" />
     <PackageReference Include="libclang.runtime.linux-x64" />
     <PackageReference Include="libclang.runtime.osx-arm64" />

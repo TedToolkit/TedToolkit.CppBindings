@@ -141,7 +141,8 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
         return Task.FromResult(new BindingProviderModel(
             declarations,
             _records.EnumModels,
-            OcctSemanticProfile.CreateEmissionProfile(_options.Value.CSharpNamespace, _options.Value.IsInternal),
+            OcctSemanticProfile.CreateEmissionProfile(
+                _options.Value.CSharpNamespace, _options.Value.IsInternal, _options.Value.RuntimeIdentifier),
             managed,
             native,
             ["NativeError_Clear",],
