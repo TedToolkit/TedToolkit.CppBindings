@@ -208,6 +208,7 @@ jobs:
       VCPKG_ROOT: ${{ github.workspace }}/.vcpkg
       VCPKG_DEFAULT_BINARY_CACHE: ${{ github.workspace }}/.vcpkg-binary-cache
       VCPKG_TRIPLET: ${{ matrix.triplet }}
+      VCPKG_OVERLAY_TRIPLETS: ${{ github.workspace }}/Build/UnixTriplets
       CMAKE_BUILD_PARALLEL_LEVEL: '2'
       CC: clang
       CXX: clang++
@@ -302,7 +303,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1 libglx0 libopengl0 libegl1 libx11-6 libxext6 libxi6 libxmu6 libxrandr2 libxrender1
+          sudo apt-get install -y libgl1 libglu1-mesa libglx0 libopengl0 libegl1 libx11-6 libxext6 libxi6 libxmu6 libxrandr2 libxrender1
       - uses: actions/download-artifact@v4
         with:
           name: packed-${{ matrix.lane }}

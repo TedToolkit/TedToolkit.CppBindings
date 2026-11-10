@@ -30,7 +30,8 @@ LINUX_SYSTEM_LIBRARIES = {
     "libutil.so.1",
     # The vcpkg OpenGL port uses the host graphics stack on Linux.
     "libGL.so.1", "libGLU.so.1", "libGLX.so.0", "libOpenGL.so.0", "libEGL.so.1",
-    "libX11.so.6", "libXext.so.6", "libXi.so.6", "libXmu.so.6",
+    "libX11.so.6", "libXext.so.6", "libXi.so.6", "libXmu.so.6", "libXrandr.so.2",
+    "libXrender.so.1",
 }
 MACOS_SYSTEM_PREFIXES = ("/usr/lib/", "/System/Library/")
 
@@ -267,6 +268,8 @@ def build(args):
     if is_macos:
         configure.extend(("-DCMAKE_OSX_ARCHITECTURES=arm64", "-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0",
                           "-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-headerpad_max_install_names"))
+    else:
+        configure.append("-DCMAKE_SHARED_LINKER_FLAGS=-Wl,-z,defs")
     lib_dir = None
     if vcpkg:
         configuration_dir = ("debug", "lib") if args.configuration == "Debug" else ("lib",)
