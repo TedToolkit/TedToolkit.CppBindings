@@ -233,11 +233,19 @@ def stage_notices(args, destination, vcpkg, triplet):
         copy_notice(smlib / "THIRD_PARTY_NOTICES.md", destination / "SMLib-THIRD-PARTY-NOTICES.txt")
         return
     installation = vcpkg / "installed"
+    # These ports install no third-party headers or libraries for the pinned Unix triplets.
+    empty_ports = {"boost-uninstall", "dirent", "libiconv", "opengl", "pthread", "pthreads"}
+    missing = []
     for name in installed_port_dependencies(installation, triplet, port):
-        # These vcpkg ports install no third-party headers or libraries.
-        if name not in {"opengl", "dirent", "boost-uninstall"}:
-            copy_notice(installation / triplet / "share" / name / "copyright",
-                        destination / f"{name}.txt")
+        notice = installation / triplet / "share" / name / "copyright"
+        if name in empty_ports and not notice.exists():
+            continue
+        if not notice.is_file() or notice.stat().st_size == 0:
+            missing.append(str(notice))
+        else:
+            shutil.copyfile(notice, destination / f"{name}.txt")
+    if missing:
+        raise ValueError("Missing native redistribution notices:\n" + "\n".join(missing))
 
 
 def build(args):
