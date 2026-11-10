@@ -2,6 +2,10 @@
 $ErrorActionPreference = 'Stop'
 $PSNativeCommandUseErrorActionPreference = $true
 $repo = Split-Path $PSScriptRoot -Parent
+$editorConfig = Join-Path $repo '.editorconfig'
+if (!(Test-Path -LiteralPath $editorConfig)) {
+    Copy-Item -LiteralPath (Join-Path $repo 'externals/TedToolkit/.editorconfig') -Destination $editorConfig
+}
 $rid = $IsWindows ? 'win-x64' : 'linux-x64'
 $root = Join-Path $repo ('out/verification/header-' + [Guid]::NewGuid().ToString('N').Substring(0, 12))
 $generate = (New-Item -ItemType Directory -Path (Join-Path $root 'generate') -Force).FullName
