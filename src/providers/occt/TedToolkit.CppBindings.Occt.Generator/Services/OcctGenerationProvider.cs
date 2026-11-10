@@ -169,7 +169,7 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
             [new("OpenCASCADE", "CONFIG REQUIRED", nativeLibraryVersion),],
             compileOptions: ["$<$<CXX_COMPILER_ID:MSVC>:/MP1>",],
             includeDirectories: ["${OpenCASCADE_INCLUDE_DIR}",],
-            linkLibraries: ["${OpenCASCADE_LIBRARIES}",],
+            linkLibraries: ["${OpenCASCADE_LIBRARIES}", "$<$<PLATFORM_ID:Linux>:atomic>",],
             targetProperties:
             [
                 new("UNITY_BUILD", "ON"),

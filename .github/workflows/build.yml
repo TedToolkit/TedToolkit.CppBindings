@@ -316,7 +316,7 @@ jobs:
         shell: bash
         run: |
           sudo apt-get update
-          sudo apt-get install -y libgl1 libglu1-mesa libglx0 libopengl0 libegl1 libx11-6 libxext6 libxi6 libxmu6 libxrandr2 libxrender1
+          sudo apt-get install -y libatomic1 libgl1 libglu1-mesa libglx0 libopengl0 libegl1 libx11-6 libxext6 libxi6 libxmu6 libxrandr2 libxrender1
       - uses: actions/download-artifact@v4
         with:
           name: packed-${{ matrix.lane }}

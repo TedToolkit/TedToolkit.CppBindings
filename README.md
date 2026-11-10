@@ -106,9 +106,9 @@ provider IDs are `Occt`, `Cgal`, `Manifold`, `Fcl`, and `Smlib`.
 | `.Linux` | `linux-x64` | Ubuntu 24.04 x64 with glibc |
 | `.MacOS` | `osx-arm64` | macOS 15 on Apple Silicon |
 
-The packages target .NET 8. Linux consumers use the Ubuntu OpenGL and X11 system libraries
-for OCCT. Each platform package supplies its app-local native dependencies. Use the verified
-OS versions when validating deployments.
+The packages target .NET 8. Linux consumers use Ubuntu's `libatomic1`, OpenGL, and X11
+system libraries for OCCT. Each platform package supplies its app-local native dependencies.
+Use the verified OS versions when validating deployments.
 
 On Linux and macOS, the OCCT 8.0.1 bindings omit the by-value destruction entry point for
 `BRepGraph_CacheMesh` because Clang requires a private type defined in the OCCT implementation.

@@ -25,7 +25,7 @@ PROVIDER_PORTS = {
     "smlib": None,
 }
 LINUX_SYSTEM_LIBRARIES = {
-    "ld-linux-x86-64.so.2", "libc.so.6", "libdl.so.2", "libgcc_s.so.1",
+    "ld-linux-x86-64.so.2", "libatomic.so.1", "libc.so.6", "libdl.so.2", "libgcc_s.so.1",
     "libm.so.6", "libpthread.so.0", "libresolv.so.2", "librt.so.1", "libstdc++.so.6",
     "libutil.so.1",
     # The vcpkg OpenGL port uses the host graphics stack on Linux.
