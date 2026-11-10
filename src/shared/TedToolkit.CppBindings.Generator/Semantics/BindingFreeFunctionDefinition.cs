@@ -17,7 +17,7 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// <param name="Parameters">The function's ordered parameter projections.</param>
 /// <param name="NativeExport">The distinct C linkage name of the generated adapter.</param>
 /// <param name="IsNoexcept">Whether the source declaration proves that the function cannot throw.</param>
-public sealed record BindingFreeFunctionDefinition(
+internal sealed record BindingFreeFunctionDefinition(
     string ContainingType,
     string MethodName,
     string QualifiedNativeName,

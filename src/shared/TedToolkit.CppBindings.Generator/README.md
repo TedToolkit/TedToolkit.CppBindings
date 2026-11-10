@@ -50,7 +50,9 @@ the globally newest release.
 
 ## Generate from headers
 
-`GenerationOptions.Headers` supplies the public inputs for shared discovery. The usual
+`GenerationOptions.NativeInputs` consumes the public headers and explicit dependencies resolved
+by `NativeSources`. `GenerationOptions.Headers` also accepts individual input paths and can set a
+wrapper name for a header already selected in the resolved inputs. The usual
 `AddCppGenerators` pipeline automatically includes external C-linkage functions declared in those
 headers. Definitions in headers included only as dependencies are used for type resolution.
 

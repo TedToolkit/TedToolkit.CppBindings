@@ -8,6 +8,7 @@
 using Microsoft.CodeAnalysis.CSharp;
 
 using TedToolkit.CppBindings.Generator.Semantics;
+using TedToolkit.FileSystem;
 
 namespace TedToolkit.CppBindings.Generator;
 
@@ -38,8 +39,9 @@ internal static class HeaderBindingGeneration
                 [],
                 compileDefinitions: options.CompileDefinitions.Select(QuoteCMakeArgument),
                 compileOptions: ["/EHs", "/EHc-",],
-                includeDirectories: options.IncludeDirectories.Select(static path => QuotePath(Path.GetFullPath(path.FullName))),
-                linkLibraries: options.LinkLibraries.Select(QuotePath))));
+                includeDirectories: GetIncludeDirectories(options).Select(QuotePath),
+                linkLibraries: (options.NativeInputs?.DependencyLibraries.Select(static path => path.FullName) ?? [])
+                    .Concat(options.LinkLibraries).Select(QuotePath))));
         return engine.CreatePlan(AddHeaders(options, model, cancellationToken));
     }
 
@@ -56,7 +58,7 @@ internal static class HeaderBindingGeneration
         BindingProviderModel model,
         in CancellationToken cancellationToken)
     {
-        if (options.Headers.Count == 0)
+        if (!options.HasPublicHeaders)
         {
             return model;
         }
@@ -66,13 +68,11 @@ internal static class HeaderBindingGeneration
             throw new NotSupportedException("Shared header discovery currently requires the win-x64 MSVC ABI.");
         }
 
-        var headers = options.Headers
-            .OrderBy(static header => header.Path.FullName, StringComparer.OrdinalIgnoreCase)
-            .ToDictionary(static header => Path.GetFullPath(header.Path.FullName), GetWrapperName, StringComparer.OrdinalIgnoreCase);
+        var headers = ResolveHeaders(options);
         string[] arguments =
         [
             "-x", "c++", "--target=x86_64-pc-windows-msvc", "-std=c++" + options.CppVersion,
-            .. options.IncludeDirectories.Select(static directory => "-I" + Path.GetFullPath(directory.FullName)),
+            .. GetIncludeDirectories(options).Select(static directory => "-I" + directory),
             .. options.CompileDefinitions.Select(static definition => "-D" + definition),
         ];
         var includes = string.Join("\n", headers.Keys.Select(static header => "#include " + QuotePath(header)));
@@ -138,6 +138,27 @@ internal static class HeaderBindingGeneration
         }
 
         throw new ArgumentException($"'{name}' is not an available wrapper class name for '{header.Path.FullName}'.");
+    }
+
+    private static Dictionary<string, string> ResolveHeaders(GenerationOptions options)
+    {
+        var nativeHeaders = options.NativeInputs is { } inputs
+            ? inputs.PublicHeaders.Select(header => new BindingHeader(new FilePath(Path.GetFullPath(header, inputs.IncludeRoot.FullName))))
+            : [];
+        return nativeHeaders.Concat(options.Headers)
+            .GroupBy(static header => Path.GetFullPath(header.Path.FullName), StringComparer.OrdinalIgnoreCase)
+            .OrderBy(static group => group.Key, StringComparer.OrdinalIgnoreCase)
+            .ToDictionary(static group => group.Key, static group => GetWrapperName(group.Last()), StringComparer.OrdinalIgnoreCase);
+    }
+
+    private static IEnumerable<string> GetIncludeDirectories(GenerationOptions options)
+    {
+        var nativeDirectories = options.NativeInputs is { } inputs
+            ? inputs.DependencyIncludeDirectories.Prepend(inputs.IncludeRoot)
+            : [];
+        return nativeDirectories.Concat(options.IncludeDirectories)
+            .Select(static path => Path.GetFullPath(path.FullName))
+            .Distinct(StringComparer.OrdinalIgnoreCase);
     }
 
     private static void ValidateWrapperNames(

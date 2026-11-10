@@ -12,4 +12,4 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// </summary>
 /// <param name="Name">The managed parameter name.</param>
 /// <param name="Type">The parameter's type projection.</param>
-public sealed record BindingFreeFunctionParameter(string Name, BindingFreeFunctionType Type);
+internal sealed record BindingFreeFunctionParameter(string Name, BindingFreeFunctionType Type);

@@ -50,7 +50,7 @@ public static class CppBindingsPipelineBuilderExtensions
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(provider.PreparationModules);
         GenerationOutput.ValidateOptions(options);
-        if (options.Headers.Count != 0 && provider is not SemanticGenerationProvider)
+        if (options.HasPublicHeaders && provider is not SemanticGenerationProvider)
         {
             throw new ArgumentException("Input headers require a provider that supplies a shared semantic model.", nameof(provider));
         }

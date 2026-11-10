@@ -81,6 +81,11 @@ public record GenerationOptions
     public IReadOnlyList<BindingHeader> Headers { get; init; } = [];
 
     /// <summary>
+    /// Gets the resolved native inputs whose public headers participate in shared discovery.
+    /// </summary>
+    public NativeSourceInputs? NativeInputs { get; init; }
+
+    /// <summary>
     /// Gets the include directories for shared header discovery and the default native project.
     /// </summary>
     public IReadOnlyList<DirectoryPath> IncludeDirectories { get; init; } = [];
@@ -103,6 +108,17 @@ public record GenerationOptions
     /// Providers with finite profiles reject a version that does not match the selected profile.
     /// </remarks>
     public Version? NativeLibraryVersion { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether there are public inputs for header discovery.
+    /// </summary>
+    internal bool HasPublicHeaders
+    {
+        get
+        {
+            return Headers.Count > 0 || NativeInputs?.PublicHeaders.Count > 0;
+        }
+    }
 
     /// <summary>
     /// Gets the validated native library artifact basename.

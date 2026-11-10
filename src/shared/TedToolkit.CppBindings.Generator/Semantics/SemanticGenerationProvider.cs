@@ -86,7 +86,7 @@ public abstract class SemanticGenerationProvider : IGenerationProvider
             : await CreateProviderModelAsync(options, cancellationToken).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(providerModel);
         cancellationToken.ThrowIfCancellationRequested();
-        return options?.Headers.Count > 0
+        return options is { HasPublicHeaders: true, }
             ? SemanticEngine.CreatePlan(HeaderBindingGeneration.AddHeaders(options, providerModel, cancellationToken))
             : SemanticEngine.CreatePlan(providerModel);
     }

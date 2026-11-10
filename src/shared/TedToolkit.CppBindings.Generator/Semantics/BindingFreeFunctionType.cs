@@ -14,7 +14,7 @@ namespace TedToolkit.CppBindings.Generator.Semantics;
 /// <param name="ManagedType">The C# type or, for an lvalue reference, its referred-to type.</param>
 /// <param name="IsReference">Whether the C++ type is an lvalue reference.</param>
 /// <param name="IsReadOnly">Whether the lvalue reference is const-qualified.</param>
-public sealed record BindingFreeFunctionType(
+internal sealed record BindingFreeFunctionType(
     string NativeType,
     string ManagedType,
     bool IsReference = false,

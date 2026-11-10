@@ -804,7 +804,7 @@ internal sealed class BindingSemanticEngineTests
                 CSharpFolder = root / "managed",
                 CppFolder = root / "native",
                 CSharpNamespace = model.EmissionProfile.CSharpNamespace,
-                Headers = [new(header),],
+                NativeInputs = NativeSources.FromHeaders(root, ["Point.h",]),
             };
 
             var plan = await provider.CreatePlanAsync(options, CancellationToken.None).ConfigureAwait(false);
