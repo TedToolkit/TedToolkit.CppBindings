@@ -40,7 +40,7 @@ the shared generation platform.
 | Use the finite FCL package | [FCL Windows bindings](src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/README.md) |
 | Generate the finite FCL profile | [FCL Generator](src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/README.md) |
 | Build SMLib directly from source | [SMLib provider](src/providers/smlib/README.md) |
-| Bind external C linkage functions from C++ headers | [C ABI Generator](src/providers/cabi/TedToolkit.CppBindings.CAbi.Generator/README.md) |
+| Bind external C linkage functions from C++ headers | [Shared header generation](src/shared/TedToolkit.CppBindings.Generator/README.md#generate-from-headers) |
 | Generate OCCT bindings | [OCCT Generator](src/providers/occt/TedToolkit.CppBindings.Occt.Generator/README.md) |
 | Use provider-neutral generation stages | [Generator](src/shared/TedToolkit.CppBindings.Generator/README.md) |
 | Understand ownership and generated-code contracts | [Runtime](src/shared/TedToolkit.CppBindings.Runtime/README.md) |

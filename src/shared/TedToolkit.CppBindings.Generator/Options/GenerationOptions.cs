@@ -76,6 +76,26 @@ public record GenerationOptions
     public int CppVersion { get; set; } = 17;
 
     /// <summary>
+    /// Gets the public input headers. Shared discovers external C linkage functions in these headers.
+    /// </summary>
+    public IReadOnlyList<BindingHeader> Headers { get; init; } = [];
+
+    /// <summary>
+    /// Gets the include directories for shared header discovery and the default native project.
+    /// </summary>
+    public IReadOnlyList<DirectoryPath> IncludeDirectories { get; init; } = [];
+
+    /// <summary>
+    /// Gets the preprocessor definitions for shared header discovery and the default native project.
+    /// </summary>
+    public IReadOnlyList<string> CompileDefinitions { get; init; } = [];
+
+    /// <summary>
+    /// Gets the native libraries linked by the default native project.
+    /// </summary>
+    public IReadOnlyList<string> LinkLibraries { get; init; } = [];
+
+    /// <summary>
     /// Gets the exact version required for the provider's primary native library.
     /// </summary>
     /// <remarks>

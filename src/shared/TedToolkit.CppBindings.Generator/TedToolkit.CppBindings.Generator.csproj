@@ -6,6 +6,9 @@
     <Description>Provider-neutral C++ binding generation stages, source publication, and Windows loading support.</Description>
   </PropertyGroup>
   <ItemGroup>
+    <PackageReference Include="ClangSharp" />
+    <PackageReference Include="libclang.runtime.win-x64" />
+    <PackageReference Include="libClangSharp.runtime.win-x64" />
     <PackageReference Include="ModularPipelines" />
     <PackageReference Include="Microsoft.CodeAnalysis.CSharp.Workspaces" />
     <PackageReference Include="TedToolkit.RoslynHelper" />

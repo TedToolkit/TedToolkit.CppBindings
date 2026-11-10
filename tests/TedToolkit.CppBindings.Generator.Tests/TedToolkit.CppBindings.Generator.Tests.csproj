@@ -11,7 +11,6 @@
   <ItemGroup>
     <Compile Remove="Fixtures\**\*.cs" />
     <ProjectReference Include="..\..\src\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
-    <ProjectReference Include="..\..\src\providers\cabi\TedToolkit.CppBindings.CAbi.Generator\TedToolkit.CppBindings.CAbi.Generator.csproj" />
   </ItemGroup>
 
   <ItemGroup>

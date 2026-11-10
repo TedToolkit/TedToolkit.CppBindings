@@ -402,13 +402,21 @@ internal sealed class BindingFiniteProfileManagedComposer(
             }
             else
             {
-                arguments.Add(parameter.Name);
+                arguments.Add(parameter.Type.IsRecordValue ? "&" + parameter.Name : parameter.Name);
             }
 
             declaration.AddParameter(Parameter(type, parameter.Name));
         }
 
         var statements = new List<string>();
+        var resultName = local + "Result";
+        if (result.IsRecordValue)
+        {
+            types.Add(result.ManagedTransportType);
+            arguments.Add("&" + resultName);
+            statements.Add(result.ManagedType + " " + resultName + " = default;");
+        }
+
         var error = local + "Error";
         if (!function.IsNoexcept)
         {
@@ -417,12 +425,11 @@ internal sealed class BindingFiniteProfileManagedComposer(
             statements.Add("global::TedToolkit.CppBindings.NativeError " + error + " = default;");
         }
 
-        types.Add(result.ManagedTransportType);
+        types.Add(result.IsRecordValue ? "void" : result.ManagedTransportType);
         var nativeApi = "global::" + profile.CSharpNamespace + ".NativeApi";
         var invocation = Invoke(function.NativeExport, types, arguments, nativeApi);
         var hasResult = result.ManagedType != "void";
-        var resultName = local + "Result";
-        statements.Add(hasResult ? "var " + resultName + " = " + invocation : invocation);
+        statements.Add(hasResult && !result.IsRecordValue ? "var " + resultName + " = " + invocation : invocation);
         if (!function.IsNoexcept)
         {
             statements.Add(ManagedErrorCheck(error, nativeApi));

@@ -27,7 +27,7 @@ $buildArguments = @('build', $consumerProject, '-c', 'Release', '--disable-build
 & dotnet @buildArguments *> $buildLog
 if ($LASTEXITCODE -ne 0) { throw "Independent package consumer did not compile; see $buildLog" }
 $assets = Get-Content -LiteralPath (Join-Path $consumer 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
-if (@($assets.libraries.Keys | Where-Object { $_ -match 'Occt|Clang' }).Count -ne 0) {
+if (@($assets.libraries.Keys | Where-Object { $_ -match '^TedToolkit\.CppBindings\.[^/]+/' -and $_ -notmatch '^TedToolkit\.CppBindings\.Generator/' }).Count -ne 0) {
     throw 'The generic package consumer acquired a provider dependency.'
 }
 $package = Join-Path $feed 'TedToolkit.CppBindings.Generator.1.0.0.nupkg'

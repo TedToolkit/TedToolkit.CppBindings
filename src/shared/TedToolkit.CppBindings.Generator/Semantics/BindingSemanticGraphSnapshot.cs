@@ -39,7 +39,7 @@ internal sealed class BindingSemanticGraphSnapshot
             source.ManagedSourceStemEmitter,
             source.NativeSourceStemEmitter,
             source.NativeProject,
-            source.FiniteProfileApis);
+            source.FiniteProfileApis) { HeaderApi = source.HeaderApi, };
     }
 
     private BindingDeclaration CloneDeclaration(BindingDeclaration source)
@@ -48,7 +48,7 @@ internal sealed class BindingSemanticGraphSnapshot
             CloneRecord(source.Record),
             source.ManagedSourceGroup,
             source.IsRoot,
-            source.Dependencies);
+            source.Dependencies) { IsHeaderLayout = source.IsHeaderLayout, };
     }
 
     private RecordModel CloneRecord(RecordModel source)

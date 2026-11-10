@@ -9,6 +9,7 @@ using Microsoft.CodeAnalysis;
 using Microsoft.CodeAnalysis.CSharp;
 
 using TedToolkit.CppBindings.Generator.Semantics;
+using TedToolkit.FileSystem;
 using TedToolkit.RoslynHelper.Generators;
 using TedToolkit.RoslynHelper.Generators.Syntaxes;
 
@@ -780,6 +781,48 @@ internal sealed class BindingSemanticEngineTests
             []);
     }
 
+    /// <summary>
+    /// Verifies that header functions reuse a provider's record identity and preserve the member slot.
+    /// </summary>
+    /// <returns>A task that completes after inspecting the shared plan.</returns>
+    [Test]
+    public async Task Should_reuse_provider_layout_and_append_header_function_slots_Async()
+    {
+        var root = DirectoryPath.CreateTempSubdirectory("CppBindings.SharedHeaders.");
+        try
+        {
+            var header = root / new FileName("Point.h");
+            await header.WriteAllTextAsync(
+                "struct Point { int value; int other; static int Measure(const int&) noexcept; };\n"
+                + "extern \"C\" Point Translate(Point value) noexcept;").ConfigureAwait(false);
+            var declaration = CreateDeclaration("Point", "ExistingPoint", false, [], "Point_Measure");
+            var model = new BindingProviderModel(
+                [declaration,], [], CreateEmissionProfile(), [], [], [], "source-stem", "source-stem", nativeProject: null);
+            var provider = new HeaderTestProvider(CreateEngine([new TypeRule(true, "ExistingPoint"),]), model);
+            var options = new GenerationOptions()
+            {
+                CSharpFolder = root / "managed",
+                CppFolder = root / "native",
+                CSharpNamespace = model.EmissionProfile.CSharpNamespace,
+                Headers = [new(header),],
+            };
+
+            var plan = await provider.CreatePlanAsync(options, CancellationToken.None).ConfigureAwait(false);
+
+            await Assert.That(plan.NativeExports[0]).IsEqualTo("Point_Measure");
+            await Assert.That(plan.NativeExports[2]).IsEqualTo("TedToolkit_FreeFunction_Call_Translate");
+            await Assert.That(plan.CSharpSources.Any(static source => source.RelativePath == "Headers/Layouts.g.cs")).IsFalse();
+            var functions = await RenderAsync(plan.CSharpSources.Single(static source =>
+                source.RelativePath == "Headers/Functions.g.cs")).ConfigureAwait(false);
+            await Assert.That(functions).Contains("static ExistingPoint Translate(");
+            await Assert.That(functions).Contains("NativeApi.GetFunction(2)");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
     private static BindingDeclaration CreateDeclaration(
         string nativeName,
         string managedName,
@@ -905,6 +948,23 @@ internal sealed class BindingSemanticEngineTests
     private static BindingSemanticEngine CreateEngine(IEnumerable<IBindingTypeRule> rules)
     {
         return new(rules, new LayoutPolicy(), new TemplatePolicy(), [new SourceStemEmitter(),]);
+    }
+
+    private sealed class HeaderTestProvider(BindingSemanticEngine engine, BindingProviderModel model)
+        : SemanticGenerationProvider(engine)
+    {
+        public override IReadOnlyList<Type> PreparationModules
+        {
+            get
+            {
+                return [];
+            }
+        }
+
+        protected override Task<BindingProviderModel> CreateProviderModelAsync(CancellationToken cancellationToken)
+        {
+            return Task.FromResult(model);
+        }
     }
 
     private sealed class TypeRule(bool matches, string managedName) : IBindingTypeRule

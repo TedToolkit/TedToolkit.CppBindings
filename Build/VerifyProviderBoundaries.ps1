@@ -18,7 +18,6 @@ $expectedProjects = @(
     'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj',
     'src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj',
     'src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj',
-    'src/providers/cabi/TedToolkit.CppBindings.CAbi.Generator/TedToolkit.CppBindings.CAbi.Generator.csproj',
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj',
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Runtime/TedToolkit.CppBindings.Cgal.Runtime.csproj',
     'src/providers/cgal/TedToolkit.CppBindings.Cgal.Windows/TedToolkit.CppBindings.Cgal.Windows.csproj',
@@ -275,16 +274,12 @@ $generationHostPath = Join-Path $repository `
 [xml] $generationHost = Get-Content -LiteralPath $generationHostPath -Raw
 $generationReferences = @($generationHost.SelectNodes('/Project/ItemGroup/ProjectReference') |
     ForEach-Object { $_.GetAttribute('Include').Replace('\', '/') })
-$windowsProviderIdentifiers = @($windowsPackagingRules.Keys | ForEach-Object { ($_ -split '/')[2] })
-foreach ($provider in $windowsProviderIdentifiers) {
+foreach ($provider in $providerIdentifiers) {
     if (@($generationReferences | Where-Object { $_ -match "CppBindings\.$provider\.Generator\.csproj`$" }).Count -ne 1) {
         throw "The shared Windows generation host must directly reference the $provider generator once."
     }
 }
 $generationContracts = [ordered]@{
-    cabi = @(
-        'src/providers/cabi/TedToolkit.CppBindings.CAbi.Generator/CAbiGenerationProvider.cs',
-        'src/providers/cabi/TedToolkit.CppBindings.CAbi.Generator/TedToolkit.CppBindings.CAbi.Generator.csproj')
     cgal = @(
         'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/CgalGenerationProvider.cs',
         'src/providers/cgal/TedToolkit.CppBindings.Cgal.Generator/TedToolkit.CppBindings.Cgal.Generator.csproj')

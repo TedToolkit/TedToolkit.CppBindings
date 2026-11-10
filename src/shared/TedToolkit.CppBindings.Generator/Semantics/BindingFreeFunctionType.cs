@@ -21,13 +21,29 @@ public sealed record BindingFreeFunctionType(
     bool IsReadOnly = false)
 {
     /// <summary>
+    /// Gets whether the source takes or returns a proved record by value.
+    /// </summary>
+    internal bool IsRecordValue { get; init; }
+
+    /// <summary>
+    /// Gets whether the native argument uses caller storage.
+    /// </summary>
+    internal bool IsPassedByAddress
+    {
+        get
+        {
+            return IsReference || IsRecordValue;
+        }
+    }
+
+    /// <summary>
     /// Gets the managed ABI type.
     /// </summary>
     internal string ManagedTransportType
     {
         get
         {
-            return IsReference ? ManagedType + "*" : ManagedType;
+            return IsPassedByAddress ? ManagedType + "*" : ManagedType;
         }
     }
 
@@ -38,7 +54,8 @@ public sealed record BindingFreeFunctionType(
     {
         get
         {
-            return IsReference ? NativeType + "*" : NativeType;
+            var type = IsRecordValue ? "const " + NativeType : NativeType;
+            return IsPassedByAddress ? type + "*" : type;
         }
     }
 }

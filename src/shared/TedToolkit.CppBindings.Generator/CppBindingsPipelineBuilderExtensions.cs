@@ -9,6 +9,8 @@ using ModularPipelines;
 using ModularPipelines.Extensions;
 using ModularPipelines.Modules;
 
+using TedToolkit.CppBindings.Generator.Semantics;
+
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
@@ -16,6 +18,20 @@ namespace TedToolkit.CppBindings.Generator;
 /// </summary>
 public static class CppBindingsPipelineBuilderExtensions
 {
+    /// <summary>
+    /// Registers source generation from the configured public input headers.
+    /// </summary>
+    /// <param name="builder">The pipeline builder.</param>
+    /// <param name="options">The input headers, native target, and dedicated output roots.</param>
+    /// <returns>The same configured builder.</returns>
+    public static PipelineBuilder AddCppGenerators(this PipelineBuilder builder, GenerationOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(options);
+        GenerationOutput.ValidateOptions(options);
+        return AddGenerationModules(builder, new GenerationSession(options, null));
+    }
+
     /// <summary>
     /// Registers the clean and language publication stages after the provider's preparation modules.
     /// </summary>
@@ -34,13 +50,22 @@ public static class CppBindingsPipelineBuilderExtensions
         ArgumentNullException.ThrowIfNull(provider);
         ArgumentNullException.ThrowIfNull(provider.PreparationModules);
         GenerationOutput.ValidateOptions(options);
+        if (options.Headers.Count != 0 && provider is not SemanticGenerationProvider)
+        {
+            throw new ArgumentException("Input headers require a provider that supplies a shared semantic model.", nameof(provider));
+        }
+
         if (provider.PreparationModules.Any(static type =>
                 type?.IsAbstract != false || type.ContainsGenericParameters || !typeof(IModule).IsAssignableFrom(type)))
         {
             throw new ArgumentException("Preparation dependencies must be concrete pipeline module types.", nameof(provider));
         }
 
-        var session = new GenerationSession(options, provider);
+        return AddGenerationModules(builder, new GenerationSession(options, provider));
+    }
+
+    private static PipelineBuilder AddGenerationModules(PipelineBuilder builder, GenerationSession session)
+    {
         builder.Services
             .AddModule<CleanGenerationOutputModule>(_ => new CleanGenerationOutputModule(session))
             .AddModule<GenerateCSharpModule>(_ => new GenerateCSharpModule(session))

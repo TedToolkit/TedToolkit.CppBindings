@@ -82,4 +82,9 @@ public sealed class BindingDeclaration
     /// Gets the native exports derived from the normalized declaration.
     /// </summary>
     public IReadOnlyList<string> NativeExports { get; }
+
+    /// <summary>
+    /// Gets a value indicating whether Shared proved this layout directly from the selected headers.
+    /// </summary>
+    internal bool IsHeaderLayout { get; init; }
 }

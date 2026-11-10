@@ -1,5 +1,5 @@
 // -----------------------------------------------------------------------
-// <copyright file="CAbiCompilerDiscovery.cs" company="TedToolkit">
+// <copyright file="HeaderCompilerDiscovery.cs" company="TedToolkit">
 // Copyright (c) TedToolkit. All rights reserved.
 // Licensed under the LGPL-3.0 license. See COPYING, COPYING.LESSER file in the project root for full license information.
 // </copyright>
@@ -12,43 +12,42 @@ using Microsoft.CodeAnalysis.CSharp;
 
 using TedToolkit.CppBindings.Generator.Semantics;
 
-namespace TedToolkit.CppBindings.CAbi.Generator;
+namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
-/// Discovers and projects external C linkage declarations from one selected header.
+/// Discovers external C linkage declarations from the public headers of one compiler input.
 /// </summary>
-internal static class CAbiCompilerDiscovery
+internal static class HeaderCompilerDiscovery
 {
     /// <summary>
-    /// Projects the eligible declarations from the selected header.
+    /// Projects the eligible declarations from the selected headers.
     /// </summary>
-    /// <param name="header">The absolute header path.</param>
-    /// <param name="wrapperClassName">The managed containing type.</param>
+    /// <param name="headers">The absolute header paths and managed wrapper names.</param>
+    /// <param name="includes">The public header includes compiled together.</param>
     /// <param name="arguments">The native target and preprocessor arguments.</param>
+    /// <param name="records">The shared record discovery and reuse context.</param>
     /// <param name="cancellationToken">The token that cancels discovery.</param>
     /// <returns>The eligible functions, once per C symbol.</returns>
-    internal static IReadOnlyList<BindingFreeFunctionDefinition> Discover(
-        string header,
-        string wrapperClassName,
+    internal static Dictionary<string, BindingFreeFunctionDefinition> Discover(
+        IReadOnlyDictionary<string, string> headers,
+        string includes,
         string[] arguments,
+        HeaderRecordDiscovery records,
         in CancellationToken cancellationToken)
     {
+        const string InputName = "TedToolkitHeaderBindings.cpp";
+        using var input = CXUnsavedFile.Create(InputName, includes);
         using var index = CXIndex.Create();
         var translationUnit = CXTranslationUnit.Parse(
-            index, header, arguments, [], CXTranslationUnit_Flags.CXTranslationUnit_SkipFunctionBodies);
+            index, InputName, arguments, [input,], CXTranslationUnit_Flags.CXTranslationUnit_SkipFunctionBodies);
         using var unit = TranslationUnit.GetOrCreate(translationUnit);
-        ThrowForDiagnostics(translationUnit, header);
+        ThrowForDiagnostics(translationUnit);
 
         var functions = new Dictionary<string, BindingFreeFunctionDefinition>(StringComparer.Ordinal);
         var pending = new Stack<Cursor>(unit.TranslationUnitDecl.CursorChildren.Reverse());
         while (pending.TryPop(out var cursor))
         {
             cancellationToken.ThrowIfCancellationRequested();
-            if (!cursor.Location.IsFromMainFile)
-            {
-                continue;
-            }
-
             if (cursor.CursorKind is CXCursorKind.CXCursor_LinkageSpec or CXCursorKind.CXCursor_Namespace)
             {
                 foreach (var child in cursor.CursorChildren.Reverse())
@@ -58,13 +57,22 @@ internal static class CAbiCompilerDiscovery
             }
             else if (cursor is FunctionDecl { CursorKind: CXCursorKind.CXCursor_FunctionDecl, IsExternC: true, } function
                      && !functions.ContainsKey(function.Spelling)
+                     && GetHeader(function) is { } header
+                     && headers.TryGetValue(header, out var wrapper)
                      && GetQualifiedName(function) is { } qualifiedName)
             {
-                functions.Add(function.Spelling, Project(function, qualifiedName, wrapperClassName));
+                functions.Add(function.Spelling, Project(function, qualifiedName, wrapper, records));
             }
         }
 
-        return functions.Values.ToArray();
+        return functions;
+    }
+
+    private static string? GetHeader(FunctionDecl function)
+    {
+        function.Location.GetFileLocation(out var file, out _, out _, out _);
+        var path = file.Name.CString;
+        return string.IsNullOrEmpty(path) ? null : Path.GetFullPath(path);
     }
 
     private static string? GetQualifiedName(FunctionDecl function)
@@ -94,7 +102,8 @@ internal static class CAbiCompilerDiscovery
     private static BindingFreeFunctionDefinition Project(
         FunctionDecl function,
         string qualifiedName,
-        string wrapperClassName)
+        string wrapperClassName,
+        HeaderRecordDiscovery records)
     {
         if (function.IsVariadic
             || function.Type.Handle.FunctionTypeCallingConv is not
@@ -116,7 +125,7 @@ internal static class CAbiCompilerDiscovery
                 }
             }
 
-            return new BindingFreeFunctionParameter(name, ProjectType(parameter.Type.Handle, qualifiedName));
+            return new BindingFreeFunctionParameter(name, ProjectType(parameter.Type, qualifiedName, records));
         }).ToArray();
         var isNoexcept = function.ExceptionSpecType is
             CXCursor_ExceptionSpecificationKind.CXCursor_ExceptionSpecificationKind_BasicNoexcept
@@ -127,7 +136,7 @@ internal static class CAbiCompilerDiscovery
             wrapperClassName,
             methodName,
             qualifiedName,
-            ProjectType(function.ReturnType.Handle, qualifiedName),
+            ProjectType(function.ReturnType, qualifiedName, records),
             parameters,
             function.Spelling,
             isNoexcept);
@@ -144,24 +153,50 @@ internal static class CAbiCompilerDiscovery
             && SyntaxFacts.GetKeywordKind(value) == SyntaxKind.None;
     }
 
-    private static BindingFreeFunctionType ProjectType(CXType type, string functionName)
+    /// <summary>
+    /// Projects a compiler type using the same record catalog as the managed layout emitter.
+    /// </summary>
+    /// <param name="type">The compiler type.</param>
+    /// <param name="context">The source declaration used for diagnostics.</param>
+    /// <param name="records">The shared record discovery context.</param>
+    /// <returns>The callable and field type projection.</returns>
+    /// <exception cref="NotSupportedException">The type has no supported value or reference transport.</exception>
+    internal static BindingFreeFunctionType ProjectType(ClangSharp.Type type, string context, HeaderRecordDiscovery records)
     {
         type = type.CanonicalType;
-        var isReference = type.kind == CXTypeKind.CXType_LValueReference;
-        var value = isReference ? type.PointeeType.CanonicalType : type.UnqualifiedType;
-        if (isReference && value.IsVolatileQualified)
+        var isReference = type is LValueReferenceType;
+        var value = isReference ? type.PointeeType.CanonicalType : type;
+        var native = isReference ? value.Handle : value.Handle.UnqualifiedType;
+        if (isReference && native.IsVolatileQualified)
         {
-            throw UnsupportedType(type, functionName);
+            throw UnsupportedType(type.Handle, context);
+        }
+
+        var isRecordValue = !isReference && value is RecordType;
+        if (isRecordValue && value is RecordType record
+            && (records.Resolve(record, context).ObjectKind != NativeObjectKind.Value || native.SizeOf <= 0))
+        {
+            throw new NotSupportedException($"'{context}' requires a complete copyable value layout for '{native.Spelling.CString}'.");
         }
 
         return new(
-            value.Spelling.CString,
-            ManagedType(value, functionName),
+            native.Spelling.CString,
+            ManagedType(value, context, records),
             isReference,
-            isReference && value.IsConstQualified);
+            isReference && native.IsConstQualified) { IsRecordValue = isRecordValue, };
     }
 
-    private static string ManagedType(CXType type, string functionName)
+    private static string ManagedType(ClangSharp.Type type, string context, HeaderRecordDiscovery records)
+    {
+        return type switch
+        {
+            RecordType record => records.Resolve(record, context).Type.CSharpTypeName,
+            PointerType pointer => ManagedType(pointer.PointeeType.CanonicalType, context, records) + "*",
+            _ => ManagedScalar(type.Handle, context),
+        };
+    }
+
+    private static string ManagedScalar(CXType type, string functionName)
     {
         return type.kind switch
         {
@@ -178,19 +213,17 @@ internal static class CAbiCompilerDiscovery
             CXTypeKind.CXType_ULongLong => "ulong",
             CXTypeKind.CXType_Float => "float",
             CXTypeKind.CXType_Double or CXTypeKind.CXType_LongDouble => "double",
-            CXTypeKind.CXType_Enum => ManagedType(type.Declaration.EnumDecl_IntegerType.CanonicalType, functionName),
-            CXTypeKind.CXType_Pointer when type.PointeeType.kind == CXTypeKind.CXType_Record => "void*",
-            CXTypeKind.CXType_Pointer => ManagedType(type.PointeeType.CanonicalType, functionName) + "*",
+            CXTypeKind.CXType_Enum => ManagedScalar(type.Declaration.EnumDecl_IntegerType.CanonicalType, functionName),
             _ => throw UnsupportedType(type, functionName),
         };
     }
 
     private static NotSupportedException UnsupportedType(CXType type, string functionName)
     {
-        return new($"Free function '{functionName}' uses unsupported type '{type.Spelling.CString}'.");
+        return new($"'{functionName}' uses unsupported type '{type.Spelling.CString}'.");
     }
 
-    private static void ThrowForDiagnostics(CXTranslationUnit unit, string header)
+    private static void ThrowForDiagnostics(CXTranslationUnit unit)
     {
         var errors = new List<string>();
         for (uint index = 0; index < unit.NumDiagnostics; index++)
@@ -207,6 +240,6 @@ internal static class CAbiCompilerDiscovery
             return;
         }
 
-        throw new InvalidOperationException($"Clang could not parse '{header}'.\n" + string.Join("\n", errors));
+        throw new InvalidOperationException("Clang could not parse the public binding headers.\n" + string.Join("\n", errors));
     }
 }

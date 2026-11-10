@@ -192,9 +192,15 @@ public static class BindingFiniteProfileEmitter
         BindingFreeFunctionDefinition function,
         string diagnosticScope)
     {
-        var returnType = function.ReturnType.NativeTransportType;
+        var returnsRecord = function.ReturnType.IsRecordValue;
+        var returnType = returnsRecord ? "void" : function.ReturnType.NativeTransportType;
         var parameters = function.Parameters.Select(static (parameter, index) =>
             parameter.Type.NativeTransportType + " argument" + index);
+        if (returnsRecord)
+        {
+            parameters = parameters.Append(function.ReturnType.NativeType + "* result");
+        }
+
         if (!function.IsNoexcept)
         {
             parameters = parameters.Append(diagnosticScope + "NativeError* error");
@@ -203,7 +209,7 @@ public static class BindingFiniteProfileEmitter
         _ = builder.Append("extern \"C\" ").Append(returnType).Append(" __cdecl ")
             .Append(function.NativeExport).Append('(').AppendJoin(", ", parameters).Append(") noexcept\n{\n");
         var arguments = function.Parameters.Select(static (parameter, index) =>
-            (parameter.Type.IsReference ? "*" : "") + "argument" + index);
+            (parameter.Type.IsPassedByAddress ? "*" : "") + "argument" + index);
         var signature = string.Join(", ", function.Parameters.Select(static parameter => NativeSourceType(parameter.Type)));
         var invocation = "static_cast<" + NativeSourceType(function.ReturnType) + " (__cdecl*)(" + signature
             + ")>(&" + function.QualifiedNativeName + ")(" + string.Join(", ", arguments) + ")";
@@ -211,10 +217,14 @@ public static class BindingFiniteProfileEmitter
         {
             invocation = "std::addressof(" + invocation + ")";
         }
+        else if (returnsRecord)
+        {
+            invocation = "::new (result) " + function.ReturnType.NativeType + "(" + invocation + ")";
+        }
 
         if (function.IsNoexcept)
         {
-            _ = builder.Append("    return ").Append(invocation).Append(";\n");
+            _ = builder.Append(returnsRecord ? "    " : "    return ").Append(invocation).Append(";\n");
         }
         else if (returnType == "void")
         {

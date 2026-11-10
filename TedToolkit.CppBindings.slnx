@@ -12,9 +12,6 @@
     <File Path="README.md" />
   </Folder>
   <Folder Name="/src/" />
-  <Folder Name="/src/providers/cabi/">
-    <Project Path="src/providers/cabi/TedToolkit.CppBindings.CAbi.Generator/TedToolkit.CppBindings.CAbi.Generator.csproj" />
-  </Folder>
   <Folder Name="/src/shared/">
     <Project Path="src/shared/TedToolkit.CppBindings.Generator/TedToolkit.CppBindings.Generator.csproj" />
     <Project Path="src/shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj" />
