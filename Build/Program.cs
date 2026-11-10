@@ -6,6 +6,7 @@ using Sourcy.DotNet;
 
 using TedToolkit.FileSystem;
 using TedToolkit.ModularPipelines;
+using TedToolkit.ModularPipelines.Modules;
 
 Console.OutputEncoding = System.Text.Encoding.UTF8;
 
@@ -28,8 +29,15 @@ var pipeline = new TedPipeline(
     (buildDirectory / new FileName("appsettings.json")).ToFileInfo());
 
 await pipeline
-    .ExecuteAsync(static builder => builder
-        .AddModule<WindowsBindingsModule>()
-        .AddModule<NativeIntegrationModule>()
-        .AddModule<ManagedTestGateModule>())
+    .CreateNoModules()
+    .AddModule<CleanOutputModule>()
+    .AddModule<UpdateEditorConfigModule>()
+    .AddModule<FormatAllCodeModule>()
+    .AddModule<GenerateCommitMessageModule>()
+    .AddModule<WindowsBindingsModule>()
+    .AddModule<DotnetBuildModule>()
+    .AddModule<NativeIntegrationModule>()
+    .AddModule<ManagedTestGateModule>()
+    .AddModule<AssertBuildTestModule>()
+    .ExecutePipelineAsync()
     .ConfigureAwait(false);
