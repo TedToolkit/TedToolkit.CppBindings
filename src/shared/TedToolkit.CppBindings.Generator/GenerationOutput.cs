@@ -199,7 +199,7 @@ internal static class GenerationOutput
         var segments = relativePath.Replace('\\', '/').Split('/');
         if (Path.IsPathRooted(relativePath) || segments.Any(static segment =>
                 string.IsNullOrWhiteSpace(segment) || segment is "." or ".."
-                || segment.EndsWith(' ') || segment.EndsWith('.')
+                || segment is [.., ' ' or '.']
                 || DeviceName.IsMatch(segment)
                 || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
         {

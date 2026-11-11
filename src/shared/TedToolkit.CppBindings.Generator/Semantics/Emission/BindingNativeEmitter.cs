@@ -464,7 +464,7 @@ public sealed class BindingNativeEmitter(RecordModel record, BindingEmissionProf
             return value[..^2].TrimEnd();
         }
 
-        return value.EndsWith('&') ? value[..^1].TrimEnd() : value;
+        return value is [.., '&'] ? value[..^1].TrimEnd() : value;
     }
 
     private void AppendParameters(

@@ -71,7 +71,7 @@ Assert-ExactCleanSource
 $arguments = @(
     'publish', $project,
     '--configuration', 'Release',
-    '--framework', 'net10.0',
+    '--framework', 'net11.0',
     '--no-restore',
     '--output', $hostRoot,
     '--nologo'

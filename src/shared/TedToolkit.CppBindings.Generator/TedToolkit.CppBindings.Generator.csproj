@@ -2,7 +2,7 @@
   <Import Project="..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
   <Import Project="..\..\..\externals\TedToolkit\props\NugetPackage.props" />
   <PropertyGroup>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
     <Description>Provider-neutral C++ binding generation stages, source publication, and Windows loading support.</Description>
   </PropertyGroup>

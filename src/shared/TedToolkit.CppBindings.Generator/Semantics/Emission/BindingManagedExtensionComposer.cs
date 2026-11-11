@@ -490,7 +490,7 @@ internal sealed class BindingManagedExtensionComposer(
                 : referencedType.Ref;
             AddPublicParameter(shape, referencedDataType, parameterName);
             var pinvokeType = parameter.Type.CSharpPInvokeType.ToCode();
-            shape.NativeParameterTypes.Add(pinvokeType.EndsWith('*') ? pinvokeType : referencedTypeName + "*");
+            shape.NativeParameterTypes.Add(pinvokeType is [.., '*'] ? pinvokeType : referencedTypeName + "*");
             var pointerName = parameterName + "Pointer";
             shape.NativeArguments.Add(pointerName);
             shape.Pins.Add((referencedTypeName, pointerName, "&" + parameterName));

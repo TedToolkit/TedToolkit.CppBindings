@@ -1,6 +1,6 @@
 # TedToolkit.CppBindings.Generator
 
-Provider-neutral generation stages for C++ bindings. This .NET 10 tool package owns source-path
+Provider-neutral generation stages for C++ bindings. This .NET 11 tool package owns source-path
 validation, public header discovery, publication, and generation of the native function table and
 its managed loader. Provider-specific native dependencies and ownership rules stay with their providers.
 

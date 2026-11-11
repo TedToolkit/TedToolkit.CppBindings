@@ -50,7 +50,7 @@ if (@($assets.libraries.Keys | Where-Object { $_ -like '*SourceGenerators/*' }).
 }
 $runLog = Join-Path $report 'consumer-run.log'
 $evidence = Join-Path $report 'generated'
-& dotnet (Join-Path $consumer 'bin/Release/net10.0/PackageConsumer.dll') $evidence *> $runLog
+& dotnet (Join-Path $consumer 'bin/Release/net11.0/PackageConsumer.dll') $evidence *> $runLog
 if ($LASTEXITCODE -ne 0) { throw "Packaged OCCT generation failed; see $runLog" }
 $result = Get-Content -LiteralPath (Join-Path $evidence 'result.json') -Raw | ConvertFrom-Json
 if (-not $result.passed -or $result.runs -ne 2 -or $result.files -le 0) { throw 'The complete deterministic generation proof did not pass.' }

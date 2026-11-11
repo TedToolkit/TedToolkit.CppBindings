@@ -85,7 +85,7 @@ else {
 $publishReceiptPath = Resolve-BenchmarkPhysicalPath $PublishCompletionReceiptPath
 $publish = Get-Content -LiteralPath $publishReceiptPath -Raw | ConvertFrom-Json -AsHashtable -DateKind String
 $expectedProject = Resolve-BenchmarkPhysicalPath (Join-Path $sourceRoot 'benchmarks/TedToolkit.CppBindings.Occt.BenchmarkHost/TedToolkit.CppBindings.Occt.BenchmarkHost.csproj')
-$expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net10.0',
+$expectedArguments = @('publish', $expectedProject, '--configuration', 'Release', '--framework', 'net11.0',
     '--no-restore', '--output', $hostRoot, '--nologo')
 if ($publish.SchemaVersion -ne 1 -or $publish.ReceiptKind -cne 'occt-console-host-publish' -or
     -not $publish.Succeeded -or $publish.ExitCode -ne 0 -or -not $publish.FreshHostDirectory -or

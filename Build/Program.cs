@@ -33,7 +33,6 @@ await pipeline
     .AddModule<CleanOutputModule>()
     .AddModule<UpdateEditorConfigModule>()
     .AddModule<FormatAllCodeModule>()
-    .AddModule<GenerateCommitMessageModule>()
     .AddModule<WindowsBindingsModule>()
     .AddModule<DotnetBuildModule>()
     .AddModule<NativeIntegrationModule>()

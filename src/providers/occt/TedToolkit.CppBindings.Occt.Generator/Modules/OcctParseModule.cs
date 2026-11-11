@@ -334,7 +334,7 @@ public sealed class OcctParseModule : Module<bool>
             }
 
             var terminator = trimmed[start] is '<' ? '>' : '"';
-            var end = trimmed.IndexOf(terminator, start + 1);
+            var end = trimmed.IndexOf(terminator, start + 1, StringComparison.Ordinal);
             if (end > start)
             {
                 var dependency = trimmed[(start + 1)..end];

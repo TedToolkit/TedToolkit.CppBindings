@@ -525,7 +525,7 @@ internal sealed class CgalGenerationProviderTests
         return File.ReadLines(files[0])
             .Select(static line => line.Replace('\\', '/'))
             .Where(static line => line.StartsWith(Prefix + "CGAL/", StringComparison.Ordinal)
-                && !line.EndsWith('/'))
+                && line is not [.., '/'])
             .Select(static line => line[Prefix.Length..])
             .Order(StringComparer.Ordinal)
             .ToArray();

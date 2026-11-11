@@ -75,7 +75,18 @@ try {
   <packageSources>
     <clear />
     <add key="verified" value="feed" />
+    <add key="nuget.org" value="https://api.nuget.org/v3/index.json" />
   </packageSources>
+  <packageSourceMapping>
+    <packageSource key="verified">
+      <package pattern="TedToolkit.CppBindings.*" />
+    </packageSource>
+    <packageSource key="nuget.org">
+      <package pattern="Microsoft.NETCore.App.Ref" />
+      <package pattern="Microsoft.WindowsDesktop.App.Ref" />
+      <package pattern="Microsoft.AspNetCore.App.Ref" />
+    </packageSource>
+  </packageSourceMapping>
 </configuration>
 '@ | Set-Content -LiteralPath $config -Encoding utf8
 

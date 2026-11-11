@@ -210,7 +210,7 @@ the final harness commit before execution. `Invoke-OcctBenchmarkWorkload.ps1` re
 binding, so a template plan cannot accidentally become a performance run.
 
 Create each host with `Publish-OcctBenchmarkHost.ps1`, giving it an absent unique host directory
-and absent completion-receipt path. It runs the exact Release/net10.0 `dotnet publish` for the
+and absent completion-receipt path. It runs the exact Release/net11.0 `dotnet publish` for the
 repository benchmark-host project and writes a non-overwriting completion receipt only after a successful
 publish from the exact clean source revision. The receipt binds the exact command, captured output,
 publisher, dotnet and project hashes, and every file in the newly produced host. Then create the

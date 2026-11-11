@@ -339,7 +339,7 @@ internal sealed class FclGenerationProviderTests
                 "fcl_0.7.0_x64-windows.list"))
             .Select(static line => line.Replace('\\', '/'))
             .Where(static line => line.StartsWith("x64-windows/include/fcl/", StringComparison.Ordinal)
-                && !line.EndsWith('/'))
+                && line is not [.., '/'])
             .Select(static line => line["x64-windows/include/".Length..])
             .Order(StringComparer.Ordinal)
             .ToArray();

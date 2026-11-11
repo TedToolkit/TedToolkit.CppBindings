@@ -1,7 +1,7 @@
 # TedToolkit.CppBindings.Occt.Generator
 
 Generate matching C# and C++ OCCT bindings from installed headers and compiler-proved facts.
-This .NET 10 tool package supplies the OCCT provider for
+This .NET 11 tool package supplies the OCCT provider for
 [the reusable generation platform](../../../shared/TedToolkit.CppBindings.Generator/README.md), not the
 ready-to-use [Windows bindings](../TedToolkit.CppBindings.Occt.Windows/README.md).
 
