@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------
 
 using TedToolkit.CppBindings.Generator.Semantics;
-using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper;
 
 namespace TedToolkit.CppBindings.Manifold.Generator;
 

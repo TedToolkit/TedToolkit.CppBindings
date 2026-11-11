@@ -19,8 +19,8 @@ using Microsoft.Extensions.Options;
 
 using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Services;
 

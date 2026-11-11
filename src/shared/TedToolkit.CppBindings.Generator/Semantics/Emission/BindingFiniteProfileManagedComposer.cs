@@ -7,10 +7,10 @@
 
 using System.Runtime.InteropServices;
 
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
-using static TedToolkit.RoslynHelper.Generators.SourceComposer;
+using static TedToolkit.RoslynHelper.SourceComposer;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;
 
@@ -92,9 +92,9 @@ internal sealed class BindingFiniteProfileManagedComposer(
                 .Select(GetContainingType));
     }
 
-    private static TedToolkit.RoslynHelper.Generators.Syntaxes.Enum ComposeStatus(BindingStatusDefinition status)
+    private static TedToolkit.RoslynHelper.Syntaxes.Enum ComposeStatus(BindingStatusDefinition status)
     {
-        var declaration = new TedToolkit.RoslynHelper.Generators.Syntaxes.Enum(status.Name, DataType.Int).Public;
+        var declaration = new TedToolkit.RoslynHelper.Syntaxes.Enum(status.Name, DataType.Int).Public;
         foreach (var member in status.Members)
         {
             declaration.AddEnumMember(new EnumMember(member.Key, member.Value.ToLiteral()));
@@ -634,7 +634,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
         return JoinLines(lines);
     }
 
-    private static TedToolkit.RoslynHelper.Generators.Syntaxes.Attribute LayoutAttribute(int size, int alignment)
+    private static TedToolkit.RoslynHelper.Syntaxes.Attribute LayoutAttribute(int size, int alignment)
     {
         return Attribute<StructLayoutAttribute>()
             .AddArgument(Argument(LayoutKind.Sequential.ToExpression()))

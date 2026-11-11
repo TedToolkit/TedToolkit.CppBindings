@@ -8,6 +8,8 @@
     <Version Condition="'$(CPPBINDINGS_PACKAGE_VERSION)' != ''">$(CPPBINDINGS_PACKAGE_VERSION)</Version>
     <GenerateDocumentationFile>true</GenerateDocumentationFile>
     <NoWarn>$(NoWarn);PolyfillMemoryVersion</NoWarn>
+    <!-- Preserve native path handling and filesystem link checks while updating FileSystem. -->
+    <NoWarn>$(NoWarn);TTFS003</NoWarn>
     <PackageProjectUrl>https://github.com/TedToolkit/TedToolkit.CppBindings</PackageProjectUrl>
   </PropertyGroup>
 </Project>

@@ -5,7 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;
 

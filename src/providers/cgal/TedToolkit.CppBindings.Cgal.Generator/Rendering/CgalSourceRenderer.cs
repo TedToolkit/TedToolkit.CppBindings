@@ -5,10 +5,10 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
-using static TedToolkit.RoslynHelper.Generators.SourceComposer;
+using static TedToolkit.RoslynHelper.SourceComposer;
 
 namespace TedToolkit.CppBindings.Cgal.Generator;
 
@@ -163,7 +163,7 @@ internal static class CgalSourceRenderer
     internal static string RenderManagedResultProjection(string cSharpNamespace)
     {
         ArgumentException.ThrowIfNullOrWhiteSpace(cSharpNamespace);
-        var kind = new TedToolkit.RoslynHelper.Generators.Syntaxes.Enum(
+        var kind = new TedToolkit.RoslynHelper.Syntaxes.Enum(
                 "Segment_2IntersectionKind",
                 DataType.Int).Public
             .AddEnumMember(new EnumMember("None", 0.ToLiteral()))

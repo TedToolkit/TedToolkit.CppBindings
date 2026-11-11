@@ -247,7 +247,7 @@ internal sealed class FclGenerationProviderTests
     /// <summary>Verifies the retained entry points resolve only the configured environment root.</summary>
     /// <returns>A task that completes when compatibility assertions finish.</returns>
     [Test]
-    [NotInParallel("VCPKG_ROOT")]
+    [NotInParallel]
     public async Task Should_preserve_environment_backed_entry_points_Async()
     {
         var original = Environment.GetEnvironmentVariable("VCPKG_ROOT");
