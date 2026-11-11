@@ -675,7 +675,7 @@ internal sealed class RecordModelManager(
 
     private static List<string> SplitInnermostTemplateArguments(string nativeTypeName)
     {
-        var close = nativeTypeName.LastIndexOf('>');
+        var close = nativeTypeName.LastIndexOf('>', StringComparison.Ordinal);
         if (close < 0)
         {
             return [];
