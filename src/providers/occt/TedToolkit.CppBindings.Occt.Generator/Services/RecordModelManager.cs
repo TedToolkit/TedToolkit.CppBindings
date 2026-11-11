@@ -760,11 +760,11 @@ internal sealed class RecordModelManager(
     private static string ToFixedTemplateArgumentToken(string nativeArgument)
     {
         var value = nativeArgument.Trim();
-        if (value.StartsWith('-'))
+        if (value is ['-', ..])
         {
             value = "minus_" + value[1..];
         }
-        else if (value.StartsWith('+'))
+        else if (value is ['+', ..])
         {
             value = "plus_" + value[1..];
         }

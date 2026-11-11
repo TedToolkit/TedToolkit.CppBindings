@@ -106,7 +106,7 @@ public static partial class VcpkgHeaderInventory
         var packagePrefix = $"{includePrefix}{includeDirectoryName}/";
         var headers = lists[0].ReadLines()
             .Select(Normalize)
-            .Where(line => line.StartsWith(packagePrefix, StringComparison.Ordinal) && !line.EndsWith('/'))
+            .Where(line => line.StartsWith(packagePrefix, StringComparison.Ordinal) && line is not [.., '/'])
             .Select(line => line[includePrefix.Length..])
             .Order(StringComparer.Ordinal)
             .ToArray();
