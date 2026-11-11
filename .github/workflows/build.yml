@@ -56,7 +56,7 @@ jobs:
         run: |
           $installer = Join-Path $env:RUNNER_TEMP 'dotnet-install.ps1'
           Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile $installer
-          pwsh -NoProfile -File $installer -Runtime dotnet -Channel 8.0 -InstallDir $env:DOTNET_ROOT -SkipNonVersionedFiles -NoPath
+          pwsh -NoProfile -ExecutionPolicy Bypass -File $installer -Runtime dotnet -Channel 8.0 -InstallDir $env:DOTNET_ROOT -SkipNonVersionedFiles -NoPath
       - name: Setup locked CMake
         shell: pwsh
         run: |
