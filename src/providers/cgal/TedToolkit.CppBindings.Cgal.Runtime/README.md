@@ -19,3 +19,7 @@ Consumers catch Shared common exceptions or the documented CGAL-local exception 
 `CgalUnknownResultException` has a public constructor because independently generated
 operation-specific result projections create it; native-failure exceptions are constructed
 exclusively by projection.
+
+## Agent skill
+
+The `preserve-cpp-binding-lifetimes` skill ships in `TedToolkit.CppBindings.Runtime`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Runtime` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Runtime@<resolved-version>`.

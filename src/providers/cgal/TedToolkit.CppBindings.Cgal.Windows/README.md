@@ -47,3 +47,7 @@ consumer, and performs real 2D/3D, intersection, empty-result, and precondition-
 
 [Provider overview](../README.md) · [Generator](../TedToolkit.CppBindings.Cgal.Generator/README.md) ·
 [Runtime](../TedToolkit.CppBindings.Cgal.Runtime/README.md)
+
+## Agent skill
+
+The `preserve-cpp-binding-lifetimes` skill ships in `TedToolkit.CppBindings.Runtime`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Runtime` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Runtime@<resolved-version>`.

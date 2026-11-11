@@ -9,3 +9,7 @@ value; references obtained from an owner remain valid only while that owner is a
 
 This package has no dependency on the OCCT, CGAL, or FCL provider families and supplies no
 provider-to-provider conversions.
+
+## Agent skill
+
+The `preserve-cpp-binding-lifetimes` skill ships in `TedToolkit.CppBindings.Runtime`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Runtime` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Runtime@<resolved-version>`.

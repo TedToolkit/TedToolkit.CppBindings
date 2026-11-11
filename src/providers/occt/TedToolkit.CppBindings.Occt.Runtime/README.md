@@ -57,3 +57,7 @@ from `tests/native/handle-fixtures` through that fixture's CMake/CTest gate. Nat
 binding proof remains a separate generator/Windows integration gate.
 
 [Repository overview](../../../../README.md) · [Platform architecture](../../../../docs/architecture/cpp-bindings-platform.md)
+
+## Agent skill
+
+The `preserve-cpp-binding-lifetimes` skill ships in `TedToolkit.CppBindings.Runtime`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Runtime` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Runtime@<resolved-version>`.
