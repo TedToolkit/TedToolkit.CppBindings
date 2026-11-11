@@ -29,6 +29,50 @@ namespace TedToolkit.CppBindings.Occt.Generator.Tests.Services.RecordModelManage
 internal sealed class AddTest
 {
     /// <summary>
+    /// Verifies native dependencies from private Unix SDK headers use an includable OCCT header.
+    /// </summary>
+    /// <returns>A task that completes when the assertions finish.</returns>
+    [Test]
+    public async Task Should_include_sdk_dependencies_through_their_occt_header_Async()
+    {
+        var root = Directory.CreateTempSubdirectory();
+        try
+        {
+            var sdk = Directory.CreateDirectory(Path.Combine(root.FullName, "sdk"));
+            var occt = Directory.CreateDirectory(Path.Combine(root.FullName, "opencascade"));
+            var header = Path.Combine(occt.FullName, "Target.hxx");
+            await File.WriteAllTextAsync(Path.Combine(sdk.FullName, "private_types.h"),
+                "struct InternalSdkType { int Value; };").ConfigureAwait(false);
+            await File.WriteAllTextAsync(Path.Combine(sdk.FullName, "public.h"),
+                "#include \"private_types.h\"\n").ConfigureAwait(false);
+            await File.WriteAllTextAsync(header, "#include \"../sdk/public.h\"\nstruct Target { InternalSdkType Field; };")
+                .ConfigureAwait(false);
+            using var unit = ParseTranslationUnit($"#include \"{header.Replace('\\', '/')}\"\n");
+            var manager = new RecordModelManager(
+                Microsoft.Extensions.Options.Options.Create(new OcctGenerationOptions()
+                {
+                    DeclOptions = [],
+                    CSharpFolder = root,
+                    CppFolder = root,
+                    RuntimeIdentifier = "osx-arm64",
+                }),
+                new Resolver([]),
+                new FakeVcpkgDefaultTripletResolver(),
+                new FakeVcpkgEnvironment(occt.FullName));
+            var model = manager.Add(unit.TranslationUnitDecl.CursorChildren.OfType<CXXRecordDecl>()
+                .Single(static record => record.Name == "Target"));
+
+            await Assert.That(model.NativeRequiredHeaders).IsEquivalentTo(["Target.hxx",]);
+            await Assert.That(manager.NativePreparationRecords
+                .Single(static record => record.Type.CppTypeName == "InternalSdkType").SourceHeader).IsEqualTo("Target.hxx");
+        }
+        finally
+        {
+            root.Delete(recursive: true);
+        }
+    }
+
+    /// <summary>
     /// Verifies that native stream base projections request address-stable owner storage.
     /// </summary>
     /// <returns>A task that completes when the storage requirement assertions finish.</returns>
@@ -2487,7 +2531,7 @@ internal sealed class AddTest
                ?? throw new InvalidOperationException("Unable to render RoslynHelper description.");
     }
 
-    private sealed class FakeVcpkgEnvironment : IVcpkgEnvironment
+    private sealed class FakeVcpkgEnvironment(string includeFolder = "__occt__") : IVcpkgEnvironment
     {
         public Task<string> GetIncludingHeaderContentAsync(
             string triplet,
@@ -2509,7 +2553,7 @@ internal sealed class AddTest
 
         public string GetOcctIncludeFolder(string triplet)
         {
-            return "__occt__";
+            return includeFolder;
         }
     }
 

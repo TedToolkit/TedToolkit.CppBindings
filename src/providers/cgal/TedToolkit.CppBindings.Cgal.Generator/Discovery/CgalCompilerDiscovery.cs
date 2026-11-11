@@ -5,7 +5,6 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
-using System.Runtime.InteropServices;
 using System.Security.Cryptography;
 using System.Text;
 
@@ -28,12 +27,14 @@ internal static class CgalCompilerDiscovery
     /// <param name="selectedHeaders">The finite profile roots.</param>
     /// <param name="reachableHeaders">The recursively closed CGAL header set.</param>
     /// <param name="profile">The closed profile whose projections must compile.</param>
+    /// <param name="commandLineArgs">Additional arguments for the target compiler.</param>
     /// <returns>The deterministic compiler declaration inventory.</returns>
     internal static IReadOnlyList<CgalCompilerDeclaration> Discover(
         string includeRoot,
         IReadOnlyList<string> selectedHeaders,
         IReadOnlySet<string> reachableHeaders,
-        CgalProfileManifest profile)
+        CgalProfileManifest profile,
+        IReadOnlyList<string> commandLineArgs)
     {
         var relay = string.Join(
             Environment.NewLine,
@@ -42,15 +43,16 @@ internal static class CgalCompilerDiscovery
             + CgalSemanticCatalog.RenderCompilerProbe(profile);
         using var unsaved = CXUnsavedFile.Create(RelayFileName, relay);
         using var index = CXIndex.Create();
-        var arguments = new string[]
-        {
+        string[] arguments =
+        [
             "-std=c++20",
             "-x",
             "c++",
             "-DCGAL_DEBUG",
             "-D_SILENCE_CXX17_CODECVT_HEADER_DEPRECATION_WARNING",
             "-I" + includeRoot,
-        };
+            .. commandLineArgs,
+        ];
         var translationUnit = CXTranslationUnit.Parse(
             index,
             RelayFileName,
@@ -61,7 +63,7 @@ internal static class CgalCompilerDiscovery
         ThrowForDiagnostics(ref translationUnit);
 
         var declarations = new Dictionary<string, CgalCompilerDeclaration>(StringComparer.Ordinal);
-        Visit(unit.TranslationUnitDecl, includeRoot, reachableHeaders, declarations);
+        Visit(unit.TranslationUnitDecl.Handle, includeRoot, reachableHeaders, declarations);
         return Array.AsReadOnly(declarations.Values
             .OrderBy(static item => item.Header, StringComparer.Ordinal)
             .ThenBy(static item => item.Signature, StringComparer.Ordinal)
@@ -69,80 +71,87 @@ internal static class CgalCompilerDiscovery
             .ToArray());
     }
 
-    private static void Visit(
-        Cursor cursor,
+    private static unsafe void Visit(
+        CXCursor cursor,
         string includeRoot,
         IReadOnlySet<string> reachableHeaders,
         Dictionary<string, CgalCompilerDeclaration> declarations)
     {
-        var pending = new Stack<Cursor>();
-        for (var index = cursor.CursorChildren.Count - 1; index >= 0; index--)
+        // Keep discovery on libclang cursors. ClangSharp can reject a native UsingEnumDecl
+        // while constructing managed children, even when that declaration is outside the CGAL profile.
+        var children = new List<CXCursor>();
+        cursor.VisitChildren((child, _, _) =>
         {
-            pending.Push(cursor.CursorChildren[index]);
-        }
+            children.Add(child);
+            return CXChildVisitResult.CXChildVisit_Recurse;
+        }, default);
 
-        while (pending.TryPop(out var child))
+        foreach (var child in children)
         {
             if (TryCreate(child, includeRoot, reachableHeaders, out var declaration))
             {
                 declarations.TryAdd(declaration.Identity, declaration);
             }
-
-            for (var index = child.CursorChildren.Count - 1; index >= 0; index--)
-            {
-                pending.Push(child.CursorChildren[index]);
-            }
         }
     }
 
     private static bool TryCreate(
-        Cursor cursor,
+        CXCursor cursor,
         string includeRoot,
         IReadOnlySet<string> reachableHeaders,
         out CgalCompilerDeclaration declaration)
     {
         declaration = null!;
-        if (!IsDeclarationKind(cursor.CursorKind)
-            || string.IsNullOrWhiteSpace(cursor.Spelling)
-            || !TryGetHeader(cursor.Handle, includeRoot, out var header)
+        if (!IsDeclarationKind(cursor.kind)
+            || !TryGetHeader(cursor, includeRoot, out var header)
             || !reachableHeaders.Contains(header)
-            || !IsPublic(cursor.Handle))
+            || !IsPublic(cursor))
         {
             return false;
         }
 
-        var usr = clang.getCursorUSR(cursor.Handle).CString;
-        var type = clang.getCursorType(cursor.Handle).Spelling.CString;
+        using var cursorSpelling = cursor.Spelling;
+        var spelling = cursorSpelling.CString;
+        if (string.IsNullOrWhiteSpace(spelling))
+        {
+            return false;
+        }
+
+        using var cursorUsr = clang.getCursorUSR(cursor);
+        using var cursorType = clang.getCursorType(cursor).Spelling;
+        using var kind = cursor.KindSpelling;
+        var usr = cursorUsr.CString;
+        var type = cursorType.CString;
         var signature = GetQualifiedName(cursor) + (string.IsNullOrWhiteSpace(type) ? "" : " : " + type);
         var sourceIdentity = string.IsNullOrWhiteSpace(usr)
-            ? header + "|" + cursor.CursorKind + "|" + signature
+            ? header + "|" + cursor.kind + "|" + signature
             : usr;
         declaration = new(
             "clang-" + Convert.ToHexString(SHA256.HashData(Encoding.UTF8.GetBytes(sourceIdentity))),
             signature,
             header,
-            cursor.CursorKindSpelling,
-            cursor.Spelling,
+            kind.CString,
+            spelling,
             IsDirectNonTemplate(cursor));
         return true;
     }
 
-    private static bool IsDirectNonTemplate(Cursor cursor)
+    private static bool IsDirectNonTemplate(CXCursor cursor)
     {
-        if (cursor.CursorKind == CXCursorKind.CXCursor_Namespace || IsOpenTemplateKind(cursor.CursorKind))
+        if (cursor.kind == CXCursorKind.CXCursor_Namespace || IsOpenTemplateKind(cursor.kind))
         {
             return false;
         }
 
-        var current = cursor.SemanticParentCursor;
-        while (current is not null && current.CursorKind != CXCursorKind.CXCursor_TranslationUnit)
+        var current = cursor.SemanticParent;
+        while (!current.IsNull && current.kind != CXCursorKind.CXCursor_TranslationUnit)
         {
-            if (IsOpenTemplateKind(current.CursorKind))
+            if (IsOpenTemplateKind(current.kind))
             {
                 return false;
             }
 
-            current = current.SemanticParentCursor;
+            current = current.SemanticParent;
         }
 
         return true;
@@ -159,18 +168,20 @@ internal static class CgalCompilerDiscovery
             or CXCursorKind.CXCursor_TypeAliasTemplateDecl;
     }
 
-    private static string GetQualifiedName(Cursor cursor)
+    private static string GetQualifiedName(CXCursor cursor)
     {
         var names = new Stack<string>();
-        Cursor? current = cursor;
-        while (current is not null && current.CursorKind != CXCursorKind.CXCursor_TranslationUnit)
+        var current = cursor;
+        while (!current.IsNull && current.kind != CXCursorKind.CXCursor_TranslationUnit)
         {
-            if (!string.IsNullOrWhiteSpace(current.Spelling))
+            using var name = current.Spelling;
+            var spelling = name.CString;
+            if (!string.IsNullOrWhiteSpace(spelling))
             {
-                names.Push(current.Spelling);
+                names.Push(spelling);
             }
 
-            current = current.SemanticParentCursor;
+            current = current.SemanticParent;
         }
 
         return string.Join("::", names);
@@ -231,7 +242,8 @@ internal static class CgalCompilerDiscovery
     private static bool TryGetHeader(CXCursor cursor, string includeRoot, out string header)
     {
         clang.getCursorLocation(cursor).GetFileLocation(out var file, out _, out _, out _);
-        var path = file.Name.CString;
+        using var name = file.Name;
+        var path = name.CString;
         if (string.IsNullOrWhiteSpace(path))
         {
             header = "";

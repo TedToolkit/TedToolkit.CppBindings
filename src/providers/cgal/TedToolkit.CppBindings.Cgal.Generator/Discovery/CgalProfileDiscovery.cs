@@ -71,7 +71,8 @@ internal static partial class CgalProfileDiscovery
                 includeRoot.FullName,
                 profile.SelectedHeaders,
                 reachable,
-                profile);
+                profile,
+                options.CommandLineArgs);
         var sourceDeclarations = compilerDeclarations.Select(static item => new CgalDeclarationDisposition(
                 item.Identity,
                 item.Signature,
@@ -251,7 +252,7 @@ internal static partial class CgalProfileDiscovery
             mpfr.Version,
             mpfr.Abi,
             ReadCMakeVersion(),
-            ReadMsvcToolsetVersion());
+            triplet is "x64-linux" or "arm64-osx" ? "" : ReadMsvcToolsetVersion());
     }
 
     private static (string Version, string Abi) ReadPackage(string status, string package, string triplet)

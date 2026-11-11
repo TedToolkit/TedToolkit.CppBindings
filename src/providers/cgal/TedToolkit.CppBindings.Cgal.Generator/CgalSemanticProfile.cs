@@ -89,7 +89,7 @@ internal static class CgalSemanticProfile
         {
             return layout.Alignment is 1 or 2 or 4 or 8
                 ? BindingAdmission.Admitted
-                : BindingAdmission.Reject($"Unsupported win-x64 alignment {layout.Alignment}.");
+                : BindingAdmission.Reject($"Unsupported managed storage alignment {layout.Alignment}.");
         }
     }
 

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TedToolkit.CppBindings.Manifold</RootNamespace>
+    <Title>TedToolkit Manifold macOS Arm64 bindings</Title>
+    <Description>Generated Manifold bindings and their native libraries for macOS Arm64.</Description>
+    <BindingsProvider>manifold</BindingsProvider>
+    <BindingsRuntimeIdentifier>osx-arm64</BindingsRuntimeIdentifier>
+    <BindingsLibraryName>ted_toolkit_cpp_bindings_manifold</BindingsLibraryName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TedToolkit.CppBindings.Manifold.Runtime/TedToolkit.CppBindings.Manifold.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="../../../../Build/UnixBindings.targets" />
+</Project>

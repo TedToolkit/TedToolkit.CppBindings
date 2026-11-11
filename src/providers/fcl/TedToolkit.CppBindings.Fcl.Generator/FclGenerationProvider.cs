@@ -5,6 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Collections.ObjectModel;
 using System.Text.Json;
 
 using TedToolkit.CppBindings.Generator;
@@ -36,10 +37,38 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
     /// <summary>Initializes a provider from the selected vcpkg installation.</summary>
     /// <param name="vcpkgRoot">The vcpkg root that supplies the locked FCL package.</param>
     public FclGenerationProvider(in DirectoryPath vcpkgRoot)
+        : this(vcpkgRoot, "x64-windows")
+    {
+    }
+
+    /// <summary>Initializes a provider for a supported target vcpkg triplet.</summary>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked FCL package.</param>
+    /// <param name="triplet">The installed target triplet.</param>
+    public FclGenerationProvider(in DirectoryPath vcpkgRoot, string triplet)
         : base(FclSemanticProfile.Create())
     {
         ArgumentNullException.ThrowIfNull(vcpkgRoot.FullName, nameof(vcpkgRoot));
         _vcpkgRoot = vcpkgRoot.GetFullPath();
+        if (triplet == "x64-windows")
+        {
+            return;
+        }
+
+        if (triplet is not ("x64-linux" or "arm64-osx"))
+        {
+            throw new ArgumentException($"Unsupported FCL triplet '{triplet}'.", nameof(triplet));
+        }
+
+        var versions = new Dictionary<string, string>(Profile.Versions, StringComparer.Ordinal)
+        {
+            ["Triplet"] = triplet,
+        };
+        versions.Remove("Msvc");
+        Profile = Profile with
+        {
+            ProfileId = $"fcl-0.7.0-obbrss-double-{triplet}-v2",
+            Versions = new ReadOnlyDictionary<string, string>(versions),
+        };
     }
 
     /// <summary>Gets the finite profile.</summary>

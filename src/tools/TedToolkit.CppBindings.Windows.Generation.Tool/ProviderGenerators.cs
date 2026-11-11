@@ -5,6 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Runtime.InteropServices;
 using System.Text.Json;
 
 using ModularPipelines;
@@ -42,12 +43,83 @@ internal interface IGenerationOperations
 
 internal static class ProviderGenerators
 {
+    internal static async Task GenerateUnixAsync(
+        WindowsGenerationOptions options,
+        IProcessRunner process,
+        CancellationToken cancellationToken)
+    {
+        var (triplet, target) = options.RuntimeIdentifier switch
+        {
+            "linux-x64" when OperatingSystem.IsLinux() && RuntimeInformation.ProcessArchitecture == Architecture.X64
+                => ("x64-linux", "x86_64-unknown-linux-gnu"),
+            "osx-arm64" when OperatingSystem.IsMacOS() && RuntimeInformation.ProcessArchitecture == Architecture.Arm64
+                => ("arm64-osx", "arm64-apple-macos15.0"),
+            _ => throw new PlatformNotSupportedException(
+                $"Generation for '{options.RuntimeIdentifier}' requires a native runner for that RID."),
+        };
+        var repository = options.RepositoryRoot.GetFullPath();
+        var output = options.OutputRoot.GetFullPath();
+        string[] compilerArguments = options.Provider.Id is "occt" or "cgal"
+            ? await GetUnixCompilerArgumentsAsync(process, repository.FullName, target, cancellationToken)
+                .ConfigureAwait(false)
+            : [];
+        Directory.CreateDirectory(output.FullName);
+        await GenerateAsync(options.Provider.Id, output, repository, options.VcpkgRoot?.GetFullPath().FullName,
+                cancellationToken, options.RuntimeIdentifier, triplet, compilerArguments)
+            .ConfigureAwait(false);
+    }
+
+    private static async Task<string[]> GetUnixCompilerArgumentsAsync(
+        IProcessRunner process,
+        string repository,
+        string target,
+        CancellationToken cancellationToken)
+    {
+        var targetArgument = "--target=" + target;
+        var result = await process.RunAsync("clang++", [targetArgument, "-E", "-v", "-x", "c++", "/dev/null",],
+                repository, null, throwOnError: true, cancellationToken)
+            .ConfigureAwait(false);
+        var arguments = new List<string> { targetArgument, "-nostdinc", };
+        const string FrameworkSuffix = " (framework directory)";
+        var inSearchList = false;
+        foreach (var line in result.StandardError.Split('\n', StringSplitOptions.TrimEntries))
+        {
+            if (line == "#include <...> search starts here:")
+            {
+                inSearchList = true;
+                continue;
+            }
+
+            if (line == "End of search list.")
+            {
+                break;
+            }
+
+            if (inSearchList && line.Length > 0)
+            {
+                var framework = line.EndsWith(FrameworkSuffix, StringComparison.Ordinal);
+                arguments.Add(framework ? "-iframework" : "-isystem");
+                arguments.Add(framework ? line[..^FrameworkSuffix.Length] : line);
+            }
+        }
+
+        if (arguments.Count == 2)
+        {
+            throw new InvalidOperationException($"clang++ did not report the system include paths for '{target}'.");
+        }
+
+        return arguments.ToArray();
+    }
+
     internal static Task GenerateAsync(
         string provider,
         DirectoryPath outputRoot,
         DirectoryPath repositoryRoot,
         string? vcpkgRoot,
-        CancellationToken cancellationToken)
+        CancellationToken cancellationToken,
+        string runtimeIdentifier = "win-x64",
+        string triplet = "",
+        string[]? compilerArguments = null)
     {
         if (provider is "smlib")
         {
@@ -57,6 +129,7 @@ internal static class ProviderGenerators
                 CppFolder = outputRoot / "cpp",
                 CSharpNamespace = "TedToolkit.CppBindings.Smlib",
                 NativeLibraryBaseName = SmlibGenerationProvider.NativeLibraryBaseName,
+                RuntimeIdentifier = runtimeIdentifier,
                 CppVersion = 17,
             };
             return RunFinitePipelineAsync(
@@ -66,11 +139,13 @@ internal static class ProviderGenerators
         var vcpkg = new DirectoryPath(vcpkgRoot ?? throw new ArgumentNullException(nameof(vcpkgRoot)));
         return provider switch
         {
-            "occt" => GenerateOcctAsync(outputRoot, vcpkg, cancellationToken),
-            "cgal" => GenerateCgalAsync(outputRoot, vcpkg, cancellationToken),
-            "manifold" => GenerateManifoldAsync(outputRoot, vcpkg, cancellationToken),
-            "fcl" => GenerateFclAsync(outputRoot, vcpkg, cancellationToken),
-            _ => throw new ArgumentException($"Unknown Windows provider '{provider}'.", nameof(provider)),
+            "occt" => GenerateOcctAsync(outputRoot, vcpkg, runtimeIdentifier, triplet, compilerArguments ?? [],
+                cancellationToken),
+            "cgal" => GenerateCgalAsync(outputRoot, vcpkg, runtimeIdentifier, compilerArguments ?? [],
+                cancellationToken),
+            "manifold" => GenerateManifoldAsync(outputRoot, vcpkg, runtimeIdentifier, triplet, cancellationToken),
+            "fcl" => GenerateFclAsync(outputRoot, vcpkg, runtimeIdentifier, triplet, cancellationToken),
+            _ => throw new ArgumentException($"Unknown provider '{provider}'.", nameof(provider)),
         };
     }
 
@@ -112,6 +187,9 @@ internal static class ProviderGenerators
     private static async Task GenerateOcctAsync(
         DirectoryPath outputRoot,
         DirectoryPath vcpkgRoot,
+        string runtimeIdentifier,
+        string triplet,
+        string[] compilerArguments,
         CancellationToken cancellationToken)
     {
         using var environment = ProcessEnvironment.Override("VCPKG_ROOT", vcpkgRoot.FullName);
@@ -122,7 +200,9 @@ internal static class ProviderGenerators
                 GenerateAllPublicHeaders = true,
                 CSharpFolder = outputRoot / "csharp",
                 CppFolder = outputRoot / "cpp",
-                CommandLineArgs = ["-w",],
+                RuntimeIdentifier = runtimeIdentifier,
+                Triplet = triplet,
+                CommandLineArgs = ["-w", .. compilerArguments,],
                 NativeLibraryVersion = new(8, 0, 1),
             });
         await RunPipelineAsync(builder, "OCCT", cancellationToken).ConfigureAwait(false);
@@ -131,6 +211,8 @@ internal static class ProviderGenerators
     private static async Task GenerateCgalAsync(
         DirectoryPath outputRoot,
         DirectoryPath vcpkgRoot,
+        string runtimeIdentifier,
+        string[] compilerArguments,
         CancellationToken cancellationToken)
     {
         var options = new CgalGenerationOptions
@@ -140,6 +222,8 @@ internal static class ProviderGenerators
             CppFolder = outputRoot / "cpp",
             CSharpNamespace = "TedToolkit.CppBindings.Cgal",
             NativeLibraryBaseName = "ted_toolkit_cpp_bindings_cgal",
+            RuntimeIdentifier = runtimeIdentifier,
+            CommandLineArgs = compilerArguments,
             CppVersion = 20,
             NativeLibraryVersion = new(6, 2),
         };
@@ -167,6 +251,8 @@ internal static class ProviderGenerators
     private static async Task GenerateFclAsync(
         DirectoryPath outputRoot,
         DirectoryPath vcpkgRoot,
+        string runtimeIdentifier,
+        string triplet,
         CancellationToken cancellationToken)
     {
         var options = new GenerationOptions
@@ -175,10 +261,13 @@ internal static class ProviderGenerators
             CppFolder = outputRoot / "cpp",
             CSharpNamespace = "TedToolkit.CppBindings.Fcl",
             NativeLibraryBaseName = "ted_toolkit_cpp_bindings_fcl",
+            RuntimeIdentifier = runtimeIdentifier,
             CppVersion = 20,
             NativeLibraryVersion = new(0, 7, 0),
         };
-        var provider = new FclGenerationProvider(vcpkgRoot);
+        var provider = triplet.Length == 0
+            ? new FclGenerationProvider(vcpkgRoot)
+            : new FclGenerationProvider(vcpkgRoot, triplet);
         var plan = await RunFinitePipelineAsync(options, provider, "FCL", cancellationToken).ConfigureAwait(false);
 
         var result = new
@@ -198,15 +287,20 @@ internal static class ProviderGenerators
     private static async Task GenerateManifoldAsync(
         DirectoryPath outputRoot,
         DirectoryPath vcpkgRoot,
+        string runtimeIdentifier,
+        string triplet,
         CancellationToken cancellationToken)
     {
-        var provider = new ManifoldGenerationProvider(vcpkgRoot);
+        var provider = triplet.Length == 0
+            ? new ManifoldGenerationProvider(vcpkgRoot)
+            : new ManifoldGenerationProvider(vcpkgRoot, triplet);
         var options = new GenerationOptions
         {
             CSharpFolder = outputRoot / "csharp",
             CppFolder = outputRoot / "cpp",
             CSharpNamespace = "TedToolkit.CppBindings.Manifold",
             NativeLibraryBaseName = provider.Profile.NativeLibraryBaseName,
+            RuntimeIdentifier = runtimeIdentifier,
             CppVersion = 20,
             NativeLibraryVersion = new(3, 5, 2),
         };

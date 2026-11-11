@@ -39,14 +39,33 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     /// <summary>Initializes a provider from the selected vcpkg installation.</summary>
     /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
     public ManifoldGenerationProvider(in DirectoryPath vcpkgRoot)
+        : this(vcpkgRoot, "x64-windows")
+    {
+    }
+
+    /// <summary>Initializes a provider for a supported target vcpkg triplet.</summary>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
+    /// <param name="triplet">The installed target triplet.</param>
+    public ManifoldGenerationProvider(in DirectoryPath vcpkgRoot, string triplet)
         : base(ManifoldSemanticProfile.Create())
     {
         ArgumentNullException.ThrowIfNull(vcpkgRoot.FullName, nameof(vcpkgRoot));
         _vcpkgRoot = vcpkgRoot.GetFullPath();
+        Profile = triplet switch
+        {
+            "x64-windows" => new(),
+            "x64-linux" or "arm64-osx" => new()
+            {
+                ProfileId = $"manifold-3.5.2-{triplet}-v2",
+                Triplet = triplet,
+                Msvc = "",
+            },
+            _ => throw new ArgumentException($"Unsupported Manifold triplet '{triplet}'.", nameof(triplet)),
+        };
     }
 
     /// <summary>Gets the finite profile.</summary>
-    public ManifoldProfile Profile { get; } = new();
+    public ManifoldProfile Profile { get; }
 
     /// <inheritdoc />
     public override IReadOnlyList<Type> PreparationModules { get; } = Array.Empty<Type>();

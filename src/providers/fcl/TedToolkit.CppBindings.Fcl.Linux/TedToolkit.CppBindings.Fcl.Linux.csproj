@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TedToolkit.CppBindings.Fcl</RootNamespace>
+    <Title>TedToolkit FCL Linux x64 bindings</Title>
+    <Description>Generated FCL bindings and their native libraries for Linux x64.</Description>
+    <BindingsProvider>fcl</BindingsProvider>
+    <BindingsRuntimeIdentifier>linux-x64</BindingsRuntimeIdentifier>
+    <BindingsLibraryName>ted_toolkit_cpp_bindings_fcl</BindingsLibraryName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TedToolkit.CppBindings.Fcl.Runtime/TedToolkit.CppBindings.Fcl.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="../../../../Build/UnixBindings.targets" />
+</Project>

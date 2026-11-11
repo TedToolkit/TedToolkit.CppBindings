@@ -13,6 +13,13 @@ var standardError = Console.Error;
 try
 {
     var options = GenerationCommandLine.Parse(args);
+    if (options.RuntimeIdentifier != "win-x64")
+    {
+        await ProviderGenerators.GenerateUnixAsync(options, new SystemProcessRunner(), CancellationToken.None)
+            .ConfigureAwait(false);
+        return 0;
+    }
+
     var coordinator = new WindowsGenerationCoordinator(
         new SystemProcessRunner(),
         new PowerShellNativeDependencyClosure());

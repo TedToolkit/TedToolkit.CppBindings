@@ -1,0 +1,59 @@
+<Project>
+  <Import Project="$(MSBuildThisFileDirectory)../externals/TedToolkit/props/CodeAnalysis.props" />
+  <Import Project="$(MSBuildThisFileDirectory)../externals/TedToolkit/props/NugetPackage.props" />
+
+  <PropertyGroup>
+    <TargetFramework>net8.0</TargetFramework>
+    <RuntimeIdentifiers>$(BindingsRuntimeIdentifier)</RuntimeIdentifiers>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <GeneratePackageOnBuild>false</GeneratePackageOnBuild>
+    <PackageReadmeFile>README.md</PackageReadmeFile>
+    <VcpkgRoot Condition="'$(VcpkgRoot)' == ''">$(VCPKG_ROOT)</VcpkgRoot>
+    <UnixBindingsPython Condition="'$(UnixBindingsPython)' == ''">python3</UnixBindingsPython>
+    <_UnixBindingsRepository>$([MSBuild]::NormalizeDirectory('$(MSBuildThisFileDirectory)', '..'))</_UnixBindingsRepository>
+    <_UnixBindingsScript>$(MSBuildThisFileDirectory)BuildUnixBindings.py</_UnixBindingsScript>
+    <_UnixBindingsOutput>$([MSBuild]::NormalizeDirectory('$(MSBuildProjectDirectory)', '$(BaseIntermediateOutputPath)', 'native', '$(Configuration)', '$(BindingsRuntimeIdentifier)'))</_UnixBindingsOutput>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeUnixBindingAssets</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <ProjectReference Include="$(_UnixBindingsRepository)src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/TedToolkit.CppBindings.Windows.Generation.Tool.csproj"
+                      ReferenceOutputAssembly="false" SkipGetTargetFrameworkProperties="true"
+                      PrivateAssets="all" GlobalPropertiesToRemove="RuntimeIdentifier;SelfContained"
+                      OutputItemType="UnixGenerationHost" />
+    <None Remove="README.md" />
+    <None Include="$(_UnixBindingsRepository)README.md" Pack="true" PackagePath="/" />
+  </ItemGroup>
+
+  <Target Name="ValidateUnixBindingHost" BeforeTargets="PrepareForBuild">
+    <Error Condition="'$(RuntimeIdentifier)' != '' and '$(RuntimeIdentifier)' != '$(BindingsRuntimeIdentifier)'"
+           Text="$(MSBuildProjectName) requires RID $(BindingsRuntimeIdentifier), but the selected RID is $(RuntimeIdentifier)." />
+    <Error Condition="'$(NETCoreSdkPortableRuntimeIdentifier)' != '$(BindingsRuntimeIdentifier)'"
+           Text="$(MSBuildProjectName) must be built on a native $(BindingsRuntimeIdentifier) host. The SDK host is $(NETCoreSdkPortableRuntimeIdentifier)." />
+  </Target>
+
+  <Target Name="BuildUnixBinding" BeforeTargets="CoreCompile" DependsOnTargets="ValidateUnixBindingHost"
+          Condition="'$(DesignTimeBuild)' != 'true'">
+    <Error Condition="'@(UnixGenerationHost->Count())' != '1'" Text="Expected exactly one bindings generation host." />
+    <Error Condition="'$(BindingsProvider)' != 'smlib' and '$(VcpkgRoot)' == ''"
+           Text="Set VcpkgRoot or VCPKG_ROOT to the pinned vcpkg installation." />
+    <Exec Command="&quot;$(UnixBindingsPython)&quot; &quot;$(_UnixBindingsScript)&quot; --provider &quot;$(BindingsProvider)&quot; --runtime-identifier &quot;$(BindingsRuntimeIdentifier)&quot; --library-name &quot;$(BindingsLibraryName)&quot; --repository-root &quot;$(_UnixBindingsRepository)&quot; --output-root &quot;$(_UnixBindingsOutput)&quot; --generator &quot;@(UnixGenerationHost)&quot; --configuration &quot;$(Configuration)&quot;"
+          EnvironmentVariables="VCPKG_ROOT=$(VcpkgRoot)"
+          IgnoreStandardErrorWarningFormat="true" />
+    <ItemGroup>
+      <Compile Include="$(_UnixBindingsOutput)csharp/**/*.cs" />
+    </ItemGroup>
+  </Target>
+
+  <Target Name="IncludeUnixBindingAssets" DependsOnTargets="ValidateUnixBindingHost">
+    <ItemGroup>
+      <_UnixBindingFiles Include="$(_UnixBindingsOutput)package/native/*" />
+      <_UnixBindingNotices Include="$(_UnixBindingsOutput)package/notices/*" />
+      <TfmSpecificPackageFile Include="@(_UnixBindingFiles)" PackagePath="runtimes/$(BindingsRuntimeIdentifier)/native/" />
+      <TfmSpecificPackageFile Include="@(_UnixBindingNotices)" PackagePath="third-party-notices/" />
+    </ItemGroup>
+    <Error Condition="'@(_UnixBindingFiles)' == '' or '@(_UnixBindingNotices)' == ''"
+           Text="Native assets or notices are missing. Build $(MSBuildProjectName) before packing." />
+  </Target>
+</Project>

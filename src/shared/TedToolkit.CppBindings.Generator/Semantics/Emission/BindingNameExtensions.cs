@@ -22,6 +22,9 @@ internal static class BindingNameExtensions
     internal static string ToGeneratedTypeName(this string name)
     {
         ArgumentNullException.ThrowIfNull(name);
+
+        // Keep standard-library implementation types distinct from their public counterparts.
+        name = name.Replace("std::__", "std::Implementation_", StringComparison.Ordinal);
         var builder = new StringBuilder();
         var needsSeparator = false;
         var endsWithUnderscore = false;

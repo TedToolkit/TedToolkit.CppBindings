@@ -52,6 +52,8 @@ internal sealed class RecordModelManager(
 
     private readonly List<string> _unsupportedDeclarations = [];
 
+    private Dictionary<string, string>? _unixHeaderOwners;
+
     private bool _managedTemplateReferencesFinalized;
 
     private RecordModel[] _managedRecords = [];
@@ -152,7 +154,7 @@ internal sealed class RecordModelManager(
             IsPubliclyAccessible = IsPubliclyAccessible(record),
             IsClosedTemplateSpecialization = IsClosedTemplateSpecialization(record),
             DescriptionItems = commentProjection.DescriptionItems,
-            SourceHeader = Path.GetFileName(file.Name.CString),
+            SourceHeader = GetNativeHeader(record, file.Name.CString),
             Type = projectedType,
             Size = size,
             Alignment = clang.Type_getAlignOf(type),
@@ -171,6 +173,7 @@ internal sealed class RecordModelManager(
             .Where(f => isOcctType || f.Access is CX_CXXAccessSpecifier.CX_CXXPublic)
             .Where(options.Value.FieldTypeToGenerate)
             .Where(static f => IsDefined(f.Type))
+            .Where(field => HasProvedFieldStorage(result, field))
             .Select(field => ToModel(field, record, templateProjection))
             .ToArray();
         if (result.TemplateProjection is not null && !HasGenericPhysicalLayout(result))
@@ -188,7 +191,7 @@ internal sealed class RecordModelManager(
             .SelectMany(ExpandDefaultArgumentOverloads)
             .GroupBy(GetProjectedMethodSignatureKey)
             .Select(SelectProjectedOverload)
-            .Where(method => IsInstantiableTemplateMember(result.Type.CppTypeName, method))
+            .Where(method => IsInstantiableTemplateMember(record, result.Type.CppTypeName, method))
             .ToArray();
 
         result.NativeRequiredHeaders = GetNativeRequiredHeaders(record);
@@ -216,6 +219,25 @@ internal sealed class RecordModelManager(
         NativeExportNameBuilder.Assign(result);
 
         return result;
+    }
+
+    private bool HasProvedFieldStorage(RecordModel record, FieldDecl field)
+    {
+        if (!field.IsBitField && field.Type.CanonicalType is not ReferenceType)
+        {
+            return true;
+        }
+
+        using var target = field.TranslationUnit.Handle.TargetInfo;
+        var triple = target.Triple.CString;
+        if (target.PointerWidth == 64 && triple.Contains("windows-msvc", StringComparison.Ordinal))
+        {
+            return true;
+        }
+
+        _unsupportedDeclarations.Add($"field {field.Name} in {record.Type.CppTypeName}: storage is not proved for "
+            + $"{triple}; field omitted from the managed projection.");
+        return false;
     }
 
     private static bool HasGenericPhysicalLayout(RecordModel record)
@@ -1198,13 +1220,13 @@ internal sealed class RecordModelManager(
         return ApplyRequiredHeaders(result.Type, type);
     }
 
-    private static TypeModel ApplyRequiredHeaders(TypeModel typeModel, ClangSharp.Type type)
+    private TypeModel ApplyRequiredHeaders(TypeModel typeModel, ClangSharp.Type type)
     {
         typeModel.RequiredHeaders = GetRequiredHeaders(type);
         return typeModel;
     }
 
-    private static IReadOnlyList<string> GetRequiredHeaders(ClangSharp.Type type)
+    private IReadOnlyList<string> GetRequiredHeaders(ClangSharp.Type type)
     {
         var headers = new HashSet<string>(StringComparer.Ordinal);
         var visitedTypes = new HashSet<CXType>();
@@ -1215,7 +1237,7 @@ internal sealed class RecordModelManager(
         return [.. headers,];
     }
 
-    private static void CollectRequiredHeaders(
+    private void CollectRequiredHeaders(
         ClangSharp.Type? type,
         HashSet<string> headers,
         HashSet<CXType> visitedTypes,
@@ -1276,7 +1298,7 @@ internal sealed class RecordModelManager(
         }
     }
 
-    private static void CollectRequiredHeaders(
+    private void CollectRequiredHeaders(
         TemplateArgument templateArgument,
         HashSet<string> headers,
         HashSet<CXType> visitedTypes,
@@ -1298,7 +1320,7 @@ internal sealed class RecordModelManager(
         }
     }
 
-    private static void AddHeader(Decl decl, HashSet<string> headers, HashSet<CXCursor> visitedDecls)
+    private void AddHeader(Decl decl, HashSet<string> headers, HashSet<CXCursor> visitedDecls)
     {
         if (!visitedDecls.Add(decl.Handle))
         {
@@ -1311,10 +1333,59 @@ internal sealed class RecordModelManager(
             return;
         }
 
-        var header = Path.GetFileName(file.Name.CString);
+        var header = GetNativeHeader(decl, file.Name.CString);
         headers.Add(string.Equals(header, "winnt.h", StringComparison.OrdinalIgnoreCase)
             ? "Windows.h"
             : header);
+    }
+
+    private string GetNativeHeader(Decl declaration, string path)
+    {
+        if (options.Value.RuntimeIdentifier is "linux-x64" or "osx-arm64")
+        {
+            _unixHeaderOwners ??= FindUnixHeaderOwners(declaration.TranslationUnit.Handle);
+            if (_unixHeaderOwners.TryGetValue(path, out var owner))
+            {
+                return owner;
+            }
+        }
+
+        return Path.GetFileName(path);
+    }
+
+    private unsafe Dictionary<string, string> FindUnixHeaderOwners(CXTranslationUnit unit)
+    {
+        var triplet = options.Value.GetTriplet(defaultsResolver);
+        var includeRoot = Path.TrimEndingDirectorySeparator(vcpkgEnvironment.GetOcctIncludeFolder(triplet));
+        var owners = new Dictionary<string, string>(StringComparer.Ordinal);
+        unit.GetInclusions((file, stack, depth, _) =>
+        {
+            using var includedFile = ((CXFile)file).Name;
+            var path = includedFile.CString;
+            if (IsOcctHeader(path))
+            {
+                return;
+            }
+
+            // SDK internals are reached through the public OCCT header that brought them into the translation unit.
+            for (var index = 0u; index < depth; index++)
+            {
+                stack[index].GetFileLocation(out var includingFile, out uint _, out uint _, out uint _);
+                using var includingName = includingFile.Name;
+                var includingPath = includingName.CString;
+                if (IsOcctHeader(includingPath))
+                {
+                    owners.TryAdd(path, Path.GetFileName(includingPath));
+                    break;
+                }
+            }
+        }, default);
+        return owners;
+
+        bool IsOcctHeader(string path)
+        {
+            return string.Equals(Path.GetDirectoryName(path), includeRoot, StringComparison.Ordinal);
+        }
     }
 
     private static bool TryGetEnumDecl(ClangSharp.Type type, [NotNullWhen(true)] out EnumDecl? enumDecl)
@@ -1622,7 +1693,7 @@ internal sealed class RecordModelManager(
         ]);
     }
 
-    private static bool IsInstantiableTemplateMember(string cppTypeName, MethodModel method)
+    private static bool IsInstantiableTemplateMember(CXXRecordDecl record, string cppTypeName, MethodModel method)
     {
         // IntPolyh_Array<T>::Dump() requires T::Dump(). IntPolyh_Edge only provides Dump(int),
         // so this concrete member cannot be instantiated even though Clang exposes its declaration.
@@ -1636,9 +1707,18 @@ internal sealed class RecordModelManager(
             return method.MethodName is not "Remove";
         }
 
-        if (cppTypeName is "NCollection_Vec3<unsigned long long>")
+        if (cppTypeName is "NCollection_Vec3<unsigned long>" or "NCollection_Vec3<unsigned long long>")
         {
             return method.MethodName is not "cwiseAbs";
+        }
+
+        if (method.NativeMethodName is "operator[]"
+            && cppTypeName.StartsWith("std::shared_ptr<", StringComparison.Ordinal)
+            && record is ClassTemplateSpecializationDecl { TemplateArgs: [var element,], }
+            && element.Kind is CXTemplateArgumentKind.CXTemplateArgumentKind_Type
+            && element.AsType.CanonicalType is not ArrayType)
+        {
+            return false;
         }
 
         if (cppTypeName is "BVH_PairTraverse<double, 3>"
@@ -1654,12 +1734,21 @@ internal sealed class RecordModelManager(
             return false;
         }
 
-        if (method.MethodName is "swap"
-            && (cppTypeName.StartsWith("std::variant<std::monostate, Geom2dGridEval_", StringComparison.Ordinal)
-                || cppTypeName.StartsWith("std::variant<std::monostate, GeomBndLib_", StringComparison.Ordinal)
-                || cppTypeName.StartsWith("std::variant<std::monostate, GeomGridEval_", StringComparison.Ordinal)))
+        var variantPrefix = method.NativeMethodName switch
         {
-            return false;
+            "swap" => "std::variant<",
+            "__swap" => "std::__variant_detail::__impl<",
+            _ => null,
+        };
+        if (variantPrefix is not null && cppTypeName.StartsWith(variantPrefix, StringComparison.Ordinal))
+        {
+            var arguments = cppTypeName.AsSpan(variantPrefix.Length);
+            if (arguments.StartsWith("std::monostate, Geom2dGridEval_", StringComparison.Ordinal)
+                || arguments.StartsWith("std::monostate, GeomBndLib_", StringComparison.Ordinal)
+                || arguments.StartsWith("std::monostate, GeomGridEval_", StringComparison.Ordinal))
+            {
+                return false;
+            }
         }
 
         if (cppTypeName is not "NCollection_Sequence<CSLib_Class2d>")
