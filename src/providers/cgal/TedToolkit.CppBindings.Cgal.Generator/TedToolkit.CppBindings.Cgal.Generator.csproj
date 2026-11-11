@@ -6,7 +6,7 @@
   <PropertyGroup>
     <Title>TedToolkit C++ Bindings CGAL Generator</Title>
     <Description>Generate deterministic finite-profile managed and native CGAL bindings.</Description>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFrameworks>net10.0;net11.0</TargetFrameworks>
     <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 

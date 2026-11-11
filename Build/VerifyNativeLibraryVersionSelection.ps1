@@ -32,7 +32,7 @@ if ($LASTEXITCODE -ne 0) {
 }
 
 $tool = Join-Path (Split-Path $toolProject -Parent) (
-    'bin/Release/net10.0/TedToolkit.CppBindings.Windows.Generation.Tool.dll')
+    'bin/Release/net11.0/TedToolkit.CppBindings.Windows.Generation.Tool.dll')
 $profiles = @(
     [pscustomobject]@{
         Id = 'occt'

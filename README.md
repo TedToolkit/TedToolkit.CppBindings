@@ -127,7 +127,7 @@ original workflow artifacts are retained. The retry uses the same version and ar
 | Runtime identifier | `win-x64` |
 | Native profiles | OCCT 8.0.1, CGAL 6.2 `epick-windows-v2`, Manifold 3.5.2 `manifold-3.5.2-windows-v2`, FCL 0.7.0 `fcl-0.7.0-obbrss-double-windows-v2`, and SMLib 1.0.1 box solids |
 | Binding target framework | `net8.0` |
-| Generator and development host | .NET 10 |
+| Generator and development host | .NET 10 or .NET 11 |
 | Native toolchain | Visual C++ with C++17 for OCCT, CGAL and SMLib, C++20 for Manifold and FCL, and CMake 3.28 or later |
 
 The repository root does not contain a `vcpkg.json` manifest. OCCT generation uses the installation
@@ -140,7 +140,7 @@ header scope requires fresh compiler and native-behavior proof.
 
 ### Prerequisites
 
-- .NET 10 SDK
+- .NET 11 SDK
 - PowerShell 7
 - CMake 3.28 or later
 - Visual Studio with MSVC, CMake tools, and LLVM (`clang-cl`) components
@@ -248,7 +248,7 @@ dotnet run --project tests/TedToolkit.CppBindings.Fcl.Runtime.Tests/TedToolkit.C
 Run the complete repository pipeline, including native handle fixtures and managed integration:
 
 ```powershell
-dotnet run --project Build/Build.csproj
+dotnet run --project Build/Build.csproj -f net11.0
 ```
 
 Focused build-gate checks are also available:

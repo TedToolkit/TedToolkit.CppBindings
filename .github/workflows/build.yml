@@ -52,6 +52,7 @@ jobs:
           dotnet-version: |
             8.0.x
             10.0.x
+            11.0.x
 
       - name: Setup locked CMake
         shell: pwsh
@@ -141,7 +142,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           cmake --version
-          dotnet run --project Build/Build.csproj -c Release
+          dotnet run --project Build/Build.csproj -c Release -f net11.0
 
       - name: Verify all generated Windows providers
         shell: pwsh
@@ -220,7 +221,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: |
+            10.0.x
+            11.0.x
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -399,7 +402,9 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '10.0.x'
+          dotnet-version: |
+            10.0.x
+            11.0.x
       - uses: actions/download-artifact@v4
         with:
           pattern: '{win-x64,linux-x64,osx-arm64}'
