@@ -49,11 +49,14 @@ jobs:
       - name: Setup .NET
         uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            8.0.x
-            10.0.x
-            11.0.x
+          dotnet-version: '11.0.x'
 
+      - name: Install the .NET 8 runtime for package consumers
+        shell: pwsh
+        run: |
+          $installer = Join-Path $env:RUNNER_TEMP 'dotnet-install.ps1'
+          Invoke-WebRequest https://dot.net/v1/dotnet-install.ps1 -OutFile $installer
+          pwsh -NoProfile -File $installer -Runtime dotnet -Channel 8.0 -InstallDir $env:DOTNET_ROOT -SkipNonVersionedFiles -NoPath
       - name: Setup locked CMake
         shell: pwsh
         run: |
@@ -142,7 +145,7 @@ jobs:
           $ErrorActionPreference = 'Stop'
           $PSNativeCommandUseErrorActionPreference = $true
           cmake --version
-          dotnet run --project Build/Build.csproj -c Release -f net11.0
+          dotnet run --project Build/Build.csproj -c Release
 
       - name: Verify all generated Windows providers
         shell: pwsh
@@ -221,9 +224,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            10.0.x
-            11.0.x
+          dotnet-version: '11.0.x'
       - uses: actions/setup-python@v5
         with:
           python-version: '3.12'
@@ -313,7 +314,12 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: '8.0.x'
+          dotnet-version: '11.0.x'
+      - name: Install the .NET 8 runtime for package consumers
+        shell: bash
+        run: |
+          curl -fsSL https://dot.net/v1/dotnet-install.sh -o "$RUNNER_TEMP/dotnet-install.sh"
+          bash "$RUNNER_TEMP/dotnet-install.sh" --runtime dotnet --channel 8.0 --install-dir "$DOTNET_ROOT" --skip-non-versioned-files --no-path
       - name: Install the Ubuntu graphics system libraries
         if: matrix.lane == 'linux-x64'
         shell: bash
@@ -402,9 +408,7 @@ jobs:
           persist-credentials: false
       - uses: actions/setup-dotnet@v4
         with:
-          dotnet-version: |
-            10.0.x
-            11.0.x
+          dotnet-version: '11.0.x'
       - uses: actions/download-artifact@v4
         with:
           pattern: '{win-x64,linux-x64,osx-arm64}'
