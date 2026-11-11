@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
   <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+  <Import Project="..\..\..\..\Build\NativePackageLicense.props" />
   <PropertyGroup>
     <RootNamespace>TedToolkit.CppBindings.Smlib</RootNamespace>
     <TargetFramework>net8.0</TargetFramework>

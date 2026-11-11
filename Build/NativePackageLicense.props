@@ -1,0 +1,11 @@
+<Project>
+  <PropertyGroup>
+    <PackageLicenseExpression />
+    <PackageLicenseFile>LICENSE.md</PackageLicenseFile>
+  </PropertyGroup>
+
+  <ItemGroup>
+    <None Include="$(MSBuildThisFileDirectory)LICENSE.md;$(MSBuildThisFileDirectory)../COPYING;$(MSBuildThisFileDirectory)../COPYING.LESSER"
+          Pack="true" PackagePath="" />
+  </ItemGroup>
+</Project>

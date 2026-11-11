@@ -2,6 +2,7 @@
 
   <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
   <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+  <Import Project="..\..\..\..\Build\NativePackageLicense.props" />
 
   <PropertyGroup>
     <AssemblyName>TedToolkit.CppBindings.Occt.Windows</AssemblyName>
@@ -28,6 +29,8 @@
           Pack="true" PackagePath="runtimes\win-x64\native" />
     <None Include="$(GeneratedRoot)\native-dependencies\*.dll"
           Pack="true" PackagePath="runtimes\win-x64\native" />
+    <None Include="$(GeneratedRoot)\third-party-notices\*.txt"
+          Pack="true" PackagePath="third-party-notices" />
   </ItemGroup>
 
   <Target Name="GenerateWindowsBindings"

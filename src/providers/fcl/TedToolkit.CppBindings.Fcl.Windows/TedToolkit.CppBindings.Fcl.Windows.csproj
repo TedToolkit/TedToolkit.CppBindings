@@ -1,6 +1,7 @@
 <Project Sdk="Microsoft.NET.Sdk">
   <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
   <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+  <Import Project="..\..\..\..\Build\NativePackageLicense.props" />
   <PropertyGroup>
     <AssemblyName>TedToolkit.CppBindings.Fcl.Windows</AssemblyName>
     <RootNamespace>TedToolkit.CppBindings.Fcl</RootNamespace>

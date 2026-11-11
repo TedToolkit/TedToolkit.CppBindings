@@ -71,7 +71,10 @@ internal sealed record ProviderDescriptor(
                 ],
                 [],
                 [],
-                new Dictionary<string, string>()),
+                new Dictionary<string, string>(StringComparer.Ordinal)
+                {
+                    ["OCCT.txt"] = "installed/x64-windows/share/opencascade/copyright",
+                }),
             "cgal" => new(
                 "cgal",
                 "CGAL",

@@ -117,11 +117,13 @@ function Get-ReleaseLane {
     Assert-ReleaseEntries -Path $Path -ExpectedNames $expectedNames
 
     $packages = foreach ($id in $packageIds) {
-        $artifact = Get-NuGetPackageArtifact -Feed $Path -PackageId $id
+        $isPlatformPackage = $id.EndsWith(".$($platforms[$RuntimeId])", [StringComparison]::Ordinal)
+        $licenseType = if ($isPlatformPackage) { 'file' } else { 'expression' }
+        $artifact = Get-NuGetPackageArtifact -Feed $Path -PackageId $id -RequiredLicenseType $licenseType
         if ($artifact.Version -cne $Version) {
             throw "Package '$id' has version '$($artifact.Version)', expected '$Version'."
         }
-        if ($id.EndsWith(".$($platforms[$RuntimeId])", [StringComparison]::Ordinal)) {
+        if ($isPlatformPackage) {
             Assert-ProviderPackageRuntime $artifact.Path $RuntimeId
         }
         [pscustomobject] [ordered] @{

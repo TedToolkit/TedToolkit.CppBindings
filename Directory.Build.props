@@ -11,5 +11,6 @@
     <!-- Preserve native path handling and filesystem link checks while updating FileSystem. -->
     <NoWarn>$(NoWarn);TTFS003</NoWarn>
     <PackageProjectUrl>https://github.com/TedToolkit/TedToolkit.CppBindings</PackageProjectUrl>
+    <PackageLicenseExpression>LGPL-3.0-only</PackageLicenseExpression>
   </PropertyGroup>
 </Project>

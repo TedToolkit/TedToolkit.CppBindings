@@ -1,6 +1,7 @@
 <Project>
   <Import Project="$(MSBuildThisFileDirectory)../externals/TedToolkit/props/CodeAnalysis.props" />
   <Import Project="$(MSBuildThisFileDirectory)../externals/TedToolkit/props/NugetPackage.props" />
+  <Import Project="$(MSBuildThisFileDirectory)NativePackageLicense.props" />
 
   <PropertyGroup>
     <TargetFramework>net8.0</TargetFramework>

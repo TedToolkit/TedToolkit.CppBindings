@@ -11,19 +11,38 @@ $version = '2026.11.10'
 $lanes = @{ 'win-x64' = 'Windows'; 'linux-x64' = 'Linux'; 'osx-arm64' = 'MacOS' }
 $pushes = [Collections.Generic.List[string]]::new()
 
-function New-FixturePackage([string] $Path, [string] $Id, [string] $PackageVersion, [string] $NativeRid) {
+function New-FixturePackage(
+    [string] $Path,
+    [string] $Id,
+    [string] $PackageVersion,
+    [string] $NativeRid,
+    [switch] $OmitLicense,
+    [switch] $OmitLicenseFile
+) {
     $archive = [IO.Compression.ZipFile]::Open($Path, [IO.Compression.ZipArchiveMode]::Create)
     try {
         $nuspec = $archive.CreateEntry("$Id.nuspec")
         $writer = [IO.StreamWriter]::new($nuspec.Open())
         try {
-            $writer.Write("<package><metadata><id>$Id</id><version>$PackageVersion</version></metadata></package>")
+            $license = if ($OmitLicense) { '' }
+            elseif ($NativeRid) { '<license type="file">LICENSE.md</license>' }
+            else { '<license type="expression">LGPL-3.0-only</license>' }
+            $writer.Write("<package><metadata><id>$Id</id><version>$PackageVersion</version>$license</metadata></package>")
         }
         finally {
             $writer.Dispose()
         }
         if ($NativeRid) {
             $null = $archive.CreateEntry("runtimes/$NativeRid/native/test-fixture")
+            if (!$OmitLicenseFile) {
+                $licenseWriter = [IO.StreamWriter]::new($archive.CreateEntry('LICENSE.md').Open())
+                try {
+                    $licenseWriter.Write('Fixture license text')
+                }
+                finally {
+                    $licenseWriter.Dispose()
+                }
+            }
         }
     }
     finally {
@@ -108,6 +127,12 @@ try {
     Remove-Item -LiteralPath $packagePath
     New-FixturePackage $packagePath $id '2026.11.11' 'linux-x64'
     Assert-ReleaseRejected '*has version*expected*'
+    Remove-Item -LiteralPath $packagePath
+    New-FixturePackage $packagePath $id $version 'linux-x64' -OmitLicense
+    Assert-ReleaseRejected '*must declare a license*'
+    Remove-Item -LiteralPath $packagePath
+    New-FixturePackage $packagePath $id $version 'linux-x64' -OmitLicenseFile
+    Assert-ReleaseRejected '*is missing its license file*'
     Remove-Item -LiteralPath $packagePath
     New-FixturePackage $packagePath $id $version 'osx-arm64'
     Assert-ReleaseRejected '*has no native assets for*'

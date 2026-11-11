@@ -6,7 +6,10 @@ function Get-NuGetPackageArtifact {
         [string] $Feed,
 
         [Parameter(Mandatory = $true)]
-        [string] $PackageId
+        [string] $PackageId,
+
+        [ValidateSet('expression', 'file')]
+        [string] $RequiredLicenseType
     )
 
     $packages = @(Get-ChildItem -LiteralPath $Feed -Filter "$PackageId.*.nupkg" -File)
@@ -37,6 +40,21 @@ function Get-NuGetPackageArtifact {
         $version = $metadata.SelectSingleNode("*[local-name()='version']").InnerText
         if ($actualId -cne $PackageId -or [string]::IsNullOrWhiteSpace($version)) {
             throw "Package '$($packages[0].FullName)' has unexpected identity '$actualId/$version'."
+        }
+
+        if ($RequiredLicenseType) {
+            $licenses = $metadata.SelectNodes("*[local-name()='license']")
+            if ($licenses.Count -ne 1 -or $licenses[0].GetAttribute('type') -cne $RequiredLicenseType -or
+                [string]::IsNullOrWhiteSpace($licenses[0].InnerText)) {
+                throw "Package '$PackageId' must declare a license of type '$RequiredLicenseType'."
+            }
+
+            if ($RequiredLicenseType -ceq 'file') {
+                $entry = $archive.GetEntry($licenses[0].InnerText)
+                if ($null -eq $entry -or $entry.Length -eq 0) {
+                    throw "Package '$PackageId' is missing its license file '$($licenses[0].InnerText)'."
+                }
+            }
         }
 
         return [pscustomobject]@{
