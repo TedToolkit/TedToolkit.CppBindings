@@ -11,7 +11,7 @@ using ClangSharp;
 using ClangSharp.Interop;
 
 using TedToolkit.CppBindings.Generator.Semantics;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Generator;
 

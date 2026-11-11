@@ -391,6 +391,7 @@ jobs:
     runs-on: ubuntu-24.04
     permissions:
       contents: write
+      id-token: write
     env:
       CPPBINDINGS_PACKAGE_VERSION: ${{ needs.release-inputs.outputs.version }}
     steps:
@@ -404,11 +405,16 @@ jobs:
         with:
           pattern: '{win-x64,linux-x64,osx-arm64}'
           path: ${{ runner.temp }}/release-packages
+      - name: Sign in to NuGet.org
+        id: nuget
+        uses: NuGet/login@8d196754b4036150537f80ac539e15c2f1028841 # v1.2.0
+        with:
+          user: ArchiTed
       - name: Publish the verified packages
         shell: pwsh
         env:
-          NUGET_API_KEY: ${{ secrets.NUGET__APIKEY }}
-          NUGET_SOURCE: ${{ vars.NUGET__SOURCE }}
+          NUGET_API_KEY: ${{ steps.nuget.outputs.NUGET_API_KEY }}
+          NUGET_SOURCE: https://api.nuget.org/v3/index.json
           GH_TOKEN: ${{ github.token }}
         run: |
           $ErrorActionPreference = 'Stop'

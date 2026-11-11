@@ -7,10 +7,10 @@
 
 using System.Text;
 
-using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper;
 
-using static TedToolkit.RoslynHelper.Generators.SourceComposer;
-using static TedToolkit.RoslynHelper.Generators.SourceComposer<
+using static TedToolkit.RoslynHelper.SourceComposer;
+using static TedToolkit.RoslynHelper.SourceComposer<
     TedToolkit.CppBindings.Generator.Semantics.BindingEnumEmitter>;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;

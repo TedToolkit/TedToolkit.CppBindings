@@ -16,8 +16,8 @@ using ClangSharp.Interop;
 using Cysharp.Text;
 
 using TedToolkit.CppBindings.Generator.Semantics;
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator;
 

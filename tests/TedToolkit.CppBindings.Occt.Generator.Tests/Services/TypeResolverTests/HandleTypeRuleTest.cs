@@ -13,8 +13,8 @@ using ClangSharp.Interop;
 using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 using TedToolkit.CppBindings.Occt.Generator.Services.Rules;
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Services.TypeResolverTests;
 

@@ -11,8 +11,8 @@ using System.Runtime.InteropServices;
 using ClangSharp;
 using ClangSharp.Interop;
 
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests;
 

@@ -8,9 +8,9 @@
 using System.Collections.ObjectModel;
 
 using TedToolkit.CppBindings.Generator.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper.Syntaxes;
 
-using static TedToolkit.RoslynHelper.Generators.SourceComposer;
+using static TedToolkit.RoslynHelper.SourceComposer;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;
 
