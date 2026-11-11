@@ -11,8 +11,8 @@ using System.Runtime.InteropServices;
 using ClangSharp;
 using ClangSharp.Interop;
 
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests;
 
@@ -26,16 +26,18 @@ internal sealed class HelpersTest
         ?? throw new InvalidOperationException("SourceBuilder internal buffer field was not found.");
 
     /// <summary>
-    /// Verifies template pointer arguments remain distinct in generated type names.
+    /// Verifies distinct C++ types keep distinct generated names.
     /// </summary>
     /// <returns>A task representing the asynchronous test.</returns>
     [Test]
-    public async Task Should_preserve_pointer_identity_in_generated_type_names_Async()
+    public async Task Should_preserve_type_identity_in_generated_type_names_Async()
     {
         await Assert.That("NCollection_Allocator<NCollection_Mat4<float> *>".ToGeneratedTypeName())
             .IsEqualTo("NCollection_Allocator_NCollection_Mat4_float_Ptr");
         await Assert.That("NCollection_Allocator<NCollection_Mat4<float>>".ToGeneratedTypeName())
             .IsEqualTo("NCollection_Allocator_NCollection_Mat4_float");
+        await Assert.That("std::__shared_ptr<GeomPlate_BuildPlateSurface>".ToGeneratedTypeName())
+            .IsNotEqualTo("std::shared_ptr<GeomPlate_BuildPlateSurface>".ToGeneratedTypeName());
     }
 
     /// <summary>

@@ -10,6 +10,7 @@ using System.Text.RegularExpressions;
 
 using Cysharp.Text;
 
+using TedToolkit.CppBindings.Generator;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
 using TedToolkit.FileSystem;
 
@@ -47,7 +48,8 @@ internal sealed class VcpkgEnvironment : IVcpkgEnvironment
     /// <inheritdoc/>
     public string GetIncludeFolder(string triplet)
     {
-        return (new DirectoryPath(GetRoot()) / INSTALLED_FOLDER_NAME / triplet / "include").FullName;
+        return NativeSources.GetVcpkgIncludeRoot(new DirectoryPath(GetRoot()) / INSTALLED_FOLDER_NAME, triplet)
+            .FullName;
     }
 
     /// <inheritdoc/>

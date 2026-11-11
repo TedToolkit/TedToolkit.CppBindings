@@ -52,3 +52,7 @@ private. Native `const T&` accessors are emitted as `ref readonly T`; each retur
 borrowed from the receiver and remains subject to that receiver's lifetime and invalidation rules.
 CGAL continues to own its finite adapter and tagged intersection alternatives; it submits CMake
 dependency and target facts to Shared instead of rendering generic native-project boilerplate.
+
+## Agent skill
+
+The `generate-cpp-bindings` skill ships in `TedToolkit.CppBindings.Generator`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Generator` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Generator@<resolved-version>`.

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TedToolkit.CppBindings.Occt</RootNamespace>
+    <Title>TedToolkit OCCT Linux x64 bindings</Title>
+    <Description>Generated OCCT bindings and their native libraries for Linux x64.</Description>
+    <BindingsProvider>occt</BindingsProvider>
+    <BindingsRuntimeIdentifier>linux-x64</BindingsRuntimeIdentifier>
+    <BindingsLibraryName>ted_toolkit_occt</BindingsLibraryName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="../../../../Build/UnixBindings.targets" />
+</Project>

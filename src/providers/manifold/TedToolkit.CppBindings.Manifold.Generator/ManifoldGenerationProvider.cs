@@ -17,6 +17,10 @@ namespace TedToolkit.CppBindings.Manifold.Generator;
 /// <summary>Supplies the finite Manifold profile to the provider-neutral Shared semantic engine.</summary>
 public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
 {
+    private const string ManifoldHeader = "manifold/manifold.h";
+
+    private const string MeshHeader = "manifold/mesh.h";
+
     private static readonly string[] Admitted =
     [
         "Manifold", "Manifold.Create", "Manifold.Status", "Manifold.Boolean",
@@ -35,14 +39,33 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     /// <summary>Initializes a provider from the selected vcpkg installation.</summary>
     /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
     public ManifoldGenerationProvider(in DirectoryPath vcpkgRoot)
+        : this(vcpkgRoot, "x64-windows")
+    {
+    }
+
+    /// <summary>Initializes a provider for a supported target vcpkg triplet.</summary>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked Manifold package.</param>
+    /// <param name="triplet">The installed target triplet.</param>
+    public ManifoldGenerationProvider(in DirectoryPath vcpkgRoot, string triplet)
         : base(ManifoldSemanticProfile.Create())
     {
         ArgumentNullException.ThrowIfNull(vcpkgRoot.FullName, nameof(vcpkgRoot));
         _vcpkgRoot = vcpkgRoot.GetFullPath();
+        Profile = triplet switch
+        {
+            "x64-windows" => new(),
+            "x64-linux" or "arm64-osx" => new()
+            {
+                ProfileId = $"manifold-3.5.2-{triplet}-v2",
+                Triplet = triplet,
+                Msvc = "",
+            },
+            _ => throw new ArgumentException($"Unsupported Manifold triplet '{triplet}'.", nameof(triplet)),
+        };
     }
 
     /// <summary>Gets the finite profile.</summary>
-    public ManifoldProfile Profile { get; } = new();
+    public ManifoldProfile Profile { get; }
 
     /// <inheritdoc />
     public override IReadOnlyList<Type> PreparationModules { get; } = Array.Empty<Type>();
@@ -68,13 +91,15 @@ public sealed class ManifoldGenerationProvider : SemanticGenerationProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateNativeLibraryVersion(nativeLibraryVersion);
-        var sourceInventory = ManifoldHeaderDiscovery.Resolve(_vcpkgRoot, Profile);
+        var sourceInventory = VcpkgHeaderInventory.ResolveLocked(
+            _vcpkgRoot / "installed", Profile.Triplet, "Manifold", Profile.ManifoldVersion,
+            [ManifoldHeader, MeshHeader,]);
         var sourceDeclarations = Admitted.Select(static value => new
         {
             id = value,
             header = value.StartsWith("Manifold", StringComparison.Ordinal)
-                ? "manifold/manifold.h"
-                : "manifold/mesh.h",
+                ? ManifoldHeader
+                : MeshHeader,
             disposition = "finite-profile-candidate",
         }).ToArray();
         BindingSourceDefinition[] managedSources =

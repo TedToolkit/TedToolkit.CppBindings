@@ -99,7 +99,7 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
                 .Where(dependency => catalog.ContainsKey(dependency.Type.CppTypeName))
                 .Select(static dependency => dependency.Type.CppTypeName))).ToArray();
         var managed = new List<BindingSourceDefinition>();
-        var admissionReport = "Target: win-x64; supported sequential native alignments: 1, 2, 4, 8.\n"
+        var admissionReport = $"Target: {_options.Value.RuntimeIdentifier}; supported native alignments: 1, 2, 4, 8.\n"
             + string.Join("\n", _records.UnsupportedDeclarations) + "\n";
         managed.Add(new BindingSourceDefinition("unsupported-declarations.txt",
             (writer, token) => writer.WriteAsync(admissionReport.AsMemory(), token)));
@@ -141,7 +141,8 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
         return Task.FromResult(new BindingProviderModel(
             declarations,
             _records.EnumModels,
-            OcctSemanticProfile.CreateEmissionProfile(_options.Value.CSharpNamespace, _options.Value.IsInternal),
+            OcctSemanticProfile.CreateEmissionProfile(
+                _options.Value.CSharpNamespace, _options.Value.IsInternal, _options.Value.RuntimeIdentifier),
             managed,
             native,
             ["NativeError_Clear",],
@@ -168,7 +169,7 @@ internal sealed class OcctGenerationProvider : SemanticGenerationProvider
             [new("OpenCASCADE", "CONFIG REQUIRED", nativeLibraryVersion),],
             compileOptions: ["$<$<CXX_COMPILER_ID:MSVC>:/MP1>",],
             includeDirectories: ["${OpenCASCADE_INCLUDE_DIR}",],
-            linkLibraries: ["${OpenCASCADE_LIBRARIES}",],
+            linkLibraries: ["${OpenCASCADE_LIBRARIES}", "$<$<PLATFORM_ID:Linux>:atomic>",],
             targetProperties:
             [
                 new("UNITY_BUILD", "ON"),

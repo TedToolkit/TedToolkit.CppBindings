@@ -1,9 +1,9 @@
 param([string] $Configuration = 'Release')
 
 $ErrorActionPreference = 'Stop'
-$assemblyRoot = Join-Path $PSScriptRoot "bin\$Configuration\net10.0"
-if ([Environment]::Version.Major -lt 10) {
-    throw 'This reflection-based build-gate proof requires PowerShell running on .NET 10 or later.'
+$assemblyRoot = Join-Path $PSScriptRoot "bin\$Configuration\net11.0"
+if ([Environment]::Version.Major -lt 11) {
+    throw 'This reflection-based build-gate proof requires PowerShell 7.7 or later running on .NET 11 or later.'
 }
 
 [Reflection.Assembly]::LoadFrom((Join-Path $assemblyRoot 'ModularPipelines.dll')) | Out-Null

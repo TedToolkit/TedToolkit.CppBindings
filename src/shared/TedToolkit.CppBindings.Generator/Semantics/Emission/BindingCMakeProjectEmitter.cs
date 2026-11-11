@@ -37,6 +37,27 @@ public static class BindingCMakeProjectEmitter
         BindingCMakeProjectDefinition definition,
         IReadOnlyList<string> sourceFiles)
     {
+        return Render(definition, sourceFiles, executable: false);
+    }
+
+    /// <summary>
+    /// Renders a CMake project for a native probe executable.
+    /// </summary>
+    /// <param name="definition">The project facts.</param>
+    /// <param name="sourceFiles">The exact compiled native source inventory.</param>
+    /// <returns>The generated CMake source.</returns>
+    public static string RenderExecutable(
+        BindingCMakeProjectDefinition definition,
+        IReadOnlyList<string> sourceFiles)
+    {
+        return Render(definition, sourceFiles, executable: true);
+    }
+
+    private static string Render(
+        BindingCMakeProjectDefinition definition,
+        IReadOnlyList<string> sourceFiles,
+        bool executable)
+    {
         ArgumentNullException.ThrowIfNull(definition);
         var sources = ValidateSources(sourceFiles);
         var builder = new StringBuilder();
@@ -60,7 +81,8 @@ public static class BindingCMakeProjectEmitter
             _ = builder.Append('\n');
         }
 
-        _ = builder.Append("add_library(").Append(definition.LibraryBaseName).Append(" SHARED\n");
+        _ = builder.Append(executable ? "add_executable(" : "add_library(")
+            .Append(definition.LibraryBaseName).Append(executable ? "\n" : " SHARED\n");
         foreach (var source in sources)
         {
             _ = builder.Append("    ").Append(source).Append('\n');
@@ -85,6 +107,8 @@ public static class BindingCMakeProjectEmitter
         AppendTargetProperties(builder, definition);
         AppendTargetCommand(builder, "target_include_directories", definition.LibraryBaseName,
             definition.IncludeDirectories);
+        AppendTargetCommand(builder, "target_link_directories", definition.LibraryBaseName,
+            definition.LinkDirectories);
         AppendTargetCommand(builder, "target_link_libraries", definition.LibraryBaseName,
             definition.LinkLibraries);
         return builder.ToString();

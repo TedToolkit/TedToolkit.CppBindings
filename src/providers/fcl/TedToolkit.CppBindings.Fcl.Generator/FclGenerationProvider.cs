@@ -5,6 +5,7 @@
 // </copyright>
 // -----------------------------------------------------------------------
 
+using System.Collections.ObjectModel;
 using System.Text.Json;
 
 using TedToolkit.CppBindings.Generator;
@@ -17,6 +18,8 @@ namespace TedToolkit.CppBindings.Fcl.Generator;
 /// <summary>Supplies the finite FCL profile to the provider-neutral Shared semantic engine.</summary>
 public sealed class FclGenerationProvider : SemanticGenerationProvider
 {
+    private const string FclHeader = "fcl/fcl.h";
+
     private static readonly string[] Admitted =
     [
         "FclVector3", "FclBvhReturnCode", "FclBvhModel.Create", "FclModelBuildResult",
@@ -34,10 +37,38 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
     /// <summary>Initializes a provider from the selected vcpkg installation.</summary>
     /// <param name="vcpkgRoot">The vcpkg root that supplies the locked FCL package.</param>
     public FclGenerationProvider(in DirectoryPath vcpkgRoot)
+        : this(vcpkgRoot, "x64-windows")
+    {
+    }
+
+    /// <summary>Initializes a provider for a supported target vcpkg triplet.</summary>
+    /// <param name="vcpkgRoot">The vcpkg root that supplies the locked FCL package.</param>
+    /// <param name="triplet">The installed target triplet.</param>
+    public FclGenerationProvider(in DirectoryPath vcpkgRoot, string triplet)
         : base(FclSemanticProfile.Create())
     {
         ArgumentNullException.ThrowIfNull(vcpkgRoot.FullName, nameof(vcpkgRoot));
         _vcpkgRoot = vcpkgRoot.GetFullPath();
+        if (triplet == "x64-windows")
+        {
+            return;
+        }
+
+        if (triplet is not ("x64-linux" or "arm64-osx"))
+        {
+            throw new ArgumentException($"Unsupported FCL triplet '{triplet}'.", nameof(triplet));
+        }
+
+        var versions = new Dictionary<string, string>(Profile.Versions, StringComparer.Ordinal)
+        {
+            ["Triplet"] = triplet,
+        };
+        versions.Remove("Msvc");
+        Profile = Profile with
+        {
+            ProfileId = $"fcl-0.7.0-obbrss-double-{triplet}-v2",
+            Versions = new ReadOnlyDictionary<string, string>(versions),
+        };
     }
 
     /// <summary>Gets the finite profile.</summary>
@@ -67,7 +98,8 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
     {
         cancellationToken.ThrowIfCancellationRequested();
         ValidateNativeLibraryVersion(nativeLibraryVersion);
-        var sourceInventory = FclHeaderDiscovery.Resolve(_vcpkgRoot, Profile);
+        var sourceInventory = VcpkgHeaderInventory.ResolveLocked(
+            _vcpkgRoot / "installed", Profile.Versions["Triplet"], "FCL", Profile.Versions["Fcl"], [FclHeader,]);
         BindingSourceDefinition[] managedSources =
         [
             JsonSource("admitted-inventory.json", Admitted),
@@ -91,7 +123,7 @@ public sealed class FclGenerationProvider : SemanticGenerationProvider
             JsonSource("source-declaration-inventory.json", Admitted.Select(static id => new
             {
                 id,
-                header = "fcl/fcl.h",
+                header = FclHeader,
                 disposition = "finite-profile-candidate",
             })),
             JsonSource("source-inventory.json", sourceInventory.Select(static item => new

@@ -290,6 +290,16 @@ public sealed class OcctParseModule : Module<bool>
         {
         }
 
+        var runtimeIdentifier = _generationOptions.Value.RuntimeIdentifier;
+        if (runtimeIdentifier is "linux-x64" or "osx-arm64")
+        {
+            // Filter relay roots so Clang still handles conditional includes in portable headers.
+            excludedHeaders.UnionWith(dependencies.Keys.Where(header =>
+                header == "OSD_WNT.hxx"
+                || header.StartsWith("WNT_", StringComparison.Ordinal)
+                || (runtimeIdentifier == "linux-x64" && header.StartsWith("Cocoa_", StringComparison.Ordinal))));
+        }
+
         var outputDirectory = _generationOptions.Value.CppFolder.TrimEndingDirectorySeparator();
         var reportDirectory = outputDirectory.Parent ?? outputDirectory;
         var reportPath = reportDirectory / new FileName("unsupported-headers.txt");
@@ -324,7 +334,7 @@ public sealed class OcctParseModule : Module<bool>
             }
 
             var terminator = trimmed[start] is '<' ? '>' : '"';
-            var end = trimmed.IndexOf(terminator, start + 1);
+            var end = trimmed.IndexOf(terminator, start + 1, StringComparison.Ordinal);
             if (end > start)
             {
                 var dependency = trimmed[(start + 1)..end];

@@ -27,6 +27,8 @@ $expectedProjects = @(
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Runtime/TedToolkit.CppBindings.Manifold.Runtime.csproj',
     'src/providers/manifold/TedToolkit.CppBindings.Manifold.Windows/TedToolkit.CppBindings.Manifold.Windows.csproj',
+    'src/providers/smlib/TedToolkit.CppBindings.Smlib.Generator/TedToolkit.CppBindings.Smlib.Generator.csproj',
+    'src/providers/smlib/TedToolkit.CppBindings.Smlib.Windows/TedToolkit.CppBindings.Smlib.Windows.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Runtime/TedToolkit.CppBindings.Occt.Runtime.csproj',
     'src/providers/occt/TedToolkit.CppBindings.Occt.Windows/TedToolkit.CppBindings.Occt.Windows.csproj',
@@ -205,6 +207,8 @@ $windowsPackagingRules = [ordered]@{
         'ted_toolkit_cpp_bindings_manifold.dll'
     'src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/TedToolkit.CppBindings.Fcl.Windows.csproj' =
         'ted_toolkit_cpp_bindings_fcl.dll'
+    'src/providers/smlib/TedToolkit.CppBindings.Smlib.Windows/TedToolkit.CppBindings.Smlib.Windows.csproj' =
+        'ted_toolkit_cpp_bindings_smlib.dll'
 }
 $bindingNames = [Collections.Generic.HashSet[string]]::new([StringComparer]::OrdinalIgnoreCase)
 foreach ($entry in $windowsPackagingRules.GetEnumerator()) {
@@ -270,7 +274,7 @@ $generationHostPath = Join-Path $repository `
 [xml] $generationHost = Get-Content -LiteralPath $generationHostPath -Raw
 $generationReferences = @($generationHost.SelectNodes('/Project/ItemGroup/ProjectReference') |
     ForEach-Object { $_.GetAttribute('Include').Replace('\', '/') })
-foreach ($provider in @('Occt', 'Cgal', 'Manifold', 'Fcl')) {
+foreach ($provider in $providerIdentifiers) {
     if (@($generationReferences | Where-Object { $_ -match "CppBindings\.$provider\.Generator\.csproj`$" }).Count -ne 1) {
         throw "The shared Windows generation host must directly reference the $provider generator once."
     }
@@ -285,6 +289,9 @@ $generationContracts = [ordered]@{
     manifold = @(
         'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/ManifoldGenerationProvider.cs',
         'src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/TedToolkit.CppBindings.Manifold.Generator.csproj')
+    smlib = @(
+        'src/providers/smlib/TedToolkit.CppBindings.Smlib.Generator/SmlibGenerationProvider.cs',
+        'src/providers/smlib/TedToolkit.CppBindings.Smlib.Generator/TedToolkit.CppBindings.Smlib.Generator.csproj')
     occt = @(
         'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/Services/OcctGenerationProvider.cs',
         'src/providers/occt/TedToolkit.CppBindings.Occt.Generator/TedToolkit.CppBindings.Occt.Generator.csproj')
@@ -326,8 +333,8 @@ foreach ($source in $providerGeneratorSources) {
 }
 $generationDispatcher = Get-Content -LiteralPath (Join-Path $repository `
     'src/tools/TedToolkit.CppBindings.Windows.Generation.Tool/ProviderGenerators.cs') -Raw
-if ([regex]::Matches($generationDispatcher, '\.AddCppGenerators\(').Count -ne 3 `
-    -or $generationDispatcher -match '\.Add(?:Fcl|Manifold|Cgal)Generators\(') {
+if ([regex]::Matches($generationDispatcher, '\.AddCppGenerators\(').Count -ne 1 `
+    -or $generationDispatcher -match '\.Add(?:Fcl|Manifold|Cgal|Smlib)Generators\(') {
     throw 'The Windows generation host does not route finite Providers through the common AddCppGenerators pipeline.'
 }
 $generationCoordinator = Get-Content -LiteralPath (Join-Path $repository `
@@ -346,7 +353,8 @@ foreach ($projectName in @(
         'TedToolkit.CppBindings.Occt.Windows.csproj',
         'TedToolkit.CppBindings.Cgal.Windows.csproj',
         'TedToolkit.CppBindings.Manifold.Windows.csproj',
-        'TedToolkit.CppBindings.Fcl.Windows.csproj')) {
+        'TedToolkit.CppBindings.Fcl.Windows.csproj',
+        'TedToolkit.CppBindings.Smlib.Windows.csproj')) {
     if (-not $windowsBindingsModule.Contains($projectName, [StringComparison]::Ordinal)) {
         throw "The Windows generation module does not build $projectName."
     }

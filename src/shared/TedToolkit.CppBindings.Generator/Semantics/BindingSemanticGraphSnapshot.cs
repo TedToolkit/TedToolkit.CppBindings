@@ -7,8 +7,8 @@
 
 using System.Collections.ObjectModel;
 
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;
 
@@ -48,7 +48,7 @@ internal sealed class BindingSemanticGraphSnapshot
             CloneRecord(source.Record),
             source.ManagedSourceGroup,
             source.IsRoot,
-            source.Dependencies);
+            source.Dependencies) { IsHeaderLayout = source.IsHeaderLayout, IsHeaderRoot = source.IsHeaderRoot, };
     }
 
     private RecordModel CloneRecord(RecordModel source)

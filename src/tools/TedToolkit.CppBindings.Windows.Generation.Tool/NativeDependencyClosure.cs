@@ -22,7 +22,7 @@ internal interface INativeDependencyClosure
         string compiler,
         string nativeLibrary,
         string destination,
-        string vcpkgBin,
+        string? vcpkgBin,
         string ownedRoot,
         string workingDirectory,
         CancellationToken cancellationToken);
@@ -62,7 +62,7 @@ internal sealed class PowerShellNativeDependencyClosure(IProcessRunner processes
         string compiler,
         string nativeLibrary,
         string destination,
-        string vcpkgBin,
+        string? vcpkgBin,
         string ownedRoot,
         string workingDirectory,
         CancellationToken cancellationToken)
@@ -76,7 +76,7 @@ internal sealed class PowerShellNativeDependencyClosure(IProcessRunner processes
                 "pwsh",
                 [
                     "-NoProfile", "-CommandWithArgs", command, modulePath, compiler, nativeLibrary,
-                    destination, vcpkgBin, ownedRoot,
+                    destination, vcpkgBin ?? "", ownedRoot,
                 ],
                 workingDirectory,
                 null,

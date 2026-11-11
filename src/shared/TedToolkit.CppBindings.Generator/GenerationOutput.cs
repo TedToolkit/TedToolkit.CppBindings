@@ -34,19 +34,13 @@ internal static class GenerationOutput
         StringComparer.Ordinal);
 
     /// <summary>
-    /// Validates shared target and output settings before provider preparation.
+    /// Validates source publication settings before provider preparation.
     /// </summary>
     /// <param name="options">The configured shared options.</param>
-    /// <exception cref="NotSupportedException">The target is not win-x64.</exception>
     /// <exception cref="ArgumentException">The namespace or output roots are invalid.</exception>
     internal static void ValidateOptions(GenerationOptions options)
     {
         _ = options.GetNativeLibraryBaseName();
-        if (options.RuntimeIdentifier != "win-x64")
-        {
-            throw new NotSupportedException("Only the proved win-x64 generation profile is supported.");
-        }
-
         ArgumentException.ThrowIfNullOrWhiteSpace(options.CSharpNamespace);
         if (options.CSharpNamespace.Split('.').Any(static part => !Identifier.IsMatch(part) || CSharpKeywords.Contains(part)))
         {
@@ -55,8 +49,8 @@ internal static class GenerationOutput
 
         ArgumentNullException.ThrowIfNull(options.CSharpFolder.FullName, nameof(options.CSharpFolder));
         ArgumentNullException.ThrowIfNull(options.CppFolder.FullName, nameof(options.CppFolder));
-        var managed = options.CSharpFolder.TrimEndingDirectorySeparator().FullName;
-        var native = options.CppFolder.TrimEndingDirectorySeparator().FullName;
+        var managed = options.CSharpFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
+        var native = options.CppFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
         ValidateRoot(managed);
         ValidateRoot(native);
         if (!managed.Equals(native, StringComparison.OrdinalIgnoreCase)
@@ -67,6 +61,28 @@ internal static class GenerationOutput
         }
 
         throw new ArgumentException("Language output roots must be distinct and non-overlapping.", nameof(options));
+    }
+
+    /// <summary>
+    /// Rejects native inputs that would be removed when the dedicated output roots are cleaned.
+    /// </summary>
+    /// <param name="options">The configured output roots.</param>
+    /// <param name="paths">The input file and directory paths.</param>
+    /// <exception cref="ArgumentException">An input is in a generation output root.</exception>
+    internal static void ValidateInputPaths(GenerationOptions options, IEnumerable<string> paths)
+    {
+        var managed = options.CSharpFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
+        var native = options.CppFolder.GetFullPath().TrimEndingDirectorySeparator().FullName;
+        var comparison = OperatingSystem.IsWindows() ? StringComparison.OrdinalIgnoreCase : StringComparison.Ordinal;
+        foreach (var path in paths)
+        {
+            var input = Path.TrimEndingDirectorySeparator(Path.GetFullPath(path));
+            if (input.Equals(managed, comparison) || IsBelow(input, managed, comparison)
+                || input.Equals(native, comparison) || IsBelow(input, native, comparison))
+            {
+                throw new ArgumentException($"Native input '{input}' is inside a generation output directory.", nameof(options));
+            }
+        }
     }
 
     /// <summary>
@@ -183,7 +199,7 @@ internal static class GenerationOutput
         var segments = relativePath.Replace('\\', '/').Split('/');
         if (Path.IsPathRooted(relativePath) || segments.Any(static segment =>
                 string.IsNullOrWhiteSpace(segment) || segment is "." or ".."
-                || segment.EndsWith(' ') || segment.EndsWith('.')
+                || segment is [.., ' ' or '.']
                 || DeviceName.IsMatch(segment)
                 || segment.IndexOfAny(Path.GetInvalidFileNameChars()) >= 0))
         {
@@ -207,9 +223,9 @@ internal static class GenerationOutput
         return path;
     }
 
-    private static bool IsBelow(string path, string root)
+    private static bool IsBelow(string path, string root, StringComparison comparison = StringComparison.OrdinalIgnoreCase)
     {
-        return path.StartsWith(root + Path.DirectorySeparatorChar, StringComparison.OrdinalIgnoreCase);
+        return path.StartsWith(root + Path.DirectorySeparatorChar, comparison);
     }
 
     private static void ValidateRoot(string path)

@@ -1,0 +1,35 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <Import Project="..\..\..\..\externals\TedToolkit\props\CodeAnalysis.props" />
+  <Import Project="..\..\..\..\externals\TedToolkit\props\NugetPackage.props" />
+  <PropertyGroup>
+    <RootNamespace>TedToolkit.CppBindings.Smlib</RootNamespace>
+    <TargetFramework>net8.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
+    <EnableDefaultCompileItems>false</EnableDefaultCompileItems>
+    <Description>Finite SMLib bindings and their source-built native library for Windows x64.</Description>
+    <RuntimeIdentifiers>win-x64</RuntimeIdentifiers>
+    <GeneratedRoot Condition="'$(GeneratedRoot)' == ''">$(MSBuildProjectDirectory)\..\..\..\..\output\providers\smlib</GeneratedRoot>
+    <TargetsForTfmSpecificContentInPackage>$(TargetsForTfmSpecificContentInPackage);IncludeSmlibNativeAssets</TargetsForTfmSpecificContentInPackage>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Runtime\TedToolkit.CppBindings.Runtime.csproj" />
+    <ProjectReference Include="..\..\..\tools\TedToolkit.CppBindings.Windows.Generation.Tool\TedToolkit.CppBindings.Windows.Generation.Tool.csproj"
+                      ReferenceOutputAssembly="false"
+                      SkipGetTargetFrameworkProperties="true"
+                      OutputItemType="WindowsGenerationHost" />
+  </ItemGroup>
+  <Target Name="GenerateSmlibWindowsBindings" BeforeTargets="CoreCompile">
+    <Error Condition="'@(WindowsGenerationHost)' == ''" Text="The Windows generation host output was not resolved." />
+    <Exec Command="dotnet &quot;@(WindowsGenerationHost)&quot; --provider smlib --repository-root &quot;$(MSBuildProjectDirectory)\..\..\..\..&quot; --output-root &quot;$(GeneratedRoot)&quot; --configuration &quot;$(Configuration)&quot;" />
+    <ItemGroup>
+      <Compile Include="$(GeneratedRoot)\csharp\*.cs" />
+    </ItemGroup>
+  </Target>
+  <Target Name="IncludeSmlibNativeAssets">
+    <ItemGroup>
+      <TfmSpecificPackageFile Include="$(GeneratedRoot)\native-build\$(Configuration)\ted_toolkit_cpp_bindings_smlib.dll;$(GeneratedRoot)\native-dependencies\*.dll"
+                              PackagePath="runtimes/win-x64/native" />
+      <TfmSpecificPackageFile Include="$(GeneratedRoot)\third-party-notices\*.txt" PackagePath="third-party-notices" />
+    </ItemGroup>
+  </Target>
+</Project>

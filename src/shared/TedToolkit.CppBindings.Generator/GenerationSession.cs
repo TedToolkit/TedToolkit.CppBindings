@@ -13,8 +13,8 @@ namespace TedToolkit.CppBindings.Generator;
 /// Shares one finalized and validated provider plan across the registered generation stages.
 /// </summary>
 /// <param name="options">The validated shared configuration.</param>
-/// <param name="provider">The provider for this pipeline run.</param>
-internal sealed class GenerationSession(GenerationOptions options, IGenerationProvider provider)
+/// <param name="provider">The optional provider for this pipeline run.</param>
+internal sealed class GenerationSession(GenerationOptions options, IGenerationProvider? provider)
 {
     private readonly object _gate = new();
 
@@ -28,7 +28,8 @@ internal sealed class GenerationSession(GenerationOptions options, IGenerationPr
     /// <summary>
     /// Gets the snapshotted preparation module dependencies.
     /// </summary>
-    internal IReadOnlyList<Type> PreparationModules { get; } = Array.AsReadOnly(provider.PreparationModules.ToArray());
+    internal IReadOnlyList<Type> PreparationModules { get; } =
+        Array.AsReadOnly(provider?.PreparationModules.ToArray() ?? Array.Empty<Type>());
 
     /// <summary>
     /// Gets the one shared plan task, preserving cancellation and preparation failure.
@@ -46,9 +47,16 @@ internal sealed class GenerationSession(GenerationOptions options, IGenerationPr
     private async Task<GenerationPlan> PrepareAsync(CancellationToken cancellationToken)
     {
         cancellationToken.ThrowIfCancellationRequested();
-        var providerPlan = await provider.CreatePlanAsync(Options, cancellationToken).ConfigureAwait(false);
+        var providerPlan = provider is null
+            ? HeaderBindingGeneration.CreatePlan(Options, cancellationToken)
+            : await provider.CreatePlanAsync(Options, cancellationToken).ConfigureAwait(false);
         ArgumentNullException.ThrowIfNull(providerPlan);
         cancellationToken.ThrowIfCancellationRequested();
+        if (Options.HasPublicHeaders && !providerPlan.ProcessedPublicHeaders)
+        {
+            throw new NotSupportedException("The generation plan did not process the requested public input headers.");
+        }
+
         var plan = new GenerationPlan(
             providerPlan.CSharpSources.Append(new GeneratedSource(
                 NativeApiGenerator.FileName,

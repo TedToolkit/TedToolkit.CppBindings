@@ -1,8 +1,8 @@
 # TedToolkit.CppBindings.Generator
 
-Provider-neutral generation stages for C++ bindings. This .NET 10 tool package owns source-path
-validation, publication, and the existing Windows x64 native function-table/loading mechanics.
-It contains no Clang declarations, OCCT rules, native package dependencies, or ownership classification.
+Provider-neutral generation stages for C++ bindings. This .NET 11 tool package owns source-path
+validation, public header discovery, publication, and generation of the native function table and
+its managed loader. Provider-specific native dependencies and ownership rules stay with their providers.
 
 ## Use
 
@@ -37,15 +37,103 @@ Existing `DirectoryInfo` inputs can be assigned through FileSystem's implicit co
 the properties now returns `DirectoryPath`. Provider vcpkg roots use `DirectoryPath`, and explicit
 CGAL profile documents use `FilePath`. This changes the public API types, so existing compiled
 consumers must be rebuilt. The other settings include
-`CSharpNamespace` and a portable `NativeLibraryBaseName`. The built-in target is `win-x64`, with
-Cdecl function pointers and the MSVC native ABI. Other runtime identifiers are rejected before
-preparation. `CppVersion` defaults to 17 and is available to the provider's native build description;
+`CSharpNamespace` and a portable `NativeLibraryBaseName`. `RuntimeIdentifier` is available to
+binding providers and defaults to `win-x64` for existing callers. Shared accepts any target RID.
+The generated function table uses the C++ compiler's target to choose its export declaration.
+Builds with a different export convention can define `TEDTOOLKIT_CPPBINDINGS_EXPORT` when compiling
+the generated function table.
+`CppVersion` defaults to 17 and is available to the provider's native build description;
 `IsInternal` is available to its managed emitters. Set `NativeLibraryVersion` to a `System.Version`
 when the provider's primary native package must match exactly. Leaving it unset preserves the
 provider's existing unversioned resolver behavior; it does not promise that every resolver chooses
 the globally newest release.
 
+## Generate from headers
+
+`GenerationOptions.NativeInputs` consumes the public headers and explicit dependencies resolved
+by `NativeSources`. `GenerationOptions.Headers` also accepts individual input paths and can set a
+wrapper name for a header already selected in the resolved inputs. The usual
+`AddCppGenerators` pipeline automatically includes external C-linkage functions declared in those
+headers. Definitions in headers included only as dependencies are used for type resolution.
+Keep native inputs, including transitive headers, outside both generated output directories.
+
+```csharp
+using ModularPipelines;
+using TedToolkit.CppBindings.Generator;
+using TedToolkit.FileSystem;
+
+var options = new GenerationOptions
+{
+    CSharpFolder = new DirectoryPath("generated/csharp"),
+    CppFolder = new DirectoryPath("generated/cpp"),
+    CSharpNamespace = "Example.Bindings",
+    NativeLibraryBaseName = "example_bindings",
+    Headers =
+    [
+        new(new FilePath("include/Geometry.h")),
+        new(new FilePath("include/Utilities.h"), WrapperClassName: "Control"),
+    ],
+    LinkLibraries = ["C:/example/lib/example.lib"],
+};
+
+var pipeline = await Pipeline.CreateBuilder().AddCppGenerators(options).BuildAsync();
+await pipeline.RunAsync();
+```
+
+The default managed class name uses the header stem followed by `Wrapper`. Both single declarations
+and blocks of `extern "C"` are recognized. C++ namespaces qualify source lookup while C-linkage names
+identify the underlying symbols. Repeated declarations of the same C symbol share one generated call.
+
+Shared resolves C++ records in function signatures against the existing semantic model first.
+With an existing `SemanticGenerationProvider`, pass the same options to
+`AddCppGenerators(options, provider)` to include the header functions in the provider's function table.
+The provider's existing slots stay in place. Newly reached exports are appended.
+Complete plain value records discovered from headers pass through the same exact-layout C# emitter.
+Typed pointers and borrowed references preserve the admitted type. Value transport uses pointers
+to caller storage. Unproved layouts and value lifetimes produce a diagnostic naming the signature.
+
+Shared header discovery supports the Windows x64 MSVC and Linux x64 GNU ABIs. Select
+`RuntimeIdentifier = "linux-x64"` for Linux. Scalar widths come from the target compiler and
+the generated native adapter checks that the native build uses the same ABI.
+The default CMake project uses
+`IncludeDirectories`, `CompileDefinitions`, and `LinkLibraries`, including library search directories
+from `NativeInputs`. Exact `NativeLibraryVersion` selection requires a version-aware provider.
+An existing provider supplies its own native build metadata and must use matching compilation
+settings for its public inputs.
+Build the generated CMake project with a compiler for the selected target. On Windows, if the
+vendor ships only a DLL, obtain its import
+library or generate one with MSVC `lib /DEF` from verified named function exports. Deploy the DLL
+and its native dependencies alongside the adapter. The managed project compiling generated code
+references `TedToolkit.CppBindings.Runtime` and enables unsafe code.
+
 ## Provider contract
+
+`NativeSources` returns resolved `NativeSourceInputs` for the binding provider. Use the headers
+and include paths for declaration discovery and pass the source directory and library paths to
+the native build as needed.
+
+```csharp
+var inputs = NativeSources.FromHeaders(
+    new DirectoryPath("sdk/include"),
+    ["widget.h"],
+    dependencyIncludeDirectories: [new DirectoryPath("dependency/include")],
+    dependencyLibraries: [new FilePath("dependency/lib/libwidget.a")]);
+
+builder.AddCppGenerators(options, new WidgetGenerationProvider(inputs));
+```
+
+When creating a `BindingCMakeProjectDefinition`, the binding provider passes `IncludeRoot` and
+`DependencyIncludeDirectories` as `includeDirectories` and the explicit `DependencyLibraries`
+files as `linkLibraries`. Use quoted CMake arguments and forward slashes in paths. The emitted project uses
+`target_include_directories` to compile the bridge and `target_link_libraries` to resolve symbols
+from the dependency. A library search directory helps locate a library. The link step still needs
+the selected file or a CMake target. A header-only dependency can leave `dependencyLibraries`
+empty when its headers supply all required implementations.
+
+`NativeSources.FromVcpkg` takes a populated `installed` or `vcpkg_installed` directory, an explicit
+triplet, and entry headers. `NativeSources.FromSourceDirectory` takes the C++ source directory,
+its relative include directory, and entry headers. Construct `NativeSourceInputs` directly for a
+custom layout.
 
 `CreatePlanAsync` runs once after every declared preparation module succeeds. A direct
 `IGenerationProvider` returns a `GenerationPlan` containing copied, read-only C# and C++ source

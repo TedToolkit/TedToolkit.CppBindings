@@ -7,7 +7,7 @@
 
 using System.Collections.ObjectModel;
 
-using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper;
 
 namespace TedToolkit.CppBindings.Occt.Generator;
 

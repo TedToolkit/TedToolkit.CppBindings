@@ -27,7 +27,7 @@ $buildArguments = @('build', $consumerProject, '-c', 'Release', '--disable-build
 & dotnet @buildArguments *> $buildLog
 if ($LASTEXITCODE -ne 0) { throw "Independent package consumer did not compile; see $buildLog" }
 $assets = Get-Content -LiteralPath (Join-Path $consumer 'obj/project.assets.json') -Raw | ConvertFrom-Json -AsHashtable
-if (@($assets.libraries.Keys | Where-Object { $_ -match 'Occt|Clang' }).Count -ne 0) {
+if (@($assets.libraries.Keys | Where-Object { $_ -match '^TedToolkit\.CppBindings\.[^/]+/' -and $_ -notmatch '^TedToolkit\.CppBindings\.Generator/' }).Count -ne 0) {
     throw 'The generic package consumer acquired a provider dependency.'
 }
 $package = Join-Path $feed 'TedToolkit.CppBindings.Generator.1.0.0.nupkg'
@@ -37,7 +37,7 @@ if ($assets.libraries['TedToolkit.CppBindings.Generator/1.0.0'].sha512 -cne $exp
 }
 $runLog = Join-Path $report 'consumer-run.log'
 $evidence = Join-Path $report 'scenarios'
-& dotnet (Join-Path $consumer 'bin/Release/net10.0/PackageConsumer.dll') $evidence *> $runLog
+& dotnet (Join-Path $consumer 'bin/Release/net11.0/PackageConsumer.dll') $evidence *> $runLog
 if ($LASTEXITCODE -ne 0) { throw "Independent consumer behavior failed; see $runLog" }
 $result = Get-Content -LiteralPath (Join-Path $evidence 'result.json') -Raw | ConvertFrom-Json
 if (-not $result.passed -or $result.count -ne 26 -or @($result.results | Where-Object { -not $_.passed }).Count -ne 0) {

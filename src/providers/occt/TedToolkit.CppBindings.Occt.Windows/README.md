@@ -43,3 +43,7 @@ native artifact and dependency inventory, restores fresh packages into an isolat
 runs the same native smoke source without local generator project references.
 
 [Repository overview](../../../../README.md) · [Source generation](../TedToolkit.CppBindings.Occt.Generator/README.md)
+
+## Agent skill
+
+The `preserve-cpp-binding-lifetimes` skill ships in `TedToolkit.CppBindings.Runtime`, which this package restores as a dependency. If your project references only this package, get the resolved `TedToolkit.CppBindings.Runtime` version from `dotnet package list --include-transitive` and import the skill with `dotnet-package-skills install --package TedToolkit.CppBindings.Runtime@<resolved-version>`.

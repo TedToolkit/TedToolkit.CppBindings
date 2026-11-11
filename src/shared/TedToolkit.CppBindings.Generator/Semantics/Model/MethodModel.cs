@@ -7,7 +7,7 @@
 
 using System.Text;
 
-using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;
 

@@ -1,16 +1,16 @@
 # TedToolkit.CppBindings
 
 TedToolkit.CppBindings is a .NET platform for generating C++ bindings. This repository provides
-Open CASCADE Technology (OCCT), Computational Geometry Algorithms Library (CGAL), Manifold, and
-Flexible Collision Library (FCL) providers.
+Open CASCADE Technology (OCCT), Computational Geometry Algorithms Library (CGAL), Manifold,
+Flexible Collision Library (FCL), and SMLib providers.
 Each builds one normalized semantic model and emits a matched C++ ABI boundary and C# API through
 the shared generation platform.
 
 > [!WARNING]
-> The project is under active development. The complete Windows binding package can be built and
-> verified locally, but they are not yet published to a remote package feed. Current ready-to-use
-> artifacts target `win-x64` and `net8.0`: OCCT 8.0.1, the finite CGAL 6.2 EPICK profile,
-> the finite Manifold 3.5.2 profile, and the finite FCL 0.7.0 OBBRSS profile.
+> The project is under active development. The release workflow builds and verifies the platform
+> packages before publication. See [platform NuGet packages](#platform-nuget-packages) for the
+> target matrix and [GitHub releases](https://github.com/TedToolkit/TedToolkit.CppBindings/releases)
+> for published versions.
 
 ## What this repository provides
 
@@ -39,6 +39,8 @@ the shared generation platform.
 | Generate the finite Manifold profile | [Manifold Generator](src/providers/manifold/TedToolkit.CppBindings.Manifold.Generator/README.md) |
 | Use the finite FCL package | [FCL Windows bindings](src/providers/fcl/TedToolkit.CppBindings.Fcl.Windows/README.md) |
 | Generate the finite FCL profile | [FCL Generator](src/providers/fcl/TedToolkit.CppBindings.Fcl.Generator/README.md) |
+| Build SMLib directly from source | [SMLib provider](src/providers/smlib/README.md) |
+| Bind external C linkage functions from C++ headers | [Shared header generation](src/shared/TedToolkit.CppBindings.Generator/README.md#generate-from-headers) |
 | Generate OCCT bindings | [OCCT Generator](src/providers/occt/TedToolkit.CppBindings.Occt.Generator/README.md) |
 | Use provider-neutral generation stages | [Generator](src/shared/TedToolkit.CppBindings.Generator/README.md) |
 | Understand ownership and generated-code contracts | [Runtime](src/shared/TedToolkit.CppBindings.Runtime/README.md) |
@@ -92,29 +94,53 @@ layout, dispatch, lifetime, and packaging contracts.
 These guarantees are governed by the [repository principles](docs/principles/README.md), not by
 convenience policy in generated bindings.
 
-## Supported profile
+## Platform NuGet packages
+
+For each provider, choose the package suffix for the machine where the consumer will run.
+For example, restore `TedToolkit.CppBindings.Occt.Linux` for Linux x64. The supported
+provider IDs are `Occt`, `Cgal`, `Manifold`, `Fcl`, and `Smlib`.
+
+| Package suffix | RID | Verification environment |
+| --- | --- | --- |
+| `.Windows` | `win-x64` | Windows x64 with MSVC |
+| `.Linux` | `linux-x64` | Ubuntu 24.04 x64 with glibc |
+| `.MacOS` | `osx-arm64` | macOS 15 on Apple Silicon |
+
+The packages target .NET 8. Linux consumers use Ubuntu's `libatomic1`, OpenGL, and X11
+system libraries for OCCT. Each platform package supplies its app-local native dependencies.
+Use the verified OS versions when validating deployments.
+
+On Linux and macOS, the OCCT 8.0.1 bindings omit the by-value destruction entry point for
+`BRepGraph_CacheMesh` because Clang requires a private type defined in the OCCT implementation.
+
+The [Build workflow](.github/workflows/build.yml) packs and verifies the three platform sets
+and checks their combined release inventory. It pushes those same archives on `main` after
+verification. If a feed push stops partway through, rerun the failed publish job while the
+original workflow artifacts are retained. The retry uses the same version and archives.
+
+## Supported Windows profile
 
 | Concern | Current support |
 | --- | --- |
-| Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows`, `TedToolkit.CppBindings.Manifold.Windows`, `TedToolkit.CppBindings.Fcl.Windows` |
-| Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal`, `TedToolkit.CppBindings.Manifold`, `TedToolkit.CppBindings.Fcl` |
+| Ready-to-use packages | `TedToolkit.CppBindings.Occt.Windows`, `TedToolkit.CppBindings.Cgal.Windows`, `TedToolkit.CppBindings.Manifold.Windows`, `TedToolkit.CppBindings.Fcl.Windows`, `TedToolkit.CppBindings.Smlib.Windows` |
+| Managed API namespaces | `TedToolkit.CppBindings.Occt`, `TedToolkit.CppBindings.Cgal`, `TedToolkit.CppBindings.Manifold`, `TedToolkit.CppBindings.Fcl`, `TedToolkit.CppBindings.Smlib` |
 | Runtime identifier | `win-x64` |
-| Native profiles | OCCT 8.0.1; CGAL 6.2 `epick-windows-v2`; Manifold 3.5.2 `manifold-3.5.2-windows-v2`; FCL 0.7.0 `fcl-0.7.0-obbrss-double-windows-v2` |
+| Native profiles | OCCT 8.0.1, CGAL 6.2 `epick-windows-v2`, Manifold 3.5.2 `manifold-3.5.2-windows-v2`, FCL 0.7.0 `fcl-0.7.0-obbrss-double-windows-v2`, and SMLib 1.0.1 box solids |
 | Binding target framework | `net8.0` |
-| Generator and development host | .NET 10 |
-| Native toolchain | Visual C++; C++17 for OCCT/CGAL and C++20 for Manifold/FCL; CMake 3.28 or later |
+| Generator and development host | .NET 11 |
+| Native toolchain | Visual C++ with C++17 for OCCT, CGAL and SMLib, C++20 for Manifold and FCL, and CMake 3.28 or later |
 
 The repository root does not contain a `vcpkg.json` manifest. OCCT generation uses the installation
 under `VCPKG_ROOT`; the CGAL and Manifold Generator packages embed their locked profile manifests
-and registry configurations; FCL does the same for FCL, libccd, Eigen, and Octomap. A new platform,
-architecture, compiler ABI, or header scope requires
-fresh compiler and native-behavior proof.
+and registry configurations. FCL does the same for FCL, libccd, Eigen, and Octomap. SMLib builds
+from the pinned `externals/SMLib` source checkout. A new platform, architecture, compiler ABI, or
+header scope requires fresh compiler and native-behavior proof.
 
 ## Build and generate locally
 
 ### Prerequisites
 
-- .NET 10 SDK
+- .NET 11 SDK
 - PowerShell 7
 - CMake 3.28 or later
 - Visual Studio with MSVC, CMake tools, and LLVM (`clang-cl`) components
@@ -199,6 +225,8 @@ MSVC object-path limits.
 | `TedToolkit.CppBindings.Fcl.Generator` | Locked FCL OBBRSS profile and deterministic paired-source generation |
 | `TedToolkit.CppBindings.Fcl.Runtime` | FCL diagnostic ownership and exception taxonomy |
 | `TedToolkit.CppBindings.Fcl.Windows` | Self-contained `win-x64` FCL binding and exact native closure |
+| `TedToolkit.CppBindings.Smlib.Generator` | Paired-source generation from an official USD BRep checkout |
+| `TedToolkit.CppBindings.Smlib.Windows` | Source-built `win-x64` SMLib binding and exact native closure |
 | `TedToolkit.CppBindings.Windows.Generation.Tool` | The only non-packable repository tool that runs each provider Generator and owns Windows generation, native build, caching, staging, and notices |
 | `Build` | Repository build, test, native fixture, and integration gates |
 
@@ -223,7 +251,7 @@ Run the complete repository pipeline, including native handle fixtures and manag
 dotnet run --project Build/Build.csproj
 ```
 
-Focused build-gate checks are also available:
+The reflection-based managed test gate requires PowerShell 7.7 or later. Run it with the following commands:
 
 ```powershell
 pwsh -NoProfile -File Build/VerifyGenerationCache.ps1

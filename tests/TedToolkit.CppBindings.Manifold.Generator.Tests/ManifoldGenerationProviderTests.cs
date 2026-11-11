@@ -406,7 +406,7 @@ internal sealed class ManifoldGenerationProviderTests
                 "manifold_3.5.2_x64-windows.list"))
             .Select(static line => line.Replace('\\', '/'))
             .Where(static line => line.StartsWith("x64-windows/include/manifold/", StringComparison.Ordinal)
-                && !line.EndsWith('/'))
+                && line is not [.., '/'])
             .Select(static line => line["x64-windows/include/".Length..])
             .Order(StringComparer.Ordinal)
             .ToArray();

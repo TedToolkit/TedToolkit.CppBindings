@@ -52,6 +52,12 @@ $providers = @(
         Root = Join-Path $outputRoot 'providers/fcl'
         NativeLibrary = "native-build/$Configuration/ted_toolkit_cpp_bindings_fcl.dll"
         Manifest = 'output-manifest.json'
+    },
+    [ordered]@{
+        Name = 'Smlib'
+        Root = Join-Path $outputRoot 'providers/smlib'
+        NativeLibrary = "native-build/$Configuration/ted_toolkit_cpp_bindings_smlib.dll"
+        Manifest = 'output-manifest.json'
     }
 )
 

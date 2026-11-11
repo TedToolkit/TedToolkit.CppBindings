@@ -13,7 +13,7 @@ using ClangSharp.Interop;
 using TedToolkit.CppBindings.Occt.Generator.Services;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
 using TedToolkit.CppBindings.Occt.Generator.Services.Rules;
-using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper;
 
 namespace TedToolkit.CppBindings.Occt.Generator.Tests.Services.TypeResolverTests;
 
@@ -98,7 +98,7 @@ internal sealed class DefaultTypeRuleTest
         await Assert.That(resolved.Enum).IsNull();
     }
 
-    private static string Render(TedToolkit.RoslynHelper.Generators.Syntaxes.DataType dataType)
+    private static string Render(TedToolkit.RoslynHelper.Syntaxes.DataType dataType)
     {
         var sourceBuilder = new SourceBuilder();
         dataType.ToCode(ref sourceBuilder);

@@ -1,0 +1,14 @@
+<Project Sdk="Microsoft.NET.Sdk">
+  <PropertyGroup>
+    <RootNamespace>TedToolkit.CppBindings.Smlib</RootNamespace>
+    <Title>TedToolkit SMLib macOS Arm64 bindings</Title>
+    <Description>Generated SMLib bindings and their native libraries for macOS Arm64.</Description>
+    <BindingsProvider>smlib</BindingsProvider>
+    <BindingsRuntimeIdentifier>osx-arm64</BindingsRuntimeIdentifier>
+    <BindingsLibraryName>ted_toolkit_cpp_bindings_smlib</BindingsLibraryName>
+  </PropertyGroup>
+  <ItemGroup>
+    <ProjectReference Include="../../../shared/TedToolkit.CppBindings.Runtime/TedToolkit.CppBindings.Runtime.csproj" />
+  </ItemGroup>
+  <Import Project="../../../../Build/UnixBindings.targets" />
+</Project>

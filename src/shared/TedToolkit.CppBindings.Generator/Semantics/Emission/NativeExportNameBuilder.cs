@@ -22,7 +22,7 @@ public static class NativeExportNameBuilder
     {
         ArgumentNullException.ThrowIfNull(derived);
         ArgumentNullException.ThrowIfNull(baseRecord);
-        return $"{ToIdentifier(derived.Type.CppTypeName)}_As_{ToIdentifier(baseRecord.Type.CppTypeName)}";
+        return $"{GetTypeIdentifier(derived.Type.CppTypeName)}_As_{GetTypeIdentifier(baseRecord.Type.CppTypeName)}";
     }
 
     /// <summary>
@@ -33,7 +33,7 @@ public static class NativeExportNameBuilder
     public static string GetIntrusiveReleaseName(string elementCppType)
     {
         ArgumentException.ThrowIfNullOrEmpty(elementCppType);
-        return ToIdentifier(elementCppType) + "_Release";
+        return GetTypeIdentifier(elementCppType) + "_Release";
     }
 
     /// <summary>
@@ -51,7 +51,7 @@ public static class NativeExportNameBuilder
             var overloadIndex = 1;
             for (var index = 0; index < methods.Length; index++)
             {
-                var name = ToIdentifier(record.Type.CppTypeName) + "_" + overloads.Key;
+                var name = GetTypeIdentifier(record.Type.CppTypeName) + "_" + overloads.Key;
                 if (ReferenceEquals(methods[index], handleRelease))
                 {
                     methods[index].NativeExportName = name;
@@ -73,8 +73,13 @@ public static class NativeExportNameBuilder
             : method.GetNativeOperationName();
     }
 
-    private static string ToIdentifier(string value)
+    /// <summary>
+    /// Gets the generated identifier for a native type spelling.
+    /// </summary>
+    /// <param name="cppTypeName">The native type spelling.</param>
+    /// <returns>The generated type identifier.</returns>
+    public static string GetTypeIdentifier(string cppTypeName)
     {
-        return value.ToGeneratedTypeName();
+        return cppTypeName.ToGeneratedTypeName();
     }
 }

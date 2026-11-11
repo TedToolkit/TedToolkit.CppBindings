@@ -6,10 +6,12 @@
   <PropertyGroup>
     <Title>TedToolkit C++ Bindings CGAL Generator</Title>
     <Description>Generate deterministic finite-profile managed and native CGAL bindings.</Description>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>
+    <InternalsVisibleTo Include="TedToolkit.CppBindings.Windows.Generation.Tool" />
     <ProjectReference Include="..\..\..\shared\TedToolkit.CppBindings.Generator\TedToolkit.CppBindings.Generator.csproj" />
     <PackageReference Include="ClangSharp" />
     <PackageReference Include="libclang.runtime.win-x64" />

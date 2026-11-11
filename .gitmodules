@@ -1,3 +1,6 @@
 [submodule "externals/TedToolkit"]
 	path = externals/TedToolkit
 	url = https://github.com/TedToolkit/TedToolkit.git
+[submodule "externals/SMLib"]
+	path = externals/SMLib
+	url = https://github.com/NVIDIA-Omniverse/usd-brep.git

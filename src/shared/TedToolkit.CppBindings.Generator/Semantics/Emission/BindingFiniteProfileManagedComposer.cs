@@ -7,10 +7,10 @@
 
 using System.Runtime.InteropServices;
 
-using TedToolkit.RoslynHelper.Generators;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper;
+using TedToolkit.RoslynHelper.Syntaxes;
 
-using static TedToolkit.RoslynHelper.Generators.SourceComposer;
+using static TedToolkit.RoslynHelper.SourceComposer;
 
 namespace TedToolkit.CppBindings.Generator.Semantics;
 
@@ -61,7 +61,10 @@ internal sealed class BindingFiniteProfileManagedComposer(
                      .Where(static operation => operation is not BindingBufferOwnerOperationDefinition)
                      .GroupBy(GetContainingType, StringComparer.Ordinal))
         {
-            var declaration = new TypeDeclaration(group.Key, TypeDeclarationType.CLASS).Public.Static.Unsafe;
+            var declaration = new TypeDeclaration(group.Key, TypeDeclarationType.CLASS).Static.Unsafe;
+            declaration = profile.IsInternal && api.HeaderProfile is not null
+                ? declaration.Internal
+                : declaration.Public;
             foreach (var operation in group)
             {
                 declaration.AddMember(ComposeOperation(operation));
@@ -73,9 +76,25 @@ internal sealed class BindingFiniteProfileManagedComposer(
         return File().AddNameSpace(nameSpace);
     }
 
-    private static TedToolkit.RoslynHelper.Generators.Syntaxes.Enum ComposeStatus(BindingStatusDefinition status)
+    /// <summary>
+    /// Enumerates the type names declared by a finite profile in its managed namespace.
+    /// </summary>
+    /// <param name="api">The finite profile API.</param>
+    /// <returns>The names occupied by the emitted profile.</returns>
+    internal static IEnumerable<string> GetDeclaredTypeNames(BindingFiniteProfileApi api)
     {
-        var declaration = new TedToolkit.RoslynHelper.Generators.Syntaxes.Enum(status.Name, DataType.Int).Public;
+        return api.Statuses.Select(static status => status.Name)
+            .Concat(api.ValueTypes.Select(static value => value.Name))
+            .Concat(api.OwnedResults.Select(static result => result.Name))
+            .Concat(api.CompositeResults.Select(static result => result.Name))
+            .Concat(api.Owners.Select(static owner => owner.Name))
+            .Concat(api.Operations.Where(static operation => operation is not BindingBufferOwnerOperationDefinition)
+                .Select(GetContainingType));
+    }
+
+    private static TedToolkit.RoslynHelper.Syntaxes.Enum ComposeStatus(BindingStatusDefinition status)
+    {
+        var declaration = new TedToolkit.RoslynHelper.Syntaxes.Enum(status.Name, DataType.Int).Public;
         foreach (var member in status.Members)
         {
             declaration.AddEnumMember(new EnumMember(member.Key, member.Value.ToLiteral()));
@@ -261,6 +280,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
             BindingCompositeOperationDefinition composite => ComposeCompositeOperation(composite),
             BindingOwnedOperationDefinition owned => ComposeOwnedOperation(owned),
             BindingScalarOperationDefinition scalar => ComposeScalarOperation(scalar),
+            BindingFreeFunctionDefinition function => ComposeFreeFunction(function),
             BindingTwoPhaseOperationDefinition twoPhase => ComposeTwoPhaseOperation(twoPhase),
             _ => throw new InvalidOperationException("A buffer owner operation is emitted on its owner type."),
         };
@@ -355,6 +375,84 @@ internal sealed class BindingFiniteProfileManagedComposer(
         callStatements.Add("return " + cast + "result;");
         statements.Add(ComposeFixedBlock(OwnerPins(operation.Owners), callStatements));
         declaration.AddStatement(new Custom(JoinLines(statements)));
+        return declaration;
+    }
+
+    private Method ComposeFreeFunction(BindingFreeFunctionDefinition function)
+    {
+        var result = function.ReturnType;
+        var returnsReference = result.Transport.FirstIndirection is TypeIndirectionKind.LValueReference;
+        var declaration = new Method(function.MethodName, ReturnType(result.CSharpPublicType)).Public.Static;
+        if (returnsReference)
+        {
+            declaration.AddRootDescription(new DescriptionRemarks([
+                new DescriptionText("The returned reference is borrowed from native storage. "
+                                    + "The caller must preserve its native lifetime and obey its invalidation rules."),
+            ]));
+        }
+
+        var types = new List<string>();
+        var arguments = new List<string>();
+        var pins = new List<(string Type, string Name, string Expression)>();
+        var local = "__cpp";
+        while (function.Parameters.Any(parameter => parameter.Name.StartsWith(local, StringComparison.Ordinal)))
+        {
+            local += "_";
+        }
+
+        foreach (var parameter in function.Parameters)
+        {
+            var type = parameter.Type.CSharpPublicType;
+            types.Add(parameter.Type.CSharpPInvokeType.ToCode() + (parameter.Type.IsRecordValue ? "*" : ""));
+            if (parameter.Type.Transport.FirstIndirection is TypeIndirectionKind.LValueReference)
+            {
+                var valueType = parameter.Type.ManagedValueType;
+                var pointerName = local + "Arg" + arguments.Count;
+                pins.Add((valueType.ToCode(), pointerName, "&" + parameter.Name));
+                type = parameter.Type.Transport.ReferencedValueIsConst ? valueType.In : valueType.Ref;
+                arguments.Add(pointerName);
+            }
+            else
+            {
+                arguments.Add(parameter.Type.IsRecordValue ? "&" + parameter.Name : parameter.Name);
+            }
+
+            declaration.AddParameter(Parameter(type, parameter.Name));
+        }
+
+        var statements = new List<string>();
+        var resultName = local + "Result";
+        if (result.IsRecordValue)
+        {
+            types.Add(result.CSharpPInvokeType.ToCode() + "*");
+            arguments.Add("&" + resultName);
+            statements.Add(result.CSharpTypeName + " " + resultName + " = default;");
+        }
+
+        var error = local + "Error";
+        if (!function.IsNoexcept)
+        {
+            types.Add("global::TedToolkit.CppBindings.NativeError*");
+            arguments.Add("&" + error);
+            statements.Add("global::TedToolkit.CppBindings.NativeError " + error + " = default;");
+        }
+
+        types.Add(result.IsRecordValue ? "void" : result.CSharpPInvokeType.ToCode());
+        var nativeApi = "global::" + profile.CSharpNamespace + ".NativeApi";
+        var invocation = Invoke(function.NativeExport, types, arguments, nativeApi);
+        var hasResult = result.CSharpTypeName != "void";
+        statements.Add(hasResult && !result.IsRecordValue ? "var " + resultName + " = " + invocation : invocation);
+        if (!function.IsNoexcept)
+        {
+            statements.Add(ManagedErrorCheck(error, nativeApi));
+        }
+
+        if (hasResult)
+        {
+            statements.Add("return " + (returnsReference ? "ref *" : "") + resultName + ";");
+        }
+
+        declaration.AddStatement(new Custom(pins.Count == 0 ? JoinLines(statements) : ComposeFixedBlock(pins, statements)));
         return declaration;
     }
 
@@ -478,12 +576,12 @@ internal sealed class BindingFiniteProfileManagedComposer(
         return owners.Select(owner => "GC.KeepAlive(" + owner.Name + ");");
     }
 
-    private string ManagedErrorCheck()
+    private string ManagedErrorCheck(string error = "error", string nativeApi = "NativeApi")
     {
         return profile.ManagedNativeErrorProjection + ".ThrowIfFailed(\n"
-               + "    ref error,\n"
+               + "    ref " + error + ",\n"
                + "    (delegate* unmanaged[Cdecl]<global::TedToolkit.CppBindings.NativeError*, void>)"
-               + "NativeApi.GetFunction(" + slots[profile.NativeErrorClearExport] + "));";
+               + nativeApi + ".GetFunction(" + slots[profile.NativeErrorClearExport] + "));";
     }
 
     private static List<string> BufferValidation(IReadOnlyList<BindingBufferDefinition> buffers)
@@ -517,10 +615,11 @@ internal sealed class BindingFiniteProfileManagedComposer(
     private string Invoke(
         string exportName,
         IEnumerable<string> parameterTypes,
-        IEnumerable<string> arguments)
+        IEnumerable<string> arguments,
+        string nativeApi = "NativeApi")
     {
         return "((delegate* unmanaged[Cdecl]<" + string.Join(", ", parameterTypes) + ">)"
-               + "NativeApi.GetFunction(" + slots[exportName] + "))("
+               + nativeApi + ".GetFunction(" + slots[exportName] + "))("
                + string.Join(", ", arguments) + ");";
     }
 
@@ -535,7 +634,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
         return JoinLines(lines);
     }
 
-    private static TedToolkit.RoslynHelper.Generators.Syntaxes.Attribute LayoutAttribute(int size, int alignment)
+    private static TedToolkit.RoslynHelper.Syntaxes.Attribute LayoutAttribute(int size, int alignment)
     {
         return Attribute<StructLayoutAttribute>()
             .AddArgument(Argument(LayoutKind.Sequential.ToExpression()))
@@ -556,6 +655,7 @@ internal sealed class BindingFiniteProfileManagedComposer(
             BindingCompositeOperationDefinition value => value.ContainingType,
             BindingOwnedOperationDefinition value => value.ContainingType,
             BindingScalarOperationDefinition value => value.ContainingType,
+            BindingFreeFunctionDefinition value => value.ContainingType,
             BindingTwoPhaseOperationDefinition value => value.ContainingType,
             _ => throw new InvalidOperationException("A buffer owner operation is emitted on its owner type."),
         };

@@ -10,7 +10,7 @@ using TedToolkit.FileSystem;
 namespace TedToolkit.CppBindings.Generator;
 
 /// <summary>
-/// Configures provider-neutral source publication and the supported Windows target.
+/// Configures provider-neutral source publication and the native target.
 /// </summary>
 public record GenerationOptions
 {
@@ -65,14 +65,40 @@ public record GenerationOptions
     public string CSharpNamespace { get; init; } = "TedToolkit.CppBindings";
 
     /// <summary>
-    /// Gets the supported Windows x64 target identifier; other targets fail before preparation.
+    /// Gets the native target RID available to the generation provider.
     /// </summary>
+    /// <remarks>Shared header discovery supports <c>win-x64</c> and <c>linux-x64</c>.</remarks>
     public string RuntimeIdentifier { get; init; } = "win-x64";
 
     /// <summary>
     /// Gets or sets the C++ language standard version passed to clang and CMake.
     /// </summary>
     public int CppVersion { get; set; } = 17;
+
+    /// <summary>
+    /// Gets the public input headers. Shared discovers external C linkage functions in these headers.
+    /// </summary>
+    public IReadOnlyList<BindingHeader> Headers { get; init; } = [];
+
+    /// <summary>
+    /// Gets the resolved native inputs whose public headers participate in shared discovery.
+    /// </summary>
+    public NativeSourceInputs? NativeInputs { get; init; }
+
+    /// <summary>
+    /// Gets the include directories for shared header discovery and the default native project.
+    /// </summary>
+    public IReadOnlyList<DirectoryPath> IncludeDirectories { get; init; } = [];
+
+    /// <summary>
+    /// Gets the preprocessor definitions for shared header discovery and the default native project.
+    /// </summary>
+    public IReadOnlyList<string> CompileDefinitions { get; init; } = [];
+
+    /// <summary>
+    /// Gets the native libraries linked by the default native project.
+    /// </summary>
+    public IReadOnlyList<string> LinkLibraries { get; init; } = [];
 
     /// <summary>
     /// Gets the exact version required for the provider's primary native library.
@@ -82,6 +108,17 @@ public record GenerationOptions
     /// Providers with finite profiles reject a version that does not match the selected profile.
     /// </remarks>
     public Version? NativeLibraryVersion { get; init; }
+
+    /// <summary>
+    /// Gets a value indicating whether there are public inputs for header discovery.
+    /// </summary>
+    internal bool HasPublicHeaders
+    {
+        get
+        {
+            return Headers.Count > 0 || NativeInputs?.PublicHeaders.Count > 0;
+        }
+    }
 
     /// <summary>
     /// Gets the validated native library artifact basename.

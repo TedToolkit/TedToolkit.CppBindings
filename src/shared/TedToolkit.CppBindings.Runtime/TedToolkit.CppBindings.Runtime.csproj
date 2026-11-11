@@ -13,4 +13,9 @@
     <IsAotCompatible Condition="$([MSBuild]::IsTargetFrameworkCompatible('$(TargetFramework)', 'net8.0'))">true</IsAotCompatible>
   </PropertyGroup>
 
+
+  <ItemGroup>
+    <None Include="../../../.agents/skills/preserve-cpp-binding-lifetimes/**/*"
+          Pack="true" PackagePath="skills/preserve-cpp-binding-lifetimes/" />
+  </ItemGroup>
 </Project>

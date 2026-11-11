@@ -17,6 +17,26 @@ namespace TedToolkit.CppBindings.Generator;
 public static class CppBindingsPipelineBuilderExtensions
 {
     /// <summary>
+    /// Registers source generation from the configured public input headers.
+    /// </summary>
+    /// <param name="builder">The pipeline builder.</param>
+    /// <param name="options">The input headers, native target, and dedicated output roots.</param>
+    /// <returns>The same configured builder.</returns>
+    /// <exception cref="NotSupportedException">Exact native version selection requires a version-aware provider.</exception>
+    public static PipelineBuilder AddCppGenerators(this PipelineBuilder builder, GenerationOptions options)
+    {
+        ArgumentNullException.ThrowIfNull(builder);
+        ArgumentNullException.ThrowIfNull(options);
+        GenerationOutput.ValidateOptions(options);
+        if (options.NativeLibraryVersion is not null)
+        {
+            throw new NotSupportedException("Exact native library version selection requires a version-aware provider.");
+        }
+
+        return AddGenerationModules(builder, new GenerationSession(options, null));
+    }
+
+    /// <summary>
     /// Registers the clean and language publication stages after the provider's preparation modules.
     /// </summary>
     /// <param name="builder">The pipeline builder, with the provider's preparation modules registered.</param>
@@ -40,7 +60,11 @@ public static class CppBindingsPipelineBuilderExtensions
             throw new ArgumentException("Preparation dependencies must be concrete pipeline module types.", nameof(provider));
         }
 
-        var session = new GenerationSession(options, provider);
+        return AddGenerationModules(builder, new GenerationSession(options, provider));
+    }
+
+    private static PipelineBuilder AddGenerationModules(PipelineBuilder builder, GenerationSession session)
+    {
         builder.Services
             .AddModule<CleanGenerationOutputModule>(_ => new CleanGenerationOutputModule(session))
             .AddModule<GenerateCSharpModule>(_ => new GenerateCSharpModule(session))

@@ -2,7 +2,7 @@
 
   <PropertyGroup>
     <OutputType>Exe</OutputType>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
     <AssemblyName>TedToolkit.CppBindings.Windows.Generation.Tool</AssemblyName>
     <RootNamespace>TedToolkit.CppBindings.Windows.Generation.Tool</RootNamespace>
     <IsPackable>false</IsPackable>
@@ -14,6 +14,7 @@
     <ProjectReference Include="..\..\providers\fcl\TedToolkit.CppBindings.Fcl.Generator\TedToolkit.CppBindings.Fcl.Generator.csproj" />
     <ProjectReference Include="..\..\providers\manifold\TedToolkit.CppBindings.Manifold.Generator\TedToolkit.CppBindings.Manifold.Generator.csproj" />
     <ProjectReference Include="..\..\providers\occt\TedToolkit.CppBindings.Occt.Generator\TedToolkit.CppBindings.Occt.Generator.csproj" />
+    <ProjectReference Include="..\..\providers\smlib\TedToolkit.CppBindings.Smlib.Generator\TedToolkit.CppBindings.Smlib.Generator.csproj" />
     <PackageReference Include="ModularPipelines" />
   </ItemGroup>
 

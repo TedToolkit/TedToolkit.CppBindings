@@ -17,7 +17,7 @@ using ModularPipelines.Modules;
 
 using TedToolkit.CppBindings.Generator.Semantics;
 using TedToolkit.CppBindings.Occt.Generator.Services.Interfaces;
-using TedToolkit.RoslynHelper.Generators.Syntaxes;
+using TedToolkit.RoslynHelper.Syntaxes;
 
 namespace TedToolkit.CppBindings.Occt.Generator;
 
@@ -74,11 +74,13 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         try
         {
             var sourcePath = Path.Combine(temporaryDirectory.FullName, "probe.cpp");
-            var executablePath = Path.Combine(temporaryDirectory.FullName, "probe.exe");
+            var executablePath = Path.Combine(temporaryDirectory.FullName, OperatingSystem.IsWindows() ? "probe.exe" : "probe");
             await File.WriteAllTextAsync(sourcePath, CreateSource(records), cancellationToken)
                 .ConfigureAwait(false);
             await CompileAsync(sourcePath, executablePath, cancellationToken).ConfigureAwait(false);
-            CompleteRecords(records, await RunAsync(executablePath, cancellationToken).ConfigureAwait(false));
+            CompleteRecords(records, await RunAsync(executablePath, cancellationToken).ConfigureAwait(false),
+                verifyParsedAlignment: !OperatingSystem.IsWindows(),
+                runtimeIdentifier: _options.Value.RuntimeIdentifier);
             return true;
         }
         finally
@@ -120,6 +122,12 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         CancellationToken cancellationToken)
     {
         var triplet = _options.Value.GetTriplet(_defaultsResolver);
+        if (!OperatingSystem.IsWindows())
+        {
+            await CompileUnixAsync(sourcePath, triplet, cancellationToken).ConfigureAwait(false);
+            return;
+        }
+
         var startInfo = CreateStartInfo("clang++");
         startInfo.ArgumentList.Add($"-std=c++{_options.Value.CppVersion}");
         startInfo.ArgumentList.Add("-I" + _vcpkgEnvironment.GetOcctIncludeFolder(triplet));
@@ -146,20 +154,72 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         _ = await RunProcessAsync(startInfo, cancellationToken).ConfigureAwait(false);
     }
 
+    private async Task CompileUnixAsync(
+        string sourcePath,
+        string triplet,
+        CancellationToken cancellationToken)
+    {
+        var sourceDirectory = Path.GetDirectoryName(sourcePath)!;
+        var buildDirectory = Path.Combine(sourceDirectory, "build");
+        var dependencyIncludes = QuoteCMakeArgument(_vcpkgEnvironment.GetIncludeFolder(triplet).Replace('\\', '/'));
+        var definition = new BindingCMakeProjectDefinition(
+            "OcctCompilerProbe", "probe", _options.Value.CppVersion,
+            [new("OpenCASCADE", "CONFIG REQUIRED", _options.Value.NativeLibraryVersion),],
+            includeDirectories: ["\"${OpenCASCADE_INCLUDE_DIR}\"", dependencyIncludes,],
+            linkLibraries: ["${OpenCASCADE_LIBRARIES}",],
+            targetProperties: [new("RUNTIME_OUTPUT_DIRECTORY", "\"${CMAKE_CURRENT_SOURCE_DIR}\""),]);
+        var source = BindingCMakeProjectEmitter.RenderExecutable(definition, ["probe.cpp",]);
+        await File.WriteAllTextAsync(Path.Combine(sourceDirectory, "CMakeLists.txt"), source, cancellationToken)
+            .ConfigureAwait(false);
+
+        var configure = CreateStartInfo("cmake");
+        string[] arguments =
+        [
+            "-S", sourceDirectory, "-B", buildDirectory, "-G", "Ninja",
+            "-DCMAKE_BUILD_TYPE=Release", "-DCMAKE_CXX_COMPILER=clang++", "-DVCPKG_MANIFEST_MODE=OFF",
+            "-DCMAKE_TOOLCHAIN_FILE=" + Path.Combine(_vcpkgEnvironment.GetRoot(), "scripts", "buildsystems", "vcpkg.cmake"),
+            "-DVCPKG_TARGET_TRIPLET=" + triplet,
+        ];
+        foreach (var argument in arguments)
+        {
+            configure.ArgumentList.Add(argument);
+        }
+
+        if (triplet == "arm64-osx")
+        {
+            configure.ArgumentList.Add("-DCMAKE_OSX_DEPLOYMENT_TARGET=15.0");
+        }
+
+        _ = await RunProcessAsync(configure, cancellationToken).ConfigureAwait(false);
+        var build = CreateStartInfo("cmake");
+        build.ArgumentList.Add("--build");
+        build.ArgumentList.Add(buildDirectory);
+        _ = await RunProcessAsync(build, cancellationToken).ConfigureAwait(false);
+    }
+
+    private static string QuoteCMakeArgument(string value)
+    {
+        var delimiter = "=";
+        while (value.Contains($"]{delimiter}]", StringComparison.Ordinal))
+        {
+            delimiter += "=";
+        }
+
+        return $"[{delimiter}[{value}]{delimiter}]";
+    }
+
     private Task<string> RunAsync(
         string executablePath,
         in CancellationToken cancellationToken)
     {
         var startInfo = CreateStartInfo(executablePath);
         var triplet = _options.Value.GetTriplet(_defaultsResolver);
-        var nativeDirectory = Path.Combine(
-            _vcpkgEnvironment.GetRoot(),
-            "installed",
-            triplet,
-            "bin");
-        startInfo.Environment["PATH"] = nativeDirectory
-                                        + Path.PathSeparator
-                                        + Environment.GetEnvironmentVariable("PATH");
+        if (OperatingSystem.IsWindows())
+        {
+            var nativeDirectory = Path.Combine(_vcpkgEnvironment.GetRoot(), "installed", triplet, "bin");
+            startInfo.Environment["PATH"] = nativeDirectory + Path.PathSeparator + Environment.GetEnvironmentVariable("PATH");
+        }
+
         return RunProcessAsync(startInfo, cancellationToken);
     }
 
@@ -200,10 +260,13 @@ public sealed class OcctCompilerProbeModule : Module<bool>
     /// </summary>
     /// <param name="records">The records in probe order.</param>
     /// <param name="output">The probe process output.</param>
+    /// <param name="verifyParsedAlignment">Whether parsed alignment must match the native compiler.</param>
+    /// <param name="runtimeIdentifier">The native target runtime.</param>
     /// <exception cref="InvalidOperationException">
     /// The output is incomplete, malformed, duplicated, or disagrees with parsed size evidence.
     /// </exception>
-    internal static void CompleteRecords(RecordModel[] records, string output)
+    internal static void CompleteRecords(
+        RecordModel[] records, string output, bool verifyParsedAlignment = false, string runtimeIdentifier = "win-x64")
     {
         var lines = output.Split(['\r', '\n',], StringSplitOptions.RemoveEmptyEntries);
         if (lines.Length != records.Length)
@@ -231,11 +294,11 @@ public sealed class OcctCompilerProbeModule : Module<bool>
             }
 
             var record = records[index];
-            if (size != record.Size || alignment < 1)
+            if (size != record.Size || alignment < 1 || (verifyParsedAlignment && alignment != record.Alignment))
             {
                 throw new InvalidOperationException(
                     $"Native compiler probe disagrees with parsed layout for '{record.Type.CppTypeName}': "
-                    + $"size {size}/{record.Size}, alignment {alignment}.");
+                    + $"size {size}/{record.Size}, alignment {alignment}/{record.Alignment}.");
             }
 
             record.Alignment = alignment;
@@ -261,6 +324,7 @@ public sealed class OcctCompilerProbeModule : Module<bool>
             }
             else if (record.ObjectKind is NativeObjectKind.IntrusiveHandle
                      && isDestructible
+                     && CanGenerateImplicitValueDestructor(record, runtimeIdentifier)
                      && !record.MethodModels.Any(static method =>
                          method.Type is MethodModelType.VALUE_DELETE))
             {
@@ -307,6 +371,14 @@ public sealed class OcctCompilerProbeModule : Module<bool>
         return !record.Type.CppTypeName.StartsWith(
             "std::unique_ptr<Geom_OsculatingSurface",
             StringComparison.Ordinal);
+    }
+
+    private static bool CanGenerateImplicitValueDestructor(RecordModel record, string runtimeIdentifier)
+    {
+        // OCCT 8.0.1 defines BRepGraph_CacheMesh::Slot only inside the implementation.
+        // Unix Clang needs that definition to instantiate the explicit destructor call.
+        return runtimeIdentifier is not ("linux-x64" or "osx-arm64")
+               || record.Type.CppTypeName != "BRepGraph_CacheMesh";
     }
 
     private static void AddHandleReleaseOperations(RecordModel[] records)

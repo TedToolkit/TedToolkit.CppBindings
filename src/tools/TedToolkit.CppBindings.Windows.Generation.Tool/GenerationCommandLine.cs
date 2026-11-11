@@ -28,12 +28,25 @@ internal static class GenerationCommandLine
             }
         }
 
+        var provider = ProviderDescriptor.Create(Require(values, "--provider").ToLowerInvariant());
+        var vcpkgRoot = provider.UsesVcpkg
+            ? new DirectoryPath(Require(values, "--vcpkg-root"))
+            : (DirectoryPath?)null;
+        var runtimeIdentifier = values.GetValueOrDefault("--runtime-identifier", "win-x64");
+        if (runtimeIdentifier is not ("win-x64" or "linux-x64" or "osx-arm64"))
+        {
+            throw Usage();
+        }
+
         return new(
-            Require(values, "--provider"),
+            provider,
             new(Require(values, "--repository-root")),
             new(Require(values, "--output-root")),
-            new(Require(values, "--vcpkg-root")),
-            Require(values, "--configuration"));
+            vcpkgRoot,
+            Require(values, "--configuration"))
+        {
+            RuntimeIdentifier = runtimeIdentifier,
+        };
     }
 
     private static string Require(IReadOnlyDictionary<string, string> values, string name)
@@ -49,14 +62,18 @@ internal static class GenerationCommandLine
     private static ArgumentException Usage()
     {
         return new(
-            "Expected --provider <occt|cgal|manifold|fcl> --repository-root <path> "
-            + "--output-root <path> --vcpkg-root <path> --configuration <name>.");
+            "Expected --provider <occt|cgal|manifold|fcl|smlib> --repository-root <path> "
+            + "--output-root <path> --configuration <name> and --vcpkg-root <path> for vcpkg providers. "
+            + "On Linux and macOS pass --runtime-identifier <linux-x64|osx-arm64>.");
     }
 }
 
 internal sealed record WindowsGenerationOptions(
-    string Provider,
+    ProviderDescriptor Provider,
     DirectoryPath RepositoryRoot,
     DirectoryPath OutputRoot,
-    DirectoryPath VcpkgRoot,
-    string Configuration);
+    DirectoryPath? VcpkgRoot,
+    string Configuration)
+{
+    internal string RuntimeIdentifier { get; init; } = "win-x64";
+}

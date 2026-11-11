@@ -61,6 +61,13 @@ independently; neither emitter reads or repairs the other's output. Generated so
 hand-edited. Source-only generation may stop after emission, while ready-to-use packaging compiles
 and verifies the emitted native project.
 
+Shared discovers external C-linkage functions in the configured public input headers. Their
+signatures resolve records against the existing semantic declaration catalog and add supported
+compiler-proved value layouts to that catalog when needed. Both entry paths use the same layout
+emitter, native build inventory, and function table. Reference and pointer projections preserve
+the admitted record type and do not infer ownership. Newly discovered record values require
+complete plain layouts whose size and alignment are checked again by the native adapter build.
+
 Every declaration-specific artifact derives from the completed Model, including layouts,
 ownership categories and operation lifetime flows, managed representation and API, imports and
 invocation glue, deterministic function-table slot identities, C declarations, C++ adapters,

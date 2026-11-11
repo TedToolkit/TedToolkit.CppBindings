@@ -6,7 +6,7 @@
 // -----------------------------------------------------------------------
 
 using TedToolkit.CppBindings.Generator.Semantics;
-using TedToolkit.RoslynHelper.Generators;
+using TedToolkit.RoslynHelper;
 
 namespace TedToolkit.CppBindings.Manifold.Generator;
 
@@ -271,7 +271,7 @@ internal static class ManifoldFiniteProfile
 
                  add_library({{libraryBaseName}} SHARED {{sourceList}})
                  target_compile_features({{libraryBaseName}} PRIVATE cxx_std_20)
-                 target_compile_options({{libraryBaseName}} PRIVATE /MP1)
+                 target_compile_options({{libraryBaseName}} PRIVATE $<$<CXX_COMPILER_ID:MSVC>:/MP1>)
                  target_link_libraries({{libraryBaseName}} PRIVATE manifold::manifold)
                  """;
     }

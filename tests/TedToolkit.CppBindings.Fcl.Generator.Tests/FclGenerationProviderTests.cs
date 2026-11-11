@@ -247,7 +247,7 @@ internal sealed class FclGenerationProviderTests
     /// <summary>Verifies the retained entry points resolve only the configured environment root.</summary>
     /// <returns>A task that completes when compatibility assertions finish.</returns>
     [Test]
-    [NotInParallel("VCPKG_ROOT")]
+    [NotInParallel]
     public async Task Should_preserve_environment_backed_entry_points_Async()
     {
         var original = Environment.GetEnvironmentVariable("VCPKG_ROOT");
@@ -339,7 +339,7 @@ internal sealed class FclGenerationProviderTests
                 "fcl_0.7.0_x64-windows.list"))
             .Select(static line => line.Replace('\\', '/'))
             .Where(static line => line.StartsWith("x64-windows/include/fcl/", StringComparison.Ordinal)
-                && !line.EndsWith('/'))
+                && line is not [.., '/'])
             .Select(static line => line["x64-windows/include/".Length..])
             .Order(StringComparer.Ordinal)
             .ToArray();

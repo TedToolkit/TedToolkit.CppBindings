@@ -6,7 +6,8 @@
   <PropertyGroup>
     <Title>TedToolkit C++ Bindings OCCT Generator</Title>
     <Description>Generate exact-layout managed and native OCCT bindings through the reusable C++ bindings platform.</Description>
-    <TargetFramework>net10.0</TargetFramework>
+    <TargetFramework>net11.0</TargetFramework>
+    <AllowUnsafeBlocks>true</AllowUnsafeBlocks>
   </PropertyGroup>
 
   <ItemGroup>

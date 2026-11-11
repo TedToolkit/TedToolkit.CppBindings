@@ -136,7 +136,7 @@ public sealed class BindingProviderModel
             source.NativePreamble,
             source.NativeUnknownExceptionMessage,
             Array.AsReadOnly(source.NativeExportOrder.ToArray()),
-            Array.AsReadOnly(source.AdditionalNativeExports.ToArray()));
+            Array.AsReadOnly(source.AdditionalNativeExports.ToArray())) { HeaderProfile = source.HeaderProfile?.Snapshot(), };
     }
 
     private static BindingFiniteOperationDefinition SnapshotOperation(BindingFiniteOperationDefinition source)
@@ -162,6 +162,10 @@ public sealed class BindingProviderModel
             {
                 Owners = Array.AsReadOnly(value.Owners.ToArray()),
                 Values = Array.AsReadOnly(value.Values.ToArray()),
+            },
+            BindingFreeFunctionDefinition value => value with
+            {
+                Parameters = Array.AsReadOnly(value.Parameters.ToArray()),
             },
             BindingTwoPhaseOperationDefinition value => value with
             {
