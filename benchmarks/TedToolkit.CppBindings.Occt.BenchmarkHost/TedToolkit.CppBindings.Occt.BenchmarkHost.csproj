@@ -29,4 +29,11 @@
     </PackageReference>
   </ItemGroup>
 
+  <Target Name="ExcludeUnusedLocalizationAnalyzers" AfterTargets="ResolveLockFileAnalyzers">
+    <ItemGroup>
+      <!-- Use the RoslynHelper assembly paired with the OCCT source generator. -->
+      <Analyzer Remove="@(Analyzer)" Condition="'%(Analyzer.NuGetPackageId)' == 'TedToolkit.Localizations'" />
+    </ItemGroup>
+  </Target>
+
 </Project>
